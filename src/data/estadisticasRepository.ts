@@ -18,10 +18,13 @@ class EstadisticasRepository{
             const row = rows[0][0];
 
             let datoVenta:DatoVentaCaja = new DatoVentaCaja();
-            datoVenta.ganancias = parseFloat(row['ganancias']);
-            datoVenta.totalVentas = parseFloat(row['totalVentas']);    
-            datoVenta.cantVentas = row['cantVentas'];
 
+            if(row!=undefined){
+                datoVenta.ganancias = parseFloat(row['ganancias']);
+                datoVenta.totalVentas = parseFloat(row['totalVentas']);    
+                datoVenta.cantVentas = row['cantVentas'];
+            }
+            
             return datoVenta;
 
         } catch (error:any) {

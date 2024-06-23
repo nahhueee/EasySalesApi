@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsc && nodemon src/index.ts",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "build": "tsc && npm run copy-files",
+    "copy-files": "cpy package.json out/ && cpy .env out/ && cpy config.json out/"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +17,7 @@
     "@types/morgan": "^1.9.9",
     "@types/mysql": "^2.15.26",
     "@types/node": "^20.14.2",
+    "cpy-cli": "^5.0.0",
     "express": "^4.19.2",
     "morgan": "^1.10.0",
     "nodemon": "^3.1.0",

@@ -1,5 +1,5 @@
 {
-    "development": {
+    "dev": {
       "port": 3000,
       "imgPath": "D:/1-CreationCode/EasySales/EasySalesApp/src/assets/productos/",
       "db": {
@@ -9,14 +9,14 @@
         "database": "dbeasysales"
       }
     },
-    "production": {
+    "prod": {
       "port": 5000,
       "imgPath": "",
       "db": {
         "host": "127.0.0.1",
-        "user": "root",
-        "password": "",
-        "database": "db"
+        "user": "easysales",
+        "password": "SDZ6rP2G4W2642Tz",
+        "database": "dbeasysales"
       }
     }
   }
