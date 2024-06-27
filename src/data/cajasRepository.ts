@@ -105,13 +105,15 @@ class CajasRepository{
     async Agregar(data:any): Promise<number>{
         const connection = await db.getConnection();
         
+        console.log(data.fecha)
+
         try {
             let idCaja:number = await ObtenerUltimaCaja(connection);
             
             const consulta = " INSERT INTO cajas(id, idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada) " +
                              " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
             
-            const parametros = [idCaja, data.responsable.id, data.fecha, data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0];
+            const parametros = [idCaja, data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0];
             
             await connection.query(consulta, parametros);
 
@@ -136,7 +138,7 @@ class CajasRepository{
                              "     inicial = ? " +
                              " WHERE id = ? ";
             
-            const parametros = [data.responsable.id, data.fecha, data.inicial, data.id];
+            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.inicial, data.id];
             await connection.query(consulta, parametros);
             return "OK";
 
