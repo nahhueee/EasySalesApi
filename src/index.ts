@@ -12,7 +12,7 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({extended: false}));
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'images')));
+app.use(express.static(path.join(__dirname, 'upload')));
 
 //Starting the server
 app.listen(app.get('port'), () => {
@@ -42,6 +42,10 @@ app.use('/api/estadisticas', estadisticasRuta);
 //Upload images Route
 import imagenesRuta from './routes/imagenesRoute';
 app.use('/api/imagenes', imagenesRuta);
+
+//Print docs Route
+import pdfRoute from './routes/pdfRoute';
+app.use('/api/docs', pdfRoute);
 
 //Index Route
 app.get('/',(_req, res) => {

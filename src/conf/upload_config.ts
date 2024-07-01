@@ -2,20 +2,24 @@ import multer from 'multer';
 const path = require('path');
 
 let uniqueName: string = "";
+let uploadPath: string = path.join(__dirname, "../upload/"); //Direccion donde se guardan los archivos
+let fullPath:string;
 
 //multer - Subida de archivos
 const storage = multer.diskStorage({
     destination: function (_req, _file, cb) {
-        cb(null, path.join(__dirname, "../images/")); //Direccion donde se guarda la imagen
+        cb(null, uploadPath); 
     },
     filename: function (_req, file, cb) {
         uniqueName = Date.now() + path.extname(file.originalname); // Nombre del archivo con fecha para evitar duplicados
         cb(null, uniqueName);
+
+        fullPath = path.join(uploadPath, uniqueName); //Obtengo la ruta absoluta del archivo
     }
 });
 
 const upload = multer({ storage: storage });
 
-export { upload, uniqueName };  //Exporto la configuracion de multer y el path completo
+export { upload, uniqueName, fullPath };  //Exporto la configuracion de multer, el nombre unico y el path completo
 
 

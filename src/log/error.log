@@ -8,3 +8,7 @@
 {"level":"error","message":"Error al obtener los datos de venta de la caja. Cannot read properties of undefined (reading 'ganancias')","timestamp":"2024-06-23T17:58:44.813Z"}
 {"level":"error","message":"Error al obtener los datos de venta de la caja. Cannot read properties of undefined (reading 'ganancias')","timestamp":"2024-06-23T18:01:37.507Z"}
 {"level":"error","message":"Error al obtener los datos de venta de la caja. Cannot read properties of undefined (reading 'ganancias')","timestamp":"2024-06-23T18:02:03.464Z"}
+{"level":"error","message":"Error al intentar imprimir el documento. undefined","timestamp":"2024-06-30T15:56:56.119Z"}
+{"level":"error","message":"Error al intentar imprimir el documento. No such file","timestamp":"2024-06-30T15:58:01.359Z"}
+{"level":"error","message":"Error al intentar imprimir el documento. No PDF specified","timestamp":"2024-07-01T17:19:29.940Z"}
+{"level":"error","message":"Error al intentar imprimir el documento. No PDF specified","timestamp":"2024-07-01T17:20:11.199Z"}
