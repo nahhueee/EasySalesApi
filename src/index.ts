@@ -54,6 +54,13 @@ app.get('/',(_req, res) => {
     res.end('Servidor de EasySales funcionando en este puerto.');
 });
 
+//Version del sistema Route
+app.get('/api/version',(_req, res) => {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/plain');
+    res.status(200).json('1.0.0');
+});
+
 //404
 app.use((_req, res) => {
     res.status(400).json({ error: 'Ruta no encontrada' });
