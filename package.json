@@ -7,7 +7,7 @@
     "dev": "tsc && nodemon src/index.ts",
     "tsc": "tsc",
     "build": "tsc && npm run copy-files",
-    "copy-files": "cpy package.json out/ && cpy .env out/ && cpy config.json out/"
+    "copy-files": "cpy package.json out/ && cpy .env out/ && cpy config.json out/ && mkdirp out/src/upload"
   },
   "keywords": [],
   "author": "",

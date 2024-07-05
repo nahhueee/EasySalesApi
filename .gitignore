@@ -1,4 +1,7 @@
 /out
 /node_modules
-/src/upload
-/src/log/error.log
+/src/upload/*
+!/src/upload/
+
+
+/error.log

@@ -1,5 +1,5 @@
--- DROP DATABASE IF EXISTS dbeasysales;
--- CREATE DATABASE dbeasysales;
+DROP DATABASE IF EXISTS dbeasysales;
+CREATE DATABASE dbeasysales;
 
 USE dbeasysales;
 

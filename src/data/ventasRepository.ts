@@ -4,6 +4,7 @@ import { Cliente } from '../models/Cliente';
 import { pagoVenta } from '../models/PagoVenta';
 import { DetalleVenta } from '../models/DetalleVenta';
 import { Producto } from '../models/Producto';
+const moment = require('moment');
 
 class VentasRepository{
 
@@ -315,7 +316,7 @@ async function InsertVenta(connection, venta):Promise<void>{
         const consulta = " INSERT INTO ventas(id, idCaja, idCliente, fecha, hora) " +
                          " VALUES(?, ?, ?, ?, ?) ";
 
-        const parametros = [venta.id, venta.idCaja, venta.cliente.id, venta.fecha, venta.hora];
+        const parametros = [venta.id, venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora];
         await connection.query(consulta, parametros);
         
     } catch (error) {

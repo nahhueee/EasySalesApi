@@ -105,8 +105,6 @@ class CajasRepository{
     async Agregar(data:any): Promise<number>{
         const connection = await db.getConnection();
         
-        console.log(data.fecha)
-
         try {
             let idCaja:number = await ObtenerUltimaCaja(connection);
             

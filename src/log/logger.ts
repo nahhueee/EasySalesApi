@@ -6,7 +6,7 @@ const logger = winston.createLogger({
   transports: [
     new winston.transports.Console(), // Salida por consola
     new winston.transports.File({ 
-      filename: 'src/log/error.log', // Salida a archivo
+      filename: 'error.log', // Salida a archivo
       format: winston.format.json() // Formato JSON para el archivo de registro
     }) 
   ],
