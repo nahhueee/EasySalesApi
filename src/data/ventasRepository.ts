@@ -11,7 +11,7 @@ class VentasRepository{
     //#region OBTENER
     async Obtener(filtros:any){
         const connection = await db.getConnection();
-        
+
         try {
              //Obtengo la query segun los filtros
             let queryRegistros = await ObtenerQuery(filtros,false);
@@ -211,7 +211,6 @@ class VentasRepository{
 
     async ActualizarEstadoPago(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
         try {
 
             if (data.realizado==0) data.total = 0;  //Si resulta que esta revirtiendo, quitamos la entrega
@@ -221,7 +220,7 @@ class VentasRepository{
                              " entrega = ? " +
                              " WHERE idVenta = ?";
 
-            const parametros = [data.realizado, data.total, data.id];
+            const parametros = [data.realizado, data.total, data.idVenta];
             await connection.query(consulta, parametros);
             return "OK";
 

@@ -56,7 +56,7 @@ class CajasRepository{
         try {
             let consulta = await ObtenerQuery(filtros,false);
             const rows = await connection.query(consulta);
-            
+           
             const row = rows[0][0];
             let caja:Caja = new Caja({
                 id: row['id'],
@@ -70,7 +70,7 @@ class CajasRepository{
                 salidas: row['salidas'],
                 finalizada: row['finalizada'],
             });
-
+            
             return caja;
 
         } catch (error:any) {

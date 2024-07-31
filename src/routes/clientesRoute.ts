@@ -15,6 +15,17 @@ router.post('/obtener', async (req:Request, res:Response) => {
     }
 });
 
+router.get('/obtener-cliente/:id', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ClientesRepo.ObtenerCliente({idCliente: req.params.id }));
+
+    } catch(error:any){
+        let msg = "Error al obtener el cliente nro " + req.params.id + ".";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.get('/selector', async (req:Request, res:Response) => {
     try{ 
         res.json(await ClientesRepo.ClientesSelector());

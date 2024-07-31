@@ -1,4 +1,5 @@
 import db from '../db';
+import { Cliente } from '../models/Cliente';
 
 class ClientesRepository{
 
@@ -16,6 +17,22 @@ class ClientesRepository{
             const resultado = await connection.query(queryTotal);
 
             return {total:resultado[0][0].total, registros:rows[0]};
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    async ObtenerCliente(filtros:any){
+        const connection = await db.getConnection();
+        
+        try {
+            let consulta = await ObtenerQuery(filtros,false);
+            const rows = await connection.query(consulta);
+           
+            return new Cliente(rows[0][0]);;
 
         } catch (error:any) {
             throw error;
@@ -114,6 +131,8 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") 
             filtro += " WHERE c.nombre LIKE '%"+ filtros.busqueda + "%' ";
+        if (filtros.idCliente != null && filtros.idCliente != 0) 
+            filtro += " WHERE c.id = "+ filtros.idCliente;
         // #endregion
 
         if (esTotal)

@@ -293,7 +293,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
 
 async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
-        let consulta = " SELECT id FROM productos WHERE nombre = ? OR codigo = ? ";
+        let consulta = " SELECT id FROM productos WHERE (nombre = ? OR codigo = ?) ";
         if(modificando) consulta += " AND id <> ? ";
 
         const parametros = [data.nombre.toUpperCase(),data.codigo.toUpperCase(), data.id];
