@@ -29,41 +29,39 @@ import movimientosRuta from './routes/movimientosRoute';
 import cajasRuta from './routes/cajasRoute';
 import estadisticasRuta from './routes/estadisticasRoute';
 
-app.use('/api/usuarios', usuariosRuta);
-app.use('/api/clientes', clientesRuta);
-app.use('/api/rubros', rubrosRuta);
-app.use('/api/productos', productosRuta);
-app.use('/api/ventas', ventasRuta);
-app.use('/api/movimientos', movimientosRuta);
-app.use('/api/cajas', cajasRuta);
-app.use('/api/estadisticas', estadisticasRuta);
+app.use('/easysales/usuarios', usuariosRuta);
+app.use('/easysales/clientes', clientesRuta);
+app.use('/easysales/rubros', rubrosRuta);
+app.use('/easysales/productos', productosRuta);
+app.use('/easysales/ventas', ventasRuta);
+app.use('/easysales/movimientos', movimientosRuta);
+app.use('/easysales/cajas', cajasRuta);
+app.use('/easysales/estadisticas', estadisticasRuta);
 //#endregion
 
 //Upload images Route
 import imagenesRuta from './routes/imagenesRoute';
-app.use('/api/imagenes', imagenesRuta);
+app.use('/easysales/imagenes', imagenesRuta);
 
 //Print docs Route
 import pdfRoute from './routes/pdfRoute';
-app.use('/api/docs', pdfRoute);
-
-//Index Route
-app.get('/',(_req, res) => {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Servidor de EasySales funcionando en este puerto.');
-});
+app.use('/easysales/docs', pdfRoute);
 
 //Version del sistema Route
-app.get('/api/version',(_req, res) => {
+app.get('/easysales/version',(_req, res) => {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/plain');
     res.status(200).json('1.0.0');
 });
 
+//Index Route
+app.get('/easysales', (req, res) => {
+    res.status(200).send('Servidor de EasySales funcionando en este puerto.');
+});
+
 //404
 app.use((_req, res) => {
-    res.status(400).json({ error: 'Ruta no encontrada' });
+    res.status(404).send('No se encontró el recurso solicitado.');
 });
   
 

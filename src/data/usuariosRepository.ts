@@ -31,7 +31,7 @@ class UsuariosRepository{
             let consulta = await ObtenerQuery(filtros,false);
             const rows = await connection.query(consulta);
             
-            return  rows[0][0];
+            return rows[0][0];
 
         } catch (error:any) {
             throw error;
