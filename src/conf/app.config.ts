@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const rawConfig = fs.readFileSync(path.resolve(__dirname, '../../config.json'), 'utf-8');
 const configs = JSON.parse(rawConfig);
 
-const env = process.env.NODE_ENV || 'development';
+const env = process.env.NODE_ENV || 'pc';
 const config = configs[env];
 
 if (!config) {

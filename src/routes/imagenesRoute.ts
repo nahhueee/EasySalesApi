@@ -36,8 +36,6 @@ const printer = require('pdf-to-printer');
 
 router.post('/imprimir', upload.single('doc'), (req:Request, res:Response) => {
     try{ 
-        //        printer.print("D:\\1-CreationCode\\EasySales\\EasySalesApi\\src\\ticket.pdf", { printer: printerName })
-        console.log(uniqueName)
         printer.print(uniqueName, { printer: printerName })
                .then(() => {
                     res.status(200).send('Impresión exitosa');

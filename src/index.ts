@@ -2,9 +2,14 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
+
+const http = require('http');
 const path = require('path');
+const socketIo = require('socket.io');
+
 
 const app = express();
+const server = http.createServer(app);
 
 //setings
 app.set('port', process.env.Port || config.port);
@@ -14,9 +19,29 @@ app.use(express.urlencoded({extended: false}));
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'upload')));
 
+//setings SocketIo
+const io = socketIo(server, {
+    cors: {
+      origin: "*", 
+      methods: ["GET", "POST"],
+    },
+});
+
+// Exportartamos io para usarlo en otros módulos
+export { io };
+
+io.on('connection', (socket) => {
+    console.log('SocketIo: Nuevo cliente conectado');
+  
+    socket.on('disconnect', () => {
+      console.log('SocketIo: Cliente desconectado');
+    });
+});
+
 //Starting the server
-app.listen(app.get('port'), () => {
+server.listen(app.get('port'), () => {
     console.log('server ' + process.env.NODE_ENV + ' on port ' + app.get('port'));
+    console.log('usuario:' + config.db.user, 'pass:' + config.db.password)
 });
 
 //#region Rutas
@@ -28,6 +53,7 @@ import ventasRuta from './routes/ventasRoute';
 import movimientosRuta from './routes/movimientosRoute';
 import cajasRuta from './routes/cajasRoute';
 import estadisticasRuta from './routes/estadisticasRoute';
+import parametrosRuta from './routes/parametrosRoute';
 
 app.use('/easysales/usuarios', usuariosRuta);
 app.use('/easysales/clientes', clientesRuta);
@@ -37,7 +63,12 @@ app.use('/easysales/ventas', ventasRuta);
 app.use('/easysales/movimientos', movimientosRuta);
 app.use('/easysales/cajas', cajasRuta);
 app.use('/easysales/estadisticas', estadisticasRuta);
-//#endregion
+app.use('/easysales/parametros', parametrosRuta);
+
+
+//AdminServer Route
+import adminServerRuta from './routes/adminRoute';
+app.use('/easysales/adminserver', adminServerRuta);
 
 //Upload images Route
 import imagenesRuta from './routes/imagenesRoute';
@@ -47,12 +78,17 @@ app.use('/easysales/imagenes', imagenesRuta);
 import pdfRoute from './routes/pdfRoute';
 app.use('/easysales/docs', pdfRoute);
 
-//Version del sistema Route
-app.get('/easysales/version',(_req, res) => {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.status(200).json('1.0.0');
-});
+//Actualizacion Route
+import actualizacionRuta from './routes/actualizacionRoute';
+app.use('/easysales/update', actualizacionRuta);
+
+//#region backups y contenidos de pago
+import backupRoute from './routes/backupRoute';
+app.use('/easysales/backup', backupRoute);
+
+import {BackupsServ} from './services/backupService';
+BackupsServ.IniciarCron();
+//#endregion
 
 //Index Route
 app.get('/easysales', (req, res) => {

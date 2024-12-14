@@ -6,21 +6,43 @@ const timezoned = () => {
   return moment().tz('America/Argentina/Buenos_Aires').format('YYYY-MM-DD HH:mm');
 };
 
-// Configurar el nivel de registro y el formato
 const logger = winston.createLogger({
-  level: 'error',
   transports: [
-    new winston.transports.Console(), // Salida por consola
+
+    // Transporte para errores
     new winston.transports.File({ 
-      filename: path.resolve(__dirname, 'error.log'), // Salida a archivo
-      format: winston.format.json() // Formato JSON para el archivo de registro
-    }) 
+      filename: path.resolve(__dirname, 'error.log'),
+      level: 'error', // Solo registrar mensajes con nivel 'error'
+      format: winston.format.combine(
+        winston.format.timestamp({ format: timezoned }),
+        winston.format.errors({ stack: true }),
+        winston.format.printf(info => `${info.timestamp} - ${info.message}\n${info.stack || ''}`),
+        winston.format.json(),
+      )
+    }),
+
+    // Transporte para mensajes del backp
+    new winston.transports.File({ 
+      filename: path.resolve(__dirname, 'backups.log'),
+      level: 'info', // Registrar mensajes con nivel 'info' y superior
+      format: winston.format.combine(
+        winston.format.timestamp({ format: timezoned }),
+        winston.format.errors({ stack: true }),
+        winston.format.printf(info => `${info.timestamp} - ${info.message}\n${info.stack || ''}`),
+        winston.format.json(),
+      )
+    }),
+
+    // Transporte para consola
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.timestamp({ format: timezoned }), // Agregar timestamp
+        winston.format.errors({ stack: true }), // Mostrar el stack de errores
+        // winston.format.printf(info => `${info.timestamp} - ${info.stack}: ${info.message}`) // Formato del mensaje de registro
+      )
+    })
   ],
-  format: winston.format.combine(
-    winston.format.timestamp({ format: timezoned }), // Agregar timestamp
-    winston.format.errors({ stack: true }), // Mostrar el stack de errores
-    winston.format.printf(info => `${info.timestamp} - ${info.stack}: ${info.message}`) // Formato del mensaje de registro
-  )
+  
 });
 
 export default logger; 

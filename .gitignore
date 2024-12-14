@@ -3,5 +3,6 @@
 /src/log/error.log
 /src/upload/*
 !/src/upload/
+/update
 
 

@@ -1,15 +1,24 @@
 {
     "pc": {
-      "port": 5000,
+      "adminUrl": "https://creationcode.store/adminserver/",
+      "port": 7500,
+      "idApp": 1,
       "db": {
         "host": "127.0.0.1",
         "user": "root",
-        "password": "",
+        "password": "1235",
         "database": "dbeasysales"
+      },
+      "mega":{
+        "email": "nahu852na@gmail.com",
+        "pass": "Na43797231N$",
+        "folderName" : "RespaldosEasySales"
       }
     },
     "web": {
+      "adminUrl": "https://creationcode.store/adminserver/",
       "port": 7500,
+      "idApp": 1,
       "db": {
         "host": "127.0.0.1",
         "user": "easysales",
