@@ -41,7 +41,6 @@ io.on('connection', (socket) => {
 //Starting the server
 server.listen(app.get('port'), () => {
     console.log('server ' + process.env.NODE_ENV + ' on port ' + app.get('port'));
-    console.log('usuario:' + config.db.user, 'pass:' + config.db.password)
 });
 
 //#region Rutas
@@ -61,7 +60,7 @@ app.use('/easysales/rubros', rubrosRuta);
 app.use('/easysales/productos', productosRuta);
 app.use('/easysales/ventas', ventasRuta);
 app.use('/easysales/movimientos', movimientosRuta);
-app.use('/easysales/cajas', cajasRuta);
+app.use('/easysales/cajas', cajasRuta); 
 app.use('/easysales/estadisticas', estadisticasRuta);
 app.use('/easysales/parametros', parametrosRuta);
 

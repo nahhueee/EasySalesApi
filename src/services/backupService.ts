@@ -17,7 +17,6 @@ class BackupsService{
 
     async IniciarCron(){
         try{ 
-            
             //Obtenemos los parametros necesarios
             //#region PARAMETROS
             const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
