@@ -24,71 +24,93 @@ class BackupsService{
             //#endregion
 
             if(dniCliente!="")
-                EjecutarProcesoCron(dniCliente, expresion);
+                this.EjecutarProcesoCron(dniCliente, expresion);
                   
         } catch(error:any){
             logger.error("Error al intentar iniciar los procesos de respaldo. " + error.message);
         }
     }
-}
 
-//Funcion para inicar el cron de respaldo
-async function EjecutarProcesoCron(DNI:string, expresion:string){
-    if (expresion!="") {
+    //Funcion para inicar el cron de respaldo
+    async EjecutarProcesoCron(DNI:string, expresion:string){
+        if (expresion!="") {
 
-        // Si ya existe una tarea programada, la detenemos para iniciar una nueva y no crear crones en simultaneo
-        if (scheduledTask){
-            scheduledTask.stop(); 
-        } 
-        
-        //Solo si el parametro de activar esta habilitado, iniciamos el proceso de cron
-        const activarBackup = await ParametrosRepo.ObtenerParametros('backups');
-        
-        if(activarBackup=="true"){
-            // Programamos la nueva tarea para crear backups
-            scheduledTask = cron.schedule(expresion, async () => {
-
-                //Verificamos que el cliente este habilitado para sincronizar
-                const habilitado = await AdminServ.ObtenerHabilitacion(DNI)
+            // Si ya existe una tarea programada, la detenemos para iniciar una nueva y no crear crones en simultaneo
+            if (scheduledTask){
+                scheduledTask.stop(); 
+            } 
             
-                if((habilitado)){
-                    logger.info('Se inicia un nuevo proceso de respaldo en cron.');
+            //Solo si el parametro de activar esta habilitado, iniciamos el proceso de cron
+            const activarBackup = await ParametrosRepo.ObtenerParametros('backups');
+            
+            if(activarBackup=="true"){
+                // Programamos la nueva tarea para crear backups
+                scheduledTask = cron.schedule(expresion, async () => {
 
-                    //Nombre del archivo
-                    const fileName = `${DNI}_${moment().format('DD-MM-YYYY')}.sql`;
-                    
-                    //Path donde guardamos el backup    
-                    const backupPath = path.join(__dirname, "../upload/", fileName);
-
-                    if(await GenerarBackup(backupPath)){
-                        
-                        const megastorage = await ConectarConMega(); //Logging Mega
-
-                        //Verificamos que el cliente tenga 3 backups en el servidor
-                        //Si tiene 3 borramos el mas viejo para crear uno más reciente
-                        const backups = await BackupsRepo.ObtenerUltimoRenovar();
-                        if(backups.total==3){
-                            EliminarDeMega(megastorage,backups.fila.nombre); //Borramos el archivo en Mega
-                            BackupsRepo.Eliminar(backups.fila.nombre); //Borramos el registro local
-                        }
-
-                        //Subimos el backup a Mega
-                        const subido = await SubirAMega(megastorage, fileName);
-
-                        //Guardamos el registro de backup
-                        if(subido){
-                            await BackupsRepo.Agregar(fileName);
-                            fs.unlinkSync(backupPath); // Elimina el archivo localmente
-                        }
-                    }
-                }else{
-                    logger.info('Cliente inexistente o inhabilitado');
-                }
+                    //Verificamos que el cliente este habilitado para sincronizar
+                    const habilitado = await AdminServ.ObtenerHabilitacion(DNI)
                 
-                logger.info('Finalizó el proceso de respaldo.');
-            });
+                    if((habilitado)){
+                        logger.info('Se inicia un nuevo proceso de respaldo en cron.');
+
+                        //Nombre del archivo
+                        const fileName = `${DNI}_${moment().format('DD-MM-YYYY')}.sql`;
+                        
+                        //Path donde guardamos el backup    
+                        const backupPath = path.join(__dirname, "../upload/", fileName);
+
+                        if(await this.GenerarBackup(backupPath)){
+                            
+                            const megastorage = await ConectarConMega(); //Logging Mega
+
+                            //Verificamos que el cliente tenga 3 backups en el servidor
+                            //Si tiene 3 borramos el mas viejo para crear uno más reciente
+                            const backups = await BackupsRepo.ObtenerUltimoRenovar();
+                            if(backups.total==3){
+                                EliminarDeMega(megastorage,backups.fila.nombre); //Borramos el archivo en Mega
+                                BackupsRepo.Eliminar(backups.fila.nombre); //Borramos el registro local
+                            }
+
+                            //Subimos el backup a Mega
+                            const subido = await SubirAMega(megastorage, fileName);
+
+                            //Guardamos el registro de backup
+                            if(subido){
+                                await BackupsRepo.Agregar(fileName);
+                                fs.unlinkSync(backupPath); // Elimina el archivo localmente
+                            }
+                        }
+                    }else{
+                        logger.info('Cliente inexistente o inhabilitado');
+                    }
+                    
+                    logger.info('Finalizó el proceso de respaldo.');
+                });
+            }
         }
     }
+
+    //#region CREAR ARCHIVO BACKUP
+    async GenerarBackup(backupPath:string){
+        
+        //comando a ejecutar
+        let command = "";
+        if(config.produccion)
+            command = `mysqldump -u ${config.db.user} -p ${config.db.password} ${config.db.database} > ${backupPath}`;
+        else
+            command = `mysqldump -u ${config.db.user} ${config.db.database} > ${backupPath}`;
+    
+        //Ejecutamos el comando
+        const { stdout, stderr } = await exec(command);
+        if (stderr) {
+            logger.info(`Error al ejecutar el comando: ${stderr.message}`);
+            return null;
+        }
+        
+        logger.info('Se generó correctamente el archivo de backup.');
+        return true;
+    }
+    //#endregion 
 }
 
 //#region SUBIDA Y ELIMINACION DE BACKUPS A MEGA
@@ -251,29 +273,6 @@ async function EliminarDeMega(megastorage:Storage, fileName:string) {
 //         logger.info('Error al intentar eliminar el archivo de drive. ' + error);
 //     }
 // }
-//#endregion 
-
-
-//#region CREAR ARCHIVO BACKUP
-async function GenerarBackup(backupPath:string){
-    
-    //comando a ejecutar
-    let command = "";
-    if(config.produccion)
-        command = `mysqldump -u ${config.db.user} -p ${config.db.password} ${config.db.database} > ${backupPath}`;
-    else
-        command = `mysqldump -u ${config.db.user} ${config.db.database} > ${backupPath}`;
-   
-    //Ejecutamos el comando
-    const { stdout, stderr } = await exec(command);
-    if (stderr) {
-        logger.info(`Error al ejecutar el comando: ${stderr.message}`);
-        return null;
-    }
-    
-    logger.info('Se generó correctamente el archivo de backup.');
-    return true;
-}
 //#endregion 
 
   

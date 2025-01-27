@@ -54,11 +54,20 @@ class ProductosRepository{
         }
     }
 
-    async ProductosSelector(){
+    async BuscarProductos(filtro:any){
         const connection = await db.getConnection();
-        
+        console.log(filtro)
         try {
-            const [rows] = await connection.query('SELECT id, codigo, nombre, costo, precio, unidad FROM productos WHERE id <> 1');
+            let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad FROM productos WHERE id <> 1';
+
+            if (filtro.metodo == 'codigo')
+                consulta += " AND codigo = '" + filtro.valor + "'";
+
+            if (filtro.metodo == 'nombre')
+                consulta += " AND LOWER(nombre) LIKE '%" + filtro.valor + "%'";
+
+            const [rows] = await connection.query(consulta);
+
             const productos:Producto[] = [];
            
             if (Array.isArray(rows)) {

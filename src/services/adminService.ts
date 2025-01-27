@@ -6,7 +6,8 @@ class AdminService{
     
     async ObtenerVersionApp() {
         try {
-            return (await axios.get(`${config.adminUrl}apps/obtener/${config.idApp}`)).data;
+            const version = (await axios.get(`${config.adminUrl}apps/obtener/${config.idApp}`)).data;
+            return version;
         } catch (error) {
             throw error;
         }
@@ -28,10 +29,11 @@ class AdminService{
         try {
             let appCliente:any;
             let mac = await GetMac();
-            
+
             if(mac){
                 //Obtiene el nro de terminal asociado a DNI y mac de esta app
                 let response = await axios.get(`${config.adminUrl}appscliente/obtener/${dni}/${config.idApp}/${mac}`);
+                console.log(response)
                 if(response.data){
                     appCliente = response.data;
                 }else{

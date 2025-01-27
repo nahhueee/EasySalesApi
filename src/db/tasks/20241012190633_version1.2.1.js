@@ -3,7 +3,7 @@
  * @returns { Promise<void> }
  */
 exports.up = function(knex) {
-    return knex.schema.createTable('backups', (table) => {
+    return knex.schema.createTable('prueba', (table) => {
         table.string('nombre', 30).primary; 
         table.date('fecha')       
     });
@@ -15,5 +15,5 @@ exports.up = function(knex) {
  */
 //Rollback
 exports.down = function(knex) {
-    return knex.schema.dropTable('backups'); 
+    return knex.schema.dropTable('prueba'); 
 };

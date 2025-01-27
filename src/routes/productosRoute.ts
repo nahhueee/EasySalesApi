@@ -15,12 +15,12 @@ router.post('/obtener', async (req:Request, res:Response) => {
     }
 });
 
-router.get('/selector', async (req:Request, res:Response) => {
+router.post('/buscar-productos', async (req:Request, res:Response) => {
     try{ 
-        res.json(await ProductosRepo.ProductosSelector());
+        res.json(await ProductosRepo.BuscarProductos(req.body));
 
     } catch(error:any){
-        let msg = "Error al obtener el selector de productos.";
+        let msg = "Error intentando buscar productos.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

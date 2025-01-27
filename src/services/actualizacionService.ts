@@ -10,6 +10,7 @@ import { io } from '../index';
 
 import knex from 'knex';
 import knexConfig from '../../knexfile.js';
+import { BackupsServ } from './backupService';
 
 const knexcommand = knex(knexConfig.development);
 
@@ -38,6 +39,11 @@ class ActualizacionService{
           const pathBack = path.join(updateFolder, 'backend');
           if (fs.existsSync(pathBack) && TieneArchivos(pathBack)) 
             ReemplazarArchivos(pathBack,  path.join(pathDestino, 'easysalesserver'));
+
+          //Creamos una copia de seguridad antes de ejecutar migraciones
+          io.emit('progreso', 'Creando una copia de seguridad');
+          const backupPath = path.join(__dirname, "../upload/", "updateBackup.sql");
+          await BackupsServ.GenerarBackup(backupPath); //Copia de seguridad actual de la base de datos
 
           //Corremos las migraciones
           io.emit('progreso', 'Actualizando la base de datos');
