@@ -100,7 +100,8 @@ class VentasRepository{
             //Insertamos los detalles de la venta
             venta.detalles.forEach(element => {
                 element.idVenta = venta.id;
-                InsertDetalleVenta(connection, element)
+                InsertDetalleVenta(connection, element);
+                ActualizarInventario(connection, element, "-")
             });
 
             //Actualizamos el total de ventas caja
@@ -123,6 +124,10 @@ class VentasRepository{
         const connection = await db.getConnection();
         
         try {
+
+            //Iniciamos una transaccion
+            await connection.beginTransaction();
+
             //Eliminamos el pago relacionado
             await connection.query("DELETE FROM ventas_pago WHERE idVenta = ?", [venta.id]);
 
@@ -135,6 +140,11 @@ class VentasRepository{
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [venta.total, venta.idCaja]);
             
+            //EActualizamos el inventario
+            venta.detalles.forEach(element => {
+                ActualizarInventario(connection, element, "+")
+            });
+
             //Mandamos la transaccion
             await connection.commit();
             return "OK";
@@ -379,6 +389,21 @@ async function InsertDetalleVenta(connection, detalle):Promise<void>{
                          " VALUES(?, ?, ?, ?, ?) ";
 
         const parametros = [detalle.idVenta, detalle.producto.id, detalle.cantidad, detalle.costo, detalle.precio];
+        await connection.query(consulta, parametros);
+        
+    } catch (error) {
+        throw error; 
+    }
+}
+
+async function ActualizarInventario(connection, detalle, operacion):Promise<void>{
+    try {
+        if(detalle.producto.id === 1) return; //No actualizamos el producto vario
+
+        const consulta = `UPDATE productos SET cantidad = cantidad ${operacion} ? 
+                          WHERE id = ?`;
+
+        const parametros = [detalle.cantidad, detalle.producto.id];
         await connection.query(consulta, parametros);
         
     } catch (error) {
