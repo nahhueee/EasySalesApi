@@ -1,5 +1,4 @@
 import config from '../conf/app.config';
-import { ObjTerminal } from '../models/ObjTerminal';
 const axios = require('axios');
 
 class AdminService{
@@ -33,7 +32,6 @@ class AdminService{
             if(mac){
                 //Obtiene el nro de terminal asociado a DNI y mac de esta app
                 let response = await axios.get(`${config.adminUrl}appscliente/obtener/${dni}/${config.idApp}/${mac}`);
-                console.log(response)
                 if(response.data){
                     appCliente = response.data;
                 }else{

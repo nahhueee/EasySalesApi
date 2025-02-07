@@ -14,50 +14,60 @@ import { BackupsServ } from './backupService';
 
 const knexcommand = knex(knexConfig.development);
 
-class ActualizacionService{
+class ActualizarService{
 
     async Actualizar(url:string) {
         const updateFolder = path.join(__dirname, '../../update/'); //Carpeta de actualización
-        const zipFilePath = path.join(updateFolder, 'comprimido.rar'); //Zip descargado
+        const zipFilePath = path.join(updateFolder, 'Actualizacion.zip'); //Zip descargado
         const pathDestino = path.join(__dirname, '../../../'); //Carpeta donde se encuentra la app
 
         try {
           io.emit('progreso', 'Descargando actualización');
+          logger.info('Descargando actualización.');
           await DescargarArchivo(url,zipFilePath); //Descargamos los archivos nuevos
       
           io.emit('progreso', 'Descomprimiendo');
+          logger.info('Descomprimiendo lo descargado.');
           await DescomprimirEnCarpeta(zipFilePath, updateFolder); //Descomprimimos en una temporal
 
           io.emit('progreso', 'Copiando archivos nuevos');
 
           //Verificamos que la carpeta frontend tenga archivos para actualizar
           const pathFront = path.join(updateFolder, 'frontend');
+          logger.info('Copiando archivos frontend.');
           if (fs.existsSync(pathFront) && TieneArchivos(pathFront)) 
-            ReemplazarArchivos(pathFront,  path.join(pathDestino, 'easysalesapp'));
+            ActualizarArchivos(pathFront,  path.join(pathDestino, 'easysalesapp'));
 
           //Verificamos que la carpeta backend tenga archivos para actualizar
           const pathBack = path.join(updateFolder, 'backend');
+          logger.info('Copiando archivos backend.');
           if (fs.existsSync(pathBack) && TieneArchivos(pathBack)) 
-            ReemplazarArchivos(pathBack,  path.join(pathDestino, 'easysalesserver'));
+            ActualizarArchivos(pathBack,  path.join(pathDestino, 'easysalesserver'));
 
           //Creamos una copia de seguridad antes de ejecutar migraciones
           io.emit('progreso', 'Creando una copia de seguridad');
+          logger.info('Creando copia de seguridad de la DB.');
           const backupPath = path.join(__dirname, "../upload/", "updateBackup.sql");
           await BackupsServ.GenerarBackup(backupPath); //Copia de seguridad actual de la base de datos
 
           //Corremos las migraciones
           io.emit('progreso', 'Actualizando la base de datos');
+          logger.info('Ejecutando migraciones.');
           await knexcommand.migrate.latest(); // Ejecuta las migraciones
 
           io.emit('progreso', 'Actualización completa');
+          logger.info('Actualización completa.');
 
           //Reiniciamos el servidor
           if(config.produccion)
             await ReiniciarServidor();
 
+          return true;
+
         } catch (error:any) {
           io.emit('error', 'Ocurrió un error al intentar actualizar');
           logger.error("Error en el proceso de actualización: " + error.message);
+          return false;
         }
     }
 
@@ -109,28 +119,29 @@ async function DescomprimirEnCarpeta(zipPath, updateFolder) {
   }
 }
 
-function ReemplazarArchivos(origen:string, destino:string) {
-  try{
+function ActualizarArchivos(origen: string, destino: string) {
+  try {
     const archivos = fs.readdirSync(origen);
 
     archivos.forEach((archivo) => {
-      const rutaArchivoOrigen = path.join(origen, archivo);
-      const rutaArchivoDestino = path.join(destino, archivo);
-  
-      // Verificar si es un directorio o un archivo
-      if (fs.lstatSync(rutaArchivoOrigen).isDirectory()) {
-        // Crear la carpeta si no existe
-        if (!fs.existsSync(rutaArchivoDestino)) {
-          fs.mkdirSync(rutaArchivoDestino, { recursive: true });
+      const rutaOrigen = path.join(origen, archivo);
+      const rutaDestino = path.join(destino, archivo);
+
+      if (fs.lstatSync(rutaOrigen).isDirectory()) {
+        // Crear la carpeta si no existe y actualizar recursivamente
+        if (!fs.existsSync(rutaDestino)) {
+          fs.mkdirSync(rutaDestino, { recursive: true });
         }
-      } 
-      //Copiamos lo descargado en la ruta de la app
-      fs.copyFileSync(rutaArchivoOrigen, rutaArchivoDestino);
-  
-      //Borramos los archivos de actualizacion
-      fs.unlinkSync(rutaArchivoOrigen);
+        ActualizarArchivos(rutaOrigen, rutaDestino);
+      } else {
+        // Sobrescribimos el archivo 
+        fs.copyFileSync(rutaOrigen, rutaDestino);
+      }
+
+      // Eliminamos el archivo de la carpeta de actualización
+      fs.unlinkSync(rutaOrigen);
     });
-  }catch (error) {
+  } catch (error) {
     throw error;
   }
 }
@@ -164,4 +175,4 @@ async function ReiniciarServidor(){
   return true;
 }
 
-export const ActualizacionServ = new ActualizacionService();
+export const ActualizarServ = new ActualizarService();

@@ -1,12 +1,13 @@
 {
     "pc": {
       "adminUrl": "https://creationcode.store/adminserver/",
+      "binariosPath": "D:/1-CreationCode/EasySales/Binarios/",
       "port": 7500,
       "idApp": 1,
       "db": {
         "host": "127.0.0.1",
         "user": "root",
-        "password": "",
+        "password": "1235",
         "database": "dbeasysales"
       },
       "mega":{
