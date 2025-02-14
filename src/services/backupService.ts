@@ -27,7 +27,7 @@ class BackupsService{
                 this.EjecutarProcesoCron(dniCliente, expresion);
                   
         } catch(error:any){
-            logger.error("Error al intentar iniciar los procesos de respaldo. " + error.message);
+            logger.warn("Error al intentar iniciar los procesos de respaldo. " + error.message);
         }
     }
 
@@ -51,7 +51,7 @@ class BackupsService{
                     const habilitado = await AdminServ.ObtenerHabilitacion(DNI)
                 
                     if((habilitado)){
-                        logger.info('Se inicia un nuevo proceso de respaldo en cron.');
+                        logger.warn('Se inicia un nuevo proceso de respaldo en cron.');
 
                         //Nombre del archivo
                         const fileName = `${DNI}_${moment().format('DD-MM-YYYY')}.sql`;
@@ -81,10 +81,10 @@ class BackupsService{
                             }
                         }
                     }else{
-                        logger.info('Cliente inexistente o inhabilitado');
+                        logger.warn('Cliente inexistente o inhabilitado');
                     }
                     
-                    logger.info('Finalizó el proceso de respaldo.');
+                    logger.warn('Finalizó el proceso de respaldo.');
                 });
             }
         }
@@ -103,11 +103,11 @@ class BackupsService{
         //Ejecutamos el comando
         const { stdout, stderr } = await exec(command);
         if (stderr) {
-            logger.info(`Error al ejecutar el comando: ${stderr.message}`);
+            logger.warn(`Error al ejecutar el comando: ${stderr.message}`);
             return null;
         }
         
-        logger.info('Se generó correctamente el archivo de backup.');
+        logger.warn('Se generó correctamente el archivo de backup.');
         return true;
     }
     //#endregion 
@@ -121,10 +121,10 @@ async function ConectarConMega():Promise<Storage> {
             password: config.mega.pass,       
         }, error => {
             if (error) {
-                logger.info('Error al intentar conectar a MEGA. ' + error);
+                logger.warn('Error al intentar conectar a MEGA. ' + error);
                 reject(new Error('Error al intentar conectar a MEGA: ' + error));
             } else {
-                logger.info('Conectado a MEGA correctamente.');
+                logger.warn('Conectado a MEGA correctamente.');
                 resolve(megastorage);
             }
         });
@@ -148,7 +148,7 @@ async function SubirAMega(megastorage:Storage, fileName:string) {
         const targetFolder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
 
         if (!targetFolder) {
-            logger.info(`Carpeta ${config.mega.folderName} no encontrada en MEGA.`);
+            logger.warn(`Carpeta ${config.mega.folderName} no encontrada en MEGA.`);
             return;
         }
 
@@ -163,12 +163,12 @@ async function SubirAMega(megastorage:Storage, fileName:string) {
             fileStream.pipe(uploadStream);
 
             uploadStream.on('complete', (file) => {
-                logger.info(`Archivo subido correctamente: ${fileName}`);
+                logger.warn(`Archivo subido correctamente: ${fileName}`);
                 resolve(true);  
             });
 
             uploadStream.on('error', (error) => {
-                logger.info(`Archivo subido correctamente: ${error}`);
+                logger.warn(`Archivo subido correctamente: ${error}`);
                 reject(false);  // Rechazar la promesa si hay un error
             });
         });
@@ -176,7 +176,7 @@ async function SubirAMega(megastorage:Storage, fileName:string) {
         return resultado;
 
     } catch (error) {
-        logger.info('Error al intentar subir el archivo a MEGA. ' + error);
+        logger.warn('Error al intentar subir el archivo a MEGA. ' + error);
         return false;
     }
 }
@@ -194,18 +194,18 @@ async function EliminarDeMega(megastorage:Storage, fileName:string) {
                 // Eliminar el archivo encontrado
                 file.delete(true, (error) => {
                     if (error)
-                        logger.info(`Error al eliminar el archivo ${fileName}: ` + error);
+                        logger.warn(`Error al eliminar el archivo ${fileName}: ` + error);
                     else 
-                        logger.info(`Archivo ${fileName} eliminado correctamente de Mega.`);
+                        logger.warn(`Archivo ${fileName} eliminado correctamente de Mega.`);
                 });
             } else {
-                logger.info(`Archivo ${fileName} no encontrado en Mega para borrar.`);
+                logger.warn(`Archivo ${fileName} no encontrado en Mega para borrar.`);
             }
         }else
-            logger.info(`No se encontró la carpeta al intentar borrar un archivo de Mega.`);
+            logger.warn(`No se encontró la carpeta al intentar borrar un archivo de Mega.`);
        
     } catch (error) {
-        logger.info('Error al intentar eliminar el archivo a MEGA. ' + error);
+        logger.warn('Error al intentar eliminar el archivo a MEGA. ' + error);
     }
 }
 //#endregion

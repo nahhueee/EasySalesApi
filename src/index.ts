@@ -23,7 +23,7 @@ app.use(express.static(path.join(__dirname, 'upload')));
 const io = socketIo(server, {
     cors: {
       origin: "*", 
-      methods: ["GET", "POST"],
+      methods: ["GET", "POST", "PUT", "DELETE"],
     },
 });
 
@@ -53,6 +53,7 @@ import movimientosRuta from './routes/movimientosRoute';
 import cajasRuta from './routes/cajasRoute';
 import estadisticasRuta from './routes/estadisticasRoute';
 import parametrosRuta from './routes/parametrosRoute';
+import logsRuta from './routes/logsRoute';
 
 app.use('/easysales/usuarios', usuariosRuta);
 app.use('/easysales/clientes', clientesRuta);
@@ -63,6 +64,7 @@ app.use('/easysales/movimientos', movimientosRuta);
 app.use('/easysales/cajas', cajasRuta); 
 app.use('/easysales/estadisticas', estadisticasRuta);
 app.use('/easysales/parametros', parametrosRuta);
+app.use('/easysales/logs', logsRuta);
 
 
 //AdminServer Route

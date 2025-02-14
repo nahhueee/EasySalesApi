@@ -1,0 +1,12 @@
+[
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: YES)",
+    "level": "warn",
+    "timestamp": "14-02-25 18:43"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: YES)",
+    "level": "warn",
+    "timestamp": "14-02-25 18:43"
+  }
+]

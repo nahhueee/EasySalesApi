@@ -2,47 +2,48 @@ import winston from 'winston';
 import * as path from 'path';
 const fs = require('fs');
 const moment = require('moment-timezone');
-const env = process.env.NODE_ENV || 'pc';
 
 const timezoned = () => {
-  return moment().tz('America/Argentina/Buenos_Aires').format('YYYY-MM-DD HH:mm');
+  return moment().tz('America/Argentina/Buenos_Aires').format('DD-MM-YY HH:mm');
 };
 
-// Ruta para los logs
-const logDir = env === 'pc' ? 'C:\\logs\\easysales': __dirname;
 
-// Crear la carpeta si no existe
-if(env=='pc'){
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-  }
+const logFilePath = path.resolve(__dirname, 'error.json');
+
+// Asegurar que el archivo existe y contiene un array JSON válido
+if (!fs.existsSync(logFilePath)) {
+  fs.writeFileSync(logFilePath, '[]'); // Iniciar con un array vacío
 }
 
+const agregarAlLog = (info) => {
+  try {
+    const logs = JSON.parse(fs.readFileSync(logFilePath, 'utf8'));
+    logs.push(info);
+    fs.writeFileSync(logFilePath, JSON.stringify(logs, null, 2)); // Guardar como array JSON
+  } catch (error) {
+    console.error('Error al escribir el log:', error);
+  }
+};
+
+
+export const limpiarLog = () => {
+  fs.writeFileSync(logFilePath, '[]'); // Reiniciar como array vacío
+};
 
 const logger = winston.createLogger({
   transports: [
 
-    // Transporte para errores
+    // Transporte para errores, warns e info
     new winston.transports.File({ 
-      filename: path.resolve(logDir, 'error.log'),
-      level: 'error', // Solo registrar mensajes con nivel 'error'
+      filename: path.resolve(logFilePath),
       format: winston.format.combine(
         winston.format.timestamp({ format: timezoned }),
         winston.format.errors({ stack: true }),
-        winston.format.printf(info => `${info.timestamp} - ${info.message}\n${info.stack || ''}`),
         winston.format.json(),
-      )
-    }),
-
-    // Transporte para mensajes del backp y estado de actualizacion
-    new winston.transports.File({ 
-      filename: path.resolve(logDir, 'info.log'),
-      level: 'info', // Registrar mensajes con nivel 'info' y superior
-      format: winston.format.combine(
-        winston.format.timestamp({ format: timezoned }),
-        winston.format.errors({ stack: true }),
-        winston.format.printf(info => `${info.timestamp} - ${info.message}\n${info.stack || ''}`),
-        winston.format.json(),
+        winston.format.printf(registro => {
+          agregarAlLog(registro);
+          return ''; // Evita escribir en formato incorrecto
+        })
       )
     }),
 

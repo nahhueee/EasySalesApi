@@ -23,40 +23,42 @@ class ActualizarService{
 
         try {
           io.emit('progreso', 'Descargando actualización');
-          logger.info('Descargando actualización.');
+          logger.info('Descargando actualización')
           await DescargarArchivo(url,zipFilePath); //Descargamos los archivos nuevos
       
           io.emit('progreso', 'Descomprimiendo');
-          logger.info('Descomprimiendo lo descargado.');
+          logger.info('Descomprimiendo archivo descargado')
           await DescomprimirEnCarpeta(zipFilePath, updateFolder); //Descomprimimos en una temporal
 
           io.emit('progreso', 'Copiando archivos nuevos');
 
           //Verificamos que la carpeta frontend tenga archivos para actualizar
           const pathFront = path.join(updateFolder, 'frontend');
-          logger.info('Copiando archivos frontend.');
-          if (fs.existsSync(pathFront) && TieneArchivos(pathFront)) 
+          if (fs.existsSync(pathFront) && TieneArchivos(pathFront)){
+            logger.info('Copiando archivos app')
             ActualizarArchivos(pathFront,  path.join(pathDestino, 'easysalesapp'));
+          } 
 
           //Verificamos que la carpeta backend tenga archivos para actualizar
           const pathBack = path.join(updateFolder, 'backend');
-          logger.info('Copiando archivos backend.');
-          if (fs.existsSync(pathBack) && TieneArchivos(pathBack)) 
+          if (fs.existsSync(pathBack) && TieneArchivos(pathBack)){
+            logger.info('Copiando archivos server')
             ActualizarArchivos(pathBack,  path.join(pathDestino, 'easysalesserver'));
+          } 
 
           //Creamos una copia de seguridad antes de ejecutar migraciones
           io.emit('progreso', 'Creando una copia de seguridad');
-          logger.info('Creando copia de seguridad de la DB.');
+          logger.info('Creando copia de seguridad en base de datos')
           const backupPath = path.join(__dirname, "../upload/", "updateBackup.sql");
           await BackupsServ.GenerarBackup(backupPath); //Copia de seguridad actual de la base de datos
 
           //Corremos las migraciones
           io.emit('progreso', 'Actualizando la base de datos');
-          logger.info('Ejecutando migraciones.');
+          logger.info('Ejecutando migraciones')
           await knexcommand.migrate.latest(); // Ejecuta las migraciones
 
           io.emit('progreso', 'Actualización completa');
-          logger.info('Actualización completa.');
+          logger.info('Actualización completa')
 
           //Reiniciamos el servidor
           if(config.produccion)
