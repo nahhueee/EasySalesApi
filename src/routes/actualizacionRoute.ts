@@ -8,12 +8,7 @@ const router : Router  = Router();
 router.post('/actualizar/', async (req:Request, res:Response) => {
     try{ 
         if(req.body){
-            const correcto = await ActualizarServ.Actualizar(req.body.url)
-            
-            if(correcto)
-                res.json("OK");
-
-            res.json("Not OK");
+            res.json(await ActualizarServ.Actualizar(req.body.url));
         }else
             throw {message:"No se proporcionó data"};
 

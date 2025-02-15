@@ -1,7 +1,5 @@
 import config from '../conf/app.config';
 import logger from '../log/logger';
-const util = require('util');
-const exec = util.promisify(require('child_process').exec);
 const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
@@ -49,8 +47,12 @@ class ActualizarService{
           //Creamos una copia de seguridad antes de ejecutar migraciones
           io.emit('progreso', 'Creando una copia de seguridad');
           logger.info('Creando copia de seguridad en base de datos')
-          const backupPath = path.join(__dirname, "../upload/", "updateBackup.sql");
-          await BackupsServ.GenerarBackup(backupPath); //Copia de seguridad actual de la base de datos
+
+          const backupPath = "C:/backups";
+          if (!fs.existsSync(backupPath))
+            fs.mkdirSync(backupPath, { recursive: true });
+
+          await BackupsServ.GenerarBackup(path.resolve(backupPath, "updateBackup.sql")); //Copia de seguridad actual de la base de datos
 
           //Corremos las migraciones
           io.emit('progreso', 'Actualizando la base de datos');
@@ -60,11 +62,7 @@ class ActualizarService{
           io.emit('progreso', 'Actualización completa');
           logger.info('Actualización completa')
 
-          //Reiniciamos el servidor
-          if(config.produccion)
-            await ReiniciarServidor();
-
-          return true;
+          return "OK";
 
         } catch (error:any) {
           io.emit('error', 'Ocurrió un error al intentar actualizar');
@@ -159,22 +157,6 @@ function ExisteDirectorio(rutaArchivo) {
 // Función para verificar si la carpeta tiene archivos
 function TieneArchivos(rutaCarpeta) {
   return fs.readdirSync(rutaCarpeta).length > 0;
-}
-
-
-async function ReiniciarServidor(){
-    
-  //comando a ejecutar
-  let command = "pm2 restart all";
- 
-  //Ejecutamos el comando
-  const { stdout, stderr } = await exec(command);
-  if (stderr) {
-      logger.error(`Error al ejecutar el comando: ${stderr.message}`);
-      return null;
-  }
-  
-  return true;
 }
 
 export const ActualizarServ = new ActualizarService();

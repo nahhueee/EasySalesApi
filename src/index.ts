@@ -2,11 +2,14 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
+import logger from './log/logger';
+
 
 const http = require('http');
 const path = require('path');
 const socketIo = require('socket.io');
-
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
 
 const app = express();
 const server = http.createServer(app);
@@ -94,6 +97,22 @@ BackupsServ.IniciarCron();
 //Index Route
 app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
+});
+
+app.get('/easysales/reset', (req, res) => {
+    //Informa al frontend que se reiniciara el servidor
+    res.status(200).json('Petición iniciada.');
+    logger.info("Reiniciando Servidor");
+
+    setTimeout(() => {
+        exec("pm2 restart easysales", (error, stdout, stderr) => {
+            if (error) {
+                logger.error(`Error al reiniciar: ${error.message}`);
+            } else {
+                logger.info("Servidor reiniciado correctamente");
+            }
+        });
+    }, 500);
 });
 
 //404

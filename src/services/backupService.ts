@@ -96,7 +96,7 @@ class BackupsService{
         //comando a ejecutar
         let command = "";
         if(config.produccion)
-            command = `mysqldump -u ${config.db.user} -p ${config.db.password} ${config.db.database} > ${backupPath}`;
+            command = `mysqldump -u ${config.db.user} -p${config.db.password} ${config.db.database} > ${backupPath}`;
         else
             command = `mysqldump -u ${config.db.user} ${config.db.database} > ${backupPath}`;
     

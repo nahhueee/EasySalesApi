@@ -18,10 +18,10 @@ module.exports = {
         database: dbConfig.database
       },
       migrations: {
-        directory: './src/db/tasks',  // Ruta donde se generan y almacenan las migraciones
+        directory: 'db/tasks',  // Ruta donde se generan y almacenan las migraciones
       },
       seeds: {
-        directory: './src/db/seeds'  // Ruta para los archivos de seeds
+        directory: 'db/seeds'  // Ruta para los archivos de seeds
       }
     }
 };
