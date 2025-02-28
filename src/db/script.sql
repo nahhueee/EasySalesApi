@@ -141,7 +141,16 @@ CREATE TABLE ventas_pago (
 ENGINE=InnoDB;
 
 
-INSERT INTO parametros(clave, valor) VALUES('version','1.0.0'),('dni',''), ('expresion',''), ('backups', 'false'), ('dias', 'Lunes, Martes, Viernes'), ('hora', '20:30'), ('avisoNvaVersion', 'true');
+INSERT INTO parametros(clave, valor) 
+VALUES 
+('version','1.0.0'),
+('dni',''), 
+('expresion',''), 
+('backups', 'false'), 
+('dias', 'Lunes, Martes, Viernes'), 
+('hora', '20:30'), 
+('avisoNvaVersion', 'true'),
+('actualizado', 'true');
 
 INSERT INTO productos(id,codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,idCategoria) 
 VALUES(NULL,'*','VARIOS',1,'$',1,1,NULL,NULL,NULL,NULL,'UNI',NULL,NULL);

@@ -1,3 +1,4 @@
+import moment from 'moment';
 import db from '../db';
 import { Producto } from '../models/Producto';
 
@@ -56,7 +57,6 @@ class ProductosRepository{
 
     async BuscarProductos(filtro:any){
         const connection = await db.getConnection();
-        console.log(filtro)
         try {
             let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad FROM productos WHERE id <> 1';
 
@@ -100,7 +100,8 @@ class ProductosRepository{
     //#region ABM
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
+        let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
+
         try {
             let existe = await ValidarExistencia(connection, data, false);
             if(existe)//Verificamos si ya existe un producto con el mismo nombre o codigo
@@ -117,7 +118,7 @@ class ProductosRepository{
                                 data.precio,
                                 data.redondeo,
                                 data.porcentaje,
-                                data.vencimiento,
+                                vencimiento,
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
@@ -135,7 +136,8 @@ class ProductosRepository{
 
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
+        let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
+
         try {
             let existe = await ValidarExistencia(connection, data, true);
             if(existe)//Verificamos si ya existe un producto con el mismo nombre o codigo
@@ -165,7 +167,7 @@ class ProductosRepository{
                                 data.precio,
                                 data.redondeo,
                                 data.porcentaje,
-                                data.vencimiento,
+                                vencimiento,
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
@@ -304,7 +306,6 @@ async function ValidarExistencia(connection, data:any, modificando:boolean):Prom
     try {
         let consulta = " SELECT id FROM productos WHERE (nombre = ? OR codigo = ?) ";
         if(modificando) consulta += " AND id <> ? ";
-
         const parametros = [data.nombre.toUpperCase(),data.codigo.toUpperCase(), data.id];
 
         const rows = await connection.query(consulta,parametros);

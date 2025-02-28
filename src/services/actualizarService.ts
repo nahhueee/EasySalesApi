@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
 const axios = require('axios');
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
 import { io } from '../index'; 
 
 import knex from 'knex';
@@ -43,6 +45,11 @@ class ActualizarService{
             logger.info('Copiando archivos server')
             ActualizarArchivos(pathBack,  path.join(pathDestino, 'easysalesserver'));
           } 
+
+          //instalamos packages
+          io.emit('progreso', 'Actualizando paquetes');
+          logger.info('Actualizando paquetes Node')
+          await InstalarPackages(); // Ejecuta las migraciones
 
           //Creamos una copia de seguridad antes de ejecutar migraciones
           io.emit('progreso', 'Creando una copia de seguridad');
@@ -134,8 +141,22 @@ function ActualizarArchivos(origen: string, destino: string) {
         }
         ActualizarArchivos(rutaOrigen, rutaDestino);
       } else {
-        // Sobrescribimos el archivo 
+
+        // Si el archivo ya existe, intentamos cerrarlo antes de eliminarlo
+        if (fs.existsSync(rutaDestino)) {
+          try {
+            fs.unlinkSync(rutaDestino);
+          } catch (error) {
+            logger.error(`⚠️ No se pudo eliminar el archivo (posiblemente en uso): ${rutaDestino}`);
+          }
+        }
+
+        // Copiamos el archivo nuevo
         fs.copyFileSync(rutaOrigen, rutaDestino);
+
+        // orzamos la actualización de la fecha de modificación
+        const now = new Date();
+        fs.utimesSync(rutaDestino, now, now);
       }
 
       // Eliminamos el archivo de la carpeta de actualización
@@ -157,6 +178,19 @@ function ExisteDirectorio(rutaArchivo) {
 // Función para verificar si la carpeta tiene archivos
 function TieneArchivos(rutaCarpeta) {
   return fs.readdirSync(rutaCarpeta).length > 0;
+}
+
+//Ejecutar npm install
+async function InstalarPackages(){
+  // Obtenemos la ruta del directorio donde queremos ejecutar npm install
+  const rootPath = path.resolve(__dirname, "../../"); 
+
+  //Ejecutamos el comando
+  const { stdout, stderr } = await exec("npm install", { cwd: rootPath });
+  if (stderr) {
+      logger.error(`Error al ejecutar el comando: ${stderr.message}`);
+      return null;
+  }
 }
 
 export const ActualizarServ = new ActualizarService();

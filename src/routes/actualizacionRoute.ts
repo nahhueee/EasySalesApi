@@ -1,19 +1,21 @@
-import {ActualizarServ} from '../services/actualizarService';
 import {Router, Request, Response} from 'express';
 import logger from '../log/logger';
-import config from '../conf/app.config';
+import { ParametrosRepo } from '../data/parametrosRepository';
 const router : Router  = Router();
 
 
-router.post('/actualizar/', async (req:Request, res:Response) => {
+router.post('/ok', async (req:Request, res:Response) => {
     try{ 
         if(req.body){
-            res.json(await ActualizarServ.Actualizar(req.body.url));
+            //Actualizamos el aviso de que se actualizo el sistema
+            await ParametrosRepo.ActualizarParametro({clave:"actualizado", valor:"true"})
+            //Actualizamos localmente la version
+            res.json(await ParametrosRepo.ActualizarParametro(req.body));
         }else
             throw {message:"No se proporcionó data"};
 
     } catch(error:any){
-        logger.error("Error al intentar actualizar. " + error);
+        logger.error("Error al intentar informar la actualización. " + error);
         res.status(500).send(false);
     }
 });

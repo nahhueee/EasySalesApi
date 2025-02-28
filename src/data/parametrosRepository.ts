@@ -22,8 +22,6 @@ class ParametrosRepository{
     } finally{
         connection.release();
     }
-
-    return "";
   }
 
   async ActualizarParametro(data:any): Promise<string>{
