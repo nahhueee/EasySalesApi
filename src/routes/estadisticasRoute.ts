@@ -1,6 +1,6 @@
 import {EstadisticasRepo} from '../data/estadisticasRepository';
 import {Router, Request, Response} from 'express';
-import logger from '../log/logger';
+import logger from '../log/loggerGeneral';
 const router : Router  = Router();
 
 

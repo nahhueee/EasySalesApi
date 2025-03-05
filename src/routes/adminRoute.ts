@@ -1,6 +1,6 @@
 import {AdminServ} from '../services/adminService';
 import {Router, Request, Response} from 'express';
-import logger from '../log/logger';
+import logger from '../log/loggerGeneral';
 const router : Router  = Router();
 
 //Obtiene la version en linea del sistema 

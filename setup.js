@@ -21,14 +21,19 @@ async function setup() {
 
     console.log("📂 Copiando archivos...");
 
+    
     // Definir archivos individuales
     const filesToCopy = [
       "package.json",
       ".env",
-      "config.json",
       "knexfile.js",
       "src/db/script.sql"
     ];
+
+    //Archivo de configuracion dependiendo el entorno
+    const env = process.env.NODE_ENV || 'pc';  
+    const configFile = `config.${env}.json`;  
+    filesToCopy.push(configFile);
 
     // Copiar archivos individuales
     for (const file of filesToCopy) {
@@ -38,10 +43,23 @@ async function setup() {
     // Copiar toda la carpeta tasks
     await fs.copy("src/db/tasks", "out/src/db/tasks");
 
+    //#region Cambiar la propiedad 'produccion' a true en el archivo de configuración
+    const configFilePath = path.resolve(__dirname, `out/${configFile}`);
+    
+    const rawConfig = await fs.readFile(configFilePath, 'utf-8');
+    const config = JSON.parse(rawConfig);
+
+    config.produccion = true;
+
+    // Guardar los cambios en el archivo de configuración
+    await fs.writeFile(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
+    //#endregion
+
     console.log("✅ Archivos copiados correctamente.");
   } catch (error) {
     console.error("❌ Error en la configuración:", error);
   }
 }
+
 
 setup();

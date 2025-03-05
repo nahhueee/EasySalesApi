@@ -1,0 +1,12 @@
+{
+    "adminUrl": "https://creationcode.store/adminserver/",
+    "produccion": true,
+    "port": 7500,
+    "idApp": 1,
+    "db": {
+        "host": "127.0.0.1",
+        "user": "easysales",
+        "password": "SDZ6rP2G4W2642Tz",
+        "database": "dbeasysales"
+    }
+}

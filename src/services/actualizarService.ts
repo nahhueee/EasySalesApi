@@ -1,5 +1,5 @@
 import config from '../conf/app.config';
-import logger from '../log/logger';
+import logger from '../log/loggerGeneral';
 const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');

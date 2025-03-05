@@ -1,5 +1,5 @@
 import {Router, Request, Response} from 'express';
-import logger from '../log/logger';
+import logger from '../log/loggerGeneral';
 import { ParametrosRepo } from '../data/parametrosRepository';
 const router : Router  = Router();
 

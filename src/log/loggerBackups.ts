@@ -8,7 +8,7 @@ const timezoned = () => {
 };
 
 
-const logFilePath = path.resolve(__dirname, 'error.json');
+const logFilePath = path.resolve(__dirname, 'backup.json');
 
 // Asegurar que el archivo existe y contiene un array JSON válido
 if (!fs.existsSync(logFilePath)) {
@@ -30,7 +30,7 @@ export const limpiarLog = () => {
   fs.writeFileSync(logFilePath, '[]'); // Reiniciar como array vacío
 };
 
-const logger = winston.createLogger({
+const backupsLogs = winston.createLogger({
   transports: [
 
     // Transporte para errores, warns e info
@@ -58,4 +58,4 @@ const logger = winston.createLogger({
   
 });
 
-export default logger; 
+export default backupsLogs; 

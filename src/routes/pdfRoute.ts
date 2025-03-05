@@ -1,6 +1,6 @@
 import {Router, Request, Response} from 'express';
 import { upload, uniqueName, fullPath } from '../conf/upload_config'; // Importar configuración de Multer y las variables
-import logger from '../log/logger';
+import logger from '../log/loggerGeneral';
 const router : Router  = Router();
 
 const printer = require('pdf-to-printer');

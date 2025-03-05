@@ -1,7 +1,8 @@
 /out
 /node_modules
-/src/log/error.json
+/src/log/general.json
 /src/log/update.json
+/src/log/backup.json
 /src/upload/*
 !/src/upload/
 /update

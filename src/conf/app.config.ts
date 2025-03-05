@@ -2,17 +2,20 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
 
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// Cargar el archivo .env dependiendo del entorno
+const env = process.env.NODE_ENV || 'pc';  // Si no se define NODE_ENV, por defecto 'pc'
+const envFilePath = path.resolve(__dirname, `../../.env`);
+dotenv.config({ path: envFilePath });
 
-const rawConfig = fs.readFileSync(path.resolve(__dirname, '../../config.json'), 'utf-8');
-const configs = JSON.parse(rawConfig);
+// Cargar el archivo de configuración correspondiente según el entorno
+const configFile = `config.${env}.json`;  // El archivo se llama 'config.pc.json' o 'config.web.json'
+const rawConfig = fs.readFileSync(path.resolve(__dirname, `../../${configFile}`), 'utf-8');
+const config = JSON.parse(rawConfig);
 
-const env = process.env.NODE_ENV || 'pc';
-const config = configs[env];
-
+// Verificar que la configuración exista para el entorno
 if (!config) {
-  throw new Error(`No configuration found for environment: ${env}`);
+  throw new Error(`No se encontró archivo de configuracion: ${configFile}`);
 }
 
+// Exportar la configuración
 export default config;
-
