@@ -80,9 +80,9 @@ app.use('/easysales/imagenes', imagenesRuta);
 import pdfRoute from './routes/pdfRoute';
 app.use('/easysales/docs', pdfRoute);
 
-//Actualizacion Route
-import actualizacionRuta from './routes/actualizacionRoute';
-app.use('/easysales/update', actualizacionRuta);
+//Facturacion Route
+import facturacionRuta from './routes/facturacionRoute';
+app.use('/easysales/facturacion', facturacionRuta);
 
 //#region backups y contenidos de pago
 import backupRoute from './routes/backupRoute';
@@ -95,6 +95,10 @@ BackupsServ.IniciarCron();
 //Index Route
 app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
+});
+
+app.get('/mega', (req, res) => {
+    BackupsServ.ConectarConMega();
 });
 
 //404

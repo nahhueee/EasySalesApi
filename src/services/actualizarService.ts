@@ -59,7 +59,7 @@ class ActualizarService{
           if (!fs.existsSync(backupPath))
             fs.mkdirSync(backupPath, { recursive: true });
 
-          await BackupsServ.GenerarBackup(path.resolve(backupPath, "updateBackup.sql")); //Copia de seguridad actual de la base de datos
+          //await BackupsServ.GenerarBackup(path.resolve(backupPath, "updateBackup.sql")); //Copia de seguridad actual de la base de datos
 
           //Corremos las migraciones
           io.emit('progreso', 'Actualizando la base de datos');

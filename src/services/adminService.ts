@@ -1,5 +1,8 @@
 import config from '../conf/app.config';
-const axios = require('axios');
+import FormData from 'form-data';
+import fs from 'fs';
+import axios from 'axios';
+
 
 class AdminService{
     
@@ -67,6 +70,26 @@ class AdminService{
             }else{
                 return false;
             }
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async SubirBackup(backupPath:string, DNI:string){
+        try {
+            const formData = new FormData();
+            formData.append("backup", fs.createReadStream(backupPath));
+            formData.append("app", config.idApp); // aplicacion
+            formData.append("dni", DNI); // usuario
+
+            const headers = formData.getHeaders();
+            const response = await axios.post(`${config.adminUrl}backups/upload`, formData, {
+                headers,
+            });
+            if (response.data) 
+                return response.data;
+
+            return null;
         } catch (error) {
             throw error;
         }

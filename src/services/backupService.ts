@@ -4,17 +4,42 @@ import {AdminServ} from '../services/adminService';
 import backupLogger from '../log/loggerBackups';
 import config from '../conf/app.config';
 import { Storage } from 'megajs';
+import { unlink } from 'fs/promises';
+import { existsSync } from 'fs';
+import { spawn } from 'child_process';
+import { createWriteStream } from 'fs';
 const moment = require('moment');
-const util = require('util');
-const exec = util.promisify(require('child_process').exec);
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
 
-let scheduledTask; // Variable para guardar la tarea programada
 
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execPromise = promisify(exec);
+
+let scheduledTask; // Variable para guardar la tarea programada
 class BackupsService{
 
+    async ConectarConMega():Promise<Storage> {
+        console.log(config.mega.email, config.mega.pass)
+        return new Promise((resolve, reject) => {
+            const megastorage = new Storage({
+                email: config.mega.email,  
+                password: config.mega.pass,       
+            }, error => {
+                if (error) {
+                    backupLogger.error('Error al intentar conectar a MEGA. ' + error);
+                    reject(new Error('Error al intentar conectar a MEGA: ' + error));
+                } else {
+                    backupLogger.info('Conectado a MEGA correctamente.');
+                    resolve(megastorage);
+                }
+            });
+        });
+    }
+
+    
     async IniciarCron(){
         try{ 
             //Obtenemos los parametros necesarios
@@ -33,88 +58,77 @@ class BackupsService{
 
     //Funcion para inicar el cron de respaldo
     async EjecutarProcesoCron(DNI:string, expresion:string){
-        if (expresion!="") {
+        try{
 
-            // Si ya existe una tarea programada, la detenemos para iniciar una nueva y no crear crones en simultaneo
-            if (scheduledTask){
-                scheduledTask.stop(); 
-            } 
-            
-            //Solo si el parametro de activar esta habilitado, iniciamos el proceso de cron
-            const activarBackup = await ParametrosRepo.ObtenerParametros('backups');
-            
-            if(activarBackup=="true"){
+            if (expresion!="") {
+
+                // Si ya existe una tarea programada, la detenemos para iniciar una nueva y no crear crones en simultaneo
+                if (scheduledTask) {
+                    scheduledTask.stop();
+                    scheduledTask = null;
+                }
+                
+                //Solo si el parametro de activar esta habilitado, iniciamos el proceso de cron
+                const activarBackup = await ParametrosRepo.ObtenerParametros('backups');
+                if (activarBackup !== "true") {
+                    return;
+                }
+
+                //Verificamos que el cliente este habilitado para sincronizar
+                const habilitado = await AdminServ.ObtenerHabilitacion(DNI)
+                if (!habilitado) {
+                    backupLogger.info('Cliente inexistente o inhabilitado para generar backups.');
+                    return;
+                }
+
                 // Programamos la nueva tarea para crear backups
                 scheduledTask = cron.schedule(expresion, async () => {
+                    backupLogger.info('Se inicia un nuevo proceso de respaldo en cron.');
 
-                    //Verificamos que el cliente este habilitado para sincronizar
-                    const habilitado = await AdminServ.ObtenerHabilitacion(DNI)
-                
-                    if((habilitado)){
-                        backupLogger.info('Se inicia un nuevo proceso de respaldo en cron.');
+                    //Nombre del archivo
+                    const fileName = `${DNI}_${moment().format('DD-MM-YYYY')}.sql`;
 
-                        //Nombre del archivo
-                        const fileName = `${DNI}_${moment().format('DD-MM-YYYY')}.sql`;
-                        
-                        //Path donde guardamos el backup    
-                        const backupPath = path.join(__dirname, "../upload/", fileName);
+                    //Path donde guardamos el backup    
+                    const backupPath = path.join(__dirname, "../upload/", fileName);
+                    await eliminarArchivo(backupPath); // Elimina el archivo
 
-                        if(await this.GenerarBackup(backupPath)){
-                            
-                            const megastorage = await ConectarConMega(); //Logging Mega
-
-                            //Verificamos que el cliente tenga 3 backups en el servidor
-                            //Si tiene 3 borramos el mas viejo para crear uno más reciente
-                            const backups = await BackupsRepo.ObtenerUltimoRenovar();
-                            if(backups.total==3){
-                                EliminarDeMega(megastorage,backups.fila.nombre); //Borramos el archivo en Mega
-                                BackupsRepo.Eliminar(backups.fila.nombre); //Borramos el registro local
-                            }
-
-                            //Subimos el backup a Mega
-                            const subido = await SubirAMega(megastorage, fileName);
-
-                            //Guardamos el registro de backup
-                            if(subido){
-                                await BackupsRepo.Agregar(fileName);
-                                fs.unlinkSync(backupPath); // Elimina el archivo localmente
-                            }
-                        }
-                    }else{
-                        backupLogger.info('Cliente inexistente o inhabilitado');
+                    //Generamos el backup
+                    await GenerarBackup(backupPath)
+                    if(!existsSync(backupPath)){
+                        backupLogger.error('Parece que ocurrio un error al intentar generar un backup.');
+                        return;
                     }
+
+
+                    //El servidor se encarga de verificar si el usuario tiene mas de 3 backups subidos
+                    //Se borra el más antiguo, y se sube el nuevo
+                    const resultado = await AdminServ.SubirBackup(backupPath, DNI);
+                    if(resultado=="OK"){
+                        backupLogger.info('Se subió correctamente el archivo al servidor.');
+
+                        //Agregamos el registro a la base local
+                        await BackupsRepo.Agregar(fileName);
+                        fs.unlinkSync(backupPath); // Elimina el archivo localmente
+                    }
+                    else
+                        backupLogger.error('Ocurrió un error al intentar subir el archivo al servidor. ' + resultado);
+
                     
-                    backupLogger.info('Finalizó el proceso de respaldo.');
+                    backupLogger.info('Finalizó correctamente el proceso de respaldo.');
                 });
+
             }
         }
-    }
-
-    //#region CREAR ARCHIVO BACKUP
-    async GenerarBackup(backupPath:string){
-        
-        //comando a ejecutar
-        let command = "";
-        if(config.produccion)
-            command = `mysqldump -u ${config.db.user} -p${config.db.password} ${config.db.database} > ${backupPath}`;
-        else
-            command = `mysqldump -u ${config.db.user} ${config.db.database} > ${backupPath}`;
-    
-        //Ejecutamos el comando
-        const { stdout, stderr } = await exec(command);
-        if (stderr) {
-            backupLogger.error(`Error al ejecutar el comando: ${stderr.message}`);
-            return null;
+        catch (error: any) {
+            backupLogger.error("Error dentro del proceso cron: " + error.message);
+            console.error(error);
         }
-        
-        backupLogger.info('Se generó correctamente el archivo de backup.');
-        return true;
     }
-    //#endregion 
 }
 
 //#region SUBIDA Y ELIMINACION DE BACKUPS A MEGA
 async function ConectarConMega():Promise<Storage> {
+    console.log(config.mega.email, config.mega.pass)
     return new Promise((resolve, reject) => {
         const megastorage = new Storage({
             email: config.mega.email,  
@@ -130,6 +144,8 @@ async function ConectarConMega():Promise<Storage> {
         });
     });
 }
+
+
 
 // Función para obtener el tamaño del archivo
 function getFileSize(filePath) {
@@ -211,69 +227,50 @@ async function EliminarDeMega(megastorage:Storage, fileName:string) {
 //#endregion
 
 
-//#region SUBIDA DE ARCHIVOS Y ELIMINACION EN DRIVE --- DEPRECADO
+async function eliminarArchivo(filePath: string) {
+    if (existsSync(filePath)) { // Verifica si el archivo existe
+        try {
+            await unlink(filePath); // Elimina el archivo
+        } catch (error) {
+            backupLogger.error(`Error al intentar eliminar el archivo: ${error}`);
+        }
+    } 
+}
 
-// Obtiene la autenticacion de google drive utilizando credenciales de servicio
-// async function authenticate() {
-//     const auth = await new google.auth.GoogleAuth({
-//       keyFile: path.join(__dirname, "../conf/adminservice-435500-8d0b1bdcf189.json"), // Ruta del archivo de credenciales de servicio
-//       scopes: ['https://www.googleapis.com/auth/drive.file'],
-//     });
-//     return auth;
-// }
+async function GenerarBackup(backupPath: string) {
+    return new Promise<boolean>((resolve, reject) => {
+        const args = [`-u`, config.db.user];
 
-//Sube el archivo de backup a drive
-// async function SubirArchivoDrive(filename, auth) {
-//     const drive = google.drive({ version: 'v3', auth });
-//     const filePath = path.join(__dirname, "../upload/", filename);  // Ruta del archivo .sql
+        if (config.produccion) {
+            args.push(`-p${config.db.password}`);
+        }
 
-//     const fileMetadata = {
-//       name: filename,  // Nombre que tendrá el archivo en Drive
-//       parents: ['1dbzEQwhvMNOz1VRcYUGx8hCfxEPYb2jZ'], //Id de la carpeta donde se ubicará
-//       role: 'reader',
-//       type: 'user',
-//       emailAddress: 'creationcode.mc@gmail.com'
-//     };
+        args.push(config.db.database);
 
-//     // Verifica que el archivo tiene contenido
-//     const stats = fs.statSync(filePath);
-//     if (stats.size === 0) {
-//         logger.info('El archivo esta vacio.');
-//         return;
-//     }
+        const dumpProcess = spawn('mysqldump', args);
+        const output = createWriteStream(backupPath);
 
-//     const media = {
-//         mimeType: 'application/sql',
-//         body: await fs.createReadStream(filePath),
-//     };
+        dumpProcess.stdout.pipe(output);
 
-//     try {
-//         const file = await drive.files.create({
-//             resource: fileMetadata,
-//             media: media,
-//             fields: 'id',
-//         });
-  
-//         logger.info(`Archivo subido correctamente: ${file.data.id}`);
-//         return file.data.id;
-//     } catch (error) {
-//         logger.info('Error al intentar subir el archivo a drive. ' + error);
-//         return null;
-//     }
-// }
+        dumpProcess.stderr.on('data', (data) => {
+            backupLogger.error(`Error en mysqldump: ${data}`);
+        });
 
-//Elimina por id un archivo en google drive
-// async function EliminarArchivoDrive(fileId, auth) {
-//     const drive = google.drive({ version: 'v3', auth });
-  
-//     try {
-//         await drive.files.delete({ fileId });
-//         logger.info(`Archivo con ID ${fileId} ha sido eliminado.`);
-//     } catch (error) {
-//         logger.info('Error al intentar eliminar el archivo de drive. ' + error);
-//     }
-// }
-//#endregion 
+        dumpProcess.on('close', (code) => {
+            if (code === 0) {
+                backupLogger.info(`Backup generado correctamente`);
+                resolve(true);
+            } else {
+                backupLogger.error(`mysqldump finalizó con código: ${code}`);
+                reject(false);
+            }
+        });
 
-  
+        dumpProcess.on('error', (err) => {
+            backupLogger.error(`Error al lanzar mysqldump: ${err}`);
+            reject(false);
+        });
+    });
+}
+
 export const BackupsServ = new BackupsService();
