@@ -126,104 +126,104 @@ class BackupsService{
     }
 }
 
-//#region SUBIDA Y ELIMINACION DE BACKUPS A MEGA
-async function ConectarConMega():Promise<Storage> {
-    console.log(config.mega.email, config.mega.pass)
-    return new Promise((resolve, reject) => {
-        const megastorage = new Storage({
-            email: config.mega.email,  
-            password: config.mega.pass,       
-        }, error => {
-            if (error) {
-                backupLogger.error('Error al intentar conectar a MEGA. ' + error);
-                reject(new Error('Error al intentar conectar a MEGA: ' + error));
-            } else {
-                backupLogger.info('Conectado a MEGA correctamente.');
-                resolve(megastorage);
-            }
-        });
-    });
-}
+//#region SUBIDA Y ELIMINACION DE BACKUPS A MEGA ---- DEPRECADO
+// async function ConectarConMega():Promise<Storage> {
+//     console.log(config.mega.email, config.mega.pass)
+//     return new Promise((resolve, reject) => {
+//         const megastorage = new Storage({
+//             email: config.mega.email,  
+//             password: config.mega.pass,       
+//         }, error => {
+//             if (error) {
+//                 backupLogger.error('Error al intentar conectar a MEGA. ' + error);
+//                 reject(new Error('Error al intentar conectar a MEGA: ' + error));
+//             } else {
+//                 backupLogger.info('Conectado a MEGA correctamente.');
+//                 resolve(megastorage);
+//             }
+//         });
+//     });
+// }
 
 
 
-// Función para obtener el tamaño del archivo
-function getFileSize(filePath) {
-    const stats = fs.statSync(filePath);
-    return stats.size;
-}
+// // Función para obtener el tamaño del archivo
+// function getFileSize(filePath) {
+//     const stats = fs.statSync(filePath);
+//     return stats.size;
+// }
 
-// Función para subir el archivo de respaldo a MEGA
-async function SubirAMega(megastorage:Storage, fileName:string) {
-    try {
+// // Función para subir el archivo de respaldo a MEGA
+// async function SubirAMega(megastorage:Storage, fileName:string) {
+//     try {
 
-        const filePath = path.join(__dirname, "../upload/", fileName);  // Ruta del archivo .sql
-        const fileSize = getFileSize(filePath);// Obtener el tamaño del archivo
+//         const filePath = path.join(__dirname, "../upload/", fileName);  // Ruta del archivo .sql
+//         const fileSize = getFileSize(filePath);// Obtener el tamaño del archivo
         
-        // Buscar la carpeta destino
-        const targetFolder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
+//         // Buscar la carpeta destino
+//         const targetFolder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
 
-        if (!targetFolder) {
-            backupLogger.error(`Carpeta ${config.mega.folderName} no encontrada en MEGA.`);
-            return;
-        }
+//         if (!targetFolder) {
+//             backupLogger.error(`Carpeta ${config.mega.folderName} no encontrada en MEGA.`);
+//             return;
+//         }
 
-        // Subir el archivo a la carpeta 
-        const fileStream = fs.createReadStream(filePath);  // Ruta del archivo
-        const uploadStream = targetFolder.upload({ name: fileName, size: fileSize });  // Nombre en MEGA
+//         // Subir el archivo a la carpeta 
+//         const fileStream = fs.createReadStream(filePath);  // Ruta del archivo
+//         const uploadStream = targetFolder.upload({ name: fileName, size: fileSize });  // Nombre en MEGA
 
 
-        const resultado = await new Promise((resolve, reject) => {
+//         const resultado = await new Promise((resolve, reject) => {
             
-            // Conectar los streams para subir el archivo
-            fileStream.pipe(uploadStream);
+//             // Conectar los streams para subir el archivo
+//             fileStream.pipe(uploadStream);
 
-            uploadStream.on('complete', (file) => {
-                backupLogger.info(`Archivo subido correctamente a MEGA: ${fileName}`);
-                resolve(true);  
-            });
+//             uploadStream.on('complete', (file) => {
+//                 backupLogger.info(`Archivo subido correctamente a MEGA: ${fileName}`);
+//                 resolve(true);  
+//             });
 
-            uploadStream.on('error', (error) => {
-                backupLogger.info(`Error al subir el archivo a MEGA: ${error}`);
-                reject(false);  // Rechazar la promesa si hay un error
-            });
-        });
+//             uploadStream.on('error', (error) => {
+//                 backupLogger.info(`Error al subir el archivo a MEGA: ${error}`);
+//                 reject(false);  // Rechazar la promesa si hay un error
+//             });
+//         });
 
-        return resultado;
+//         return resultado;
 
-    } catch (error) {
-        backupLogger.error('Error al intentar subir el archivo a MEGA. ' + error);
-        return false;
-    }
-}
+//     } catch (error) {
+//         backupLogger.error('Error al intentar subir el archivo a MEGA. ' + error);
+//         return false;
+//     }
+// }
 
-async function EliminarDeMega(megastorage:Storage, fileName:string) {
-    try {
+// async function EliminarDeMega(megastorage:Storage, fileName:string) {
+//     try {
 
-        //Obtenemos la carpeta de backups
-        const folder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
-        if (folder) {
-            // Buscar el archivo dentro de la carpeta
-            const file = folder.children!.find(child => child.name === fileName);
+//         //Obtenemos la carpeta de backups
+//         const folder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
+//         if (folder) {
+//             // Buscar el archivo dentro de la carpeta
+//             const file = folder.children!.find(child => child.name === fileName);
 
-            if (file) {
-                // Eliminar el archivo encontrado
-                file.delete(true, (error) => {
-                    if (error)
-                        backupLogger.error(`Error al eliminar el archivo ${fileName}: ` + error);
-                    else 
-                    backupLogger.info(`Archivo ${fileName} eliminado correctamente de Mega.`);
-                });
-            } else {
-                backupLogger.error(`Archivo ${fileName} no encontrado en Mega para borrar.`);
-            }
-        }else
-            backupLogger.error(`No se encontró la carpeta al intentar borrar un archivo de Mega.`);
+//             if (file) {
+//                 // Eliminar el archivo encontrado
+//                 file.delete(true, (error) => {
+//                     if (error)
+//                         backupLogger.error(`Error al eliminar el archivo ${fileName}: ` + error);
+//                     else 
+//                     backupLogger.info(`Archivo ${fileName} eliminado correctamente de Mega.`);
+//                 });
+//             } else {
+//                 backupLogger.error(`Archivo ${fileName} no encontrado en Mega para borrar.`);
+//             }
+//         }else
+//             backupLogger.error(`No se encontró la carpeta al intentar borrar un archivo de Mega.`);
        
-    } catch (error) {
-        backupLogger.error('Error al intentar eliminar el archivo a MEGA. ' + error);
-    }
-}
+//     } catch (error) {
+//         backupLogger.error('Error al intentar eliminar el archivo a MEGA. ' + error);
+//     }
+// }
 //#endregion
 
 
