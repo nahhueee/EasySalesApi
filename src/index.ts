@@ -6,8 +6,6 @@ import config from './conf/app.config';
 const http = require('http');
 const path = require('path');
 const socketIo = require('socket.io');
-const util = require('util');
-const exec = util.promisify(require('child_process').exec);
 
 const app = express();
 const server = http.createServer(app);
@@ -95,10 +93,6 @@ BackupsServ.IniciarCron();
 //Index Route
 app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
-});
-
-app.get('/mega', (req, res) => {
-    BackupsServ.ConectarConMega();
 });
 
 //404

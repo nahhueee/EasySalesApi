@@ -3,9 +3,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Cargar el archivo .env dependiendo del entorno
-const env = process.env.NODE_ENV || 'pc';  // Si no se define NODE_ENV, por defecto 'pc'
 const envFilePath = path.resolve(__dirname, `../../.env`);
 dotenv.config({ path: envFilePath });
+
+const env = process.env.NODE_ENV || 'pc';  // Si no se define NODE_ENV, por defecto 'pc'
 
 // Cargar el archivo de configuración correspondiente según el entorno
 const configFile = `config.${env}.json`;  // El archivo se llama 'config.pc.json' o 'config.web.json'

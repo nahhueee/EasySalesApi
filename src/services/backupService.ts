@@ -3,7 +3,6 @@ import {BackupsRepo} from '../data/backupsRepository';
 import {AdminServ} from '../services/adminService';
 import backupLogger from '../log/loggerBackups';
 import config from '../conf/app.config';
-import { Storage } from 'megajs';
 import { unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { spawn } from 'child_process';
@@ -16,28 +15,27 @@ const fs = require('fs');
 
 const { exec } = require('child_process');
 const { promisify } = require('util');
-const execPromise = promisify(exec);
 
 let scheduledTask; // Variable para guardar la tarea programada
 class BackupsService{
 
-    async ConectarConMega():Promise<Storage> {
-        console.log(config.mega.email, config.mega.pass)
-        return new Promise((resolve, reject) => {
-            const megastorage = new Storage({
-                email: config.mega.email,  
-                password: config.mega.pass,       
-            }, error => {
-                if (error) {
-                    backupLogger.error('Error al intentar conectar a MEGA. ' + error);
-                    reject(new Error('Error al intentar conectar a MEGA: ' + error));
-                } else {
-                    backupLogger.info('Conectado a MEGA correctamente.');
-                    resolve(megastorage);
-                }
-            });
-        });
-    }
+    // async ConectarConMega():Promise<Storage> {
+    //     console.log(config.mega.email, config.mega.pass)
+    //     return new Promise((resolve, reject) => {
+    //         const megastorage = new Storage({
+    //             email: config.mega.email,  
+    //             password: config.mega.pass,       
+    //         }, error => {
+    //             if (error) {
+    //                 backupLogger.error('Error al intentar conectar a MEGA. ' + error);
+    //                 reject(new Error('Error al intentar conectar a MEGA: ' + error));
+    //             } else {
+    //                 backupLogger.info('Conectado a MEGA correctamente.');
+    //                 resolve(megastorage);
+    //             }
+    //         });
+    //     });
+    // }
 
     
     async IniciarCron(){

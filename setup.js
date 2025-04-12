@@ -1,5 +1,6 @@
 const fs = require("fs-extra");
 const path = require("path");
+require('dotenv').config();
 
 async function setup() {
   try {

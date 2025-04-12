@@ -104,8 +104,8 @@ class ProductosRepository{
 
         try {
             let existe = await ValidarExistencia(connection, data, false);
-            if(existe)//Verificamos si ya existe un producto con el mismo nombre o codigo
-                return "Ya existe un producto con el mismo nombre o código.";
+            if(existe)//Verificamos si ya existe un producto con el mismo codigo
+                return "Ya existe un producto con el mismo código.";
             
             const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,idCategoria)
                               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`;
@@ -140,8 +140,8 @@ class ProductosRepository{
 
         try {
             let existe = await ValidarExistencia(connection, data, true);
-            if(existe)//Verificamos si ya existe un producto con el mismo nombre o codigo
-                return "Ya existe un producto con el mismo nombre o código.";
+            if(existe)//Verificamos si ya existe un producto con el mismo codigo
+                return "Ya existe un producto con el mismo código.";
             
             const consulta = `UPDATE productos SET
                                 codigo = ?,
@@ -196,6 +196,30 @@ class ProductosRepository{
         } finally{
             connection.release();
         }
+    }
+
+    async VerificarYObtener(parametro:any){
+        const connection = await db.getConnection();
+
+        try {
+            const existe = await ValidarExistencia(connection, {codigo:parametro.cod}, false);
+            let producto: Producto = new Producto();
+
+            if(existe){
+                let consulta = " SELECT id, codigo, nombre, cantidad, tipoPrecio, costo, precio, redondeo, porcentaje, vencimiento, faltante, unidad, imagen, idCategoria " +
+                               " FROM productos WHERE codigo = ? ";
+                
+                const rows = await connection.query(consulta, parametro.cod);
+                producto = new Producto(rows[0][0]);
+            }   
+
+            return {existe, producto}
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        } 
     }
     //#endregion
 
@@ -304,10 +328,9 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
 
 async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
-        let consulta = " SELECT id FROM productos WHERE (nombre = ? OR codigo = ?) ";
+        let consulta = " SELECT id FROM productos WHERE codigo = ? ";
         if(modificando) consulta += " AND id <> ? ";
-        const parametros = [data.nombre.toUpperCase(),data.codigo.toUpperCase(), data.id];
-
+        const parametros = [data.codigo.toUpperCase(), data.id];
         const rows = await connection.query(consulta,parametros);
         if(rows[0].length > 0) return true;
 

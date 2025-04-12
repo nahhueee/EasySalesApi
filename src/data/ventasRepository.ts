@@ -45,17 +45,27 @@ class VentasRepository{
                     venta.pago = new pagoVenta({
                         efectivo: parseFloat(row['efectivo']), 
                         digital: parseFloat(row['digital']), 
+                        recargo: parseFloat(row['recargo']), 
+                        descuento: parseFloat(row['descuento']), 
                         entrega: parseFloat(row['entrega']), //Dinero entregado a la venta
-                        restante: venta.total - parseFloat(row['entrega']), //Restante a pagar
-
                         tipoPago: row['tipoPago'],
                         realizado: row['realizado'],
                     });
 
+                    //Aplicamos descuentos
+                    if(venta.pago.descuento > 0)
+                        venta.total = venta.total - (venta.total * (venta.pago.descuento / 100));
+
+                    //Aplicamos recargos
+                    if(venta.pago.recargo > 0)
+                        venta.total = venta.total + (venta.total * (venta.pago.recargo / 100));
+
+                    venta.pago.restante = venta.total - venta.pago.entrega!, //Restante a pagar
+
                     ventas.push(venta);
                   }
             }
-            
+
             return {total:resultado[0][0].total, registros:ventas};
 
         } catch (error:any) {
@@ -335,10 +345,10 @@ async function InsertVenta(connection, venta):Promise<void>{
 
 async function InsertPagoVenta(connection, venta):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_pago(idVenta, idPago, efectivo, digital, entrega, realizado) " +
-                         " VALUES(?, ?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas_pago(idVenta, idPago, efectivo, digital, recargo, descuento, entrega, realizado) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [venta.id, venta.pago.idTipoPago, venta.pago.efectivo, venta.pago.digital, venta.pago.entrega, venta.pago.realizado];
+        const parametros = [venta.id, venta.pago.idTipoPago, venta.pago.efectivo, venta.pago.digital, venta.pago.recargo, venta.pago.descuento, venta.pago.entrega, venta.pago.realizado];
         await connection.query(consulta, parametros);
         
     } catch (error) {

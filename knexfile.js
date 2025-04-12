@@ -1,27 +1,25 @@
 const path = require('path');
 const fs = require('fs');
+const env = process.env.NODE_ENV || 'pc';  // Si no se define NODE_ENV, por defecto 'pc'
 
 // Carga el archivo JSON desde la raíz
-const configPath = path.resolve(__dirname, 'config.json');
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-// Elige la configuración correcta (pc o web)
-const dbConfig = config.pc.db;
+const configFile = `config.${env}.json`; 
+const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
 
 module.exports = {
   development: {
       client: 'mysql2', 
       connection: {
-        host: dbConfig.host,
-        user: dbConfig.user,
-        password: dbConfig.password,
-        database: dbConfig.database
+        host: config.host,
+        user: config.user,
+        password: config.password,
+        database: config.database
       },
       migrations: {
-        directory: 'db/tasks',  // Ruta donde se generan y almacenan las migraciones
+        directory: './src/db/tasks',  // Ruta donde se generan y almacenan las migraciones
       },
       seeds: {
-        directory: 'db/seeds'  // Ruta para los archivos de seeds
+        directory: './src/db/seeds'  // Ruta para los archivos de seeds
       }
     }
 };

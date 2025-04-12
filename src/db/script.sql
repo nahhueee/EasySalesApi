@@ -135,6 +135,8 @@ CREATE TABLE ventas_pago (
     idPago INT,
     efectivo DECIMAL(10,2),
     digital DECIMAL(10,2),
+    descuento DECIMAL(4,2),
+    recargo DECIMAL(4,2),
     entrega DECIMAL(10,2),
     realizado BOOLEAN
 )
@@ -143,7 +145,7 @@ ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.4.8'),
+('version','1.5.0'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
