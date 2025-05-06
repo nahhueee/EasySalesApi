@@ -1,5 +1,6 @@
 import { Cliente } from "./Cliente";
 import { DetalleVenta } from "./DetalleVenta";
+import { FacturaVenta } from "./FacturaVenta";
 import { pagoVenta } from "./PagoVenta";
 
 export class Venta {
@@ -11,5 +12,6 @@ export class Venta {
 
     cliente?: Cliente;
     pago?: pagoVenta;
+    factura?: FacturaVenta;
     detalles?: DetalleVenta[];
 }

@@ -28,7 +28,7 @@ class RubrosRepository{
         const connection = await db.getConnection();
         
         try {
-            const [rows] = await connection.query('SELECT id, nombre FROM categorias');
+            const [rows] = await connection.query('SELECT id, nombre FROM categorias WHERE id <> 1');
             return [rows][0];
 
         } catch (error:any) {
@@ -113,7 +113,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
 
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") 
-            filtro += " WHERE c.nombre LIKE '%"+ filtros.busqueda + "%' ";
+            filtro += " AND c.nombre LIKE '%"+ filtros.busqueda + "%' ";
         // #endregion
 
         if (esTotal)
@@ -130,12 +130,14 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
             " SELECT c.* " +
-            " FROM categorias c" +
+            " FROM categorias c " +
+            " WHERE c.id <> 1 " +
             filtro +
-            " ORDER BY c.id DESC" +
+            " ORDER BY c.id DESC " +
             paginado +
             endCount;
 
+        console.log(query)
         return query;
             
     } catch (error) {

@@ -61,12 +61,12 @@ class EstadisticasRepository{
         }
     }
 
-    //Obtiene los las ganancias por caja
+    //Obtiene las ganancias por caja
     async ObtenerGraficoGanancias(idCaja:string){
         const connection = await db.getConnection();
         
         let condicion = "";
-        if(idCaja != "0") condicion = " WHERE c.id <= ? "; //Si la caja es distinto de 0, filtramos por caja
+        if(idCaja != "0") condicion = " WHERE c.id <= ? AND c.finalizada = 1 "; //Si la caja es distinto de 0, filtramos por caja
 
         try {
             const consulta = " SELECT SUM(((vd.precio - vd.costo) * vd.cantidad)) EjeY, c.id EjeX " +

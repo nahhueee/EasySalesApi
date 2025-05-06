@@ -43,6 +43,7 @@ server.listen(app.get('port'), () => {
 });
 
 //#region Rutas
+import actualizacionRuta from './routes/actualizacionRoute';
 import usuariosRuta from './routes/usuariosRoute';
 import clientesRuta from './routes/clientesRoute';
 import rubrosRuta from './routes/rubrosRoute';
@@ -54,6 +55,7 @@ import estadisticasRuta from './routes/estadisticasRoute';
 import parametrosRuta from './routes/parametrosRoute';
 import logsRuta from './routes/logsRoute';
 
+app.use('/easysales/update', actualizacionRuta)
 app.use('/easysales/usuarios', usuariosRuta);
 app.use('/easysales/clientes', clientesRuta);
 app.use('/easysales/rubros', rubrosRuta);
@@ -78,10 +80,6 @@ app.use('/easysales/imagenes', imagenesRuta);
 import pdfRoute from './routes/pdfRoute';
 app.use('/easysales/docs', pdfRoute);
 
-//Facturacion Route
-import facturacionRuta from './routes/facturacionRoute';
-app.use('/easysales/facturacion', facturacionRuta);
-
 //#region backups y contenidos de pago
 import backupRoute from './routes/backupRoute';
 app.use('/easysales/backup', backupRoute);
@@ -94,6 +92,7 @@ BackupsServ.IniciarCron();
 app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
 });
+  
 
 //404
 app.use((_req, res) => {

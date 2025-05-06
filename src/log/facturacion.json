@@ -1,0 +1,37 @@
+[
+  {
+    "message": "Error 10006: Campo CbteTipo debe ser un valor numerico mayor a 0.",
+    "level": "error",
+    "timestamp": "06-05-25 11:50"
+  },
+  {
+    "message": "Observación 10013: Campo  DocTipo  Para comprobantes clase A y M el campo  DocTipo debe ser igual a 80 (CUIT)",
+    "level": "error",
+    "timestamp": "06-05-25 12:12"
+  },
+  {
+    "message": "Observación 10015: El campo  DocNro es invalido.",
+    "level": "error",
+    "timestamp": "06-05-25 12:12"
+  },
+  {
+    "message": "Observación 10015: Para facturas B (CbteDesde igual a CbteHasta) mayor o igual a $417288, DocTipo debe ser uno de los valores devueltos por el mÃ©todo FEParamGetTiposDoc distinto a 99 y DocNro deberÃ¡ ser mayor a 0.",
+    "level": "error",
+    "timestamp": "06-05-25 12:20"
+  },
+  {
+    "message": "Observación 10015: Para facturas B (CbteDesde igual a CbteHasta) mayor o igual a $417288, DocTipo debe ser uno de los valores devueltos por el mÃ©todo FEParamGetTiposDoc distinto a 99 y DocNro deberÃ¡ ser mayor a 0.",
+    "level": "error",
+    "timestamp": "06-05-25 12:24"
+  },
+  {
+    "message": "Observación 10015: El campo  DocNro es invalido.",
+    "level": "error",
+    "timestamp": "06-05-25 12:41"
+  },
+  {
+    "message": "Error 600: ValidacionDeToken: No aparecio CUIT en lista de relaciones: 20437972312",
+    "level": "error",
+    "timestamp": "06-05-25 16:41"
+  }
+]

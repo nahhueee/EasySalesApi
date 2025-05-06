@@ -39,7 +39,7 @@ class ProductosRepository{
                         imagen: row['imagen'],
                         idCategoria: row['idCategoria'],
                         categoria: row['categoria'],
-                        activo: row['activo'],
+                        soloPrecio: row['soloPrecio'],
                     });
                     
                     productos.push(producto);
@@ -55,10 +55,13 @@ class ProductosRepository{
         }
     }
 
+    //Busca los productos segun lo que digite el usuario
+    //en la ventana de nueva venta
     async BuscarProductos(filtro:any){
         const connection = await db.getConnection();
+
         try {
-            let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad FROM productos WHERE id <> 1';
+            let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad FROM productos WHERE id <> 1 AND soloPrecio = 0 ';
 
             if (filtro.metodo == 'codigo')
                 consulta += " AND codigo = '" + filtro.valor + "'";
@@ -95,6 +98,20 @@ class ProductosRepository{
             connection.release();
         }
     }
+
+    async ObtenerProductosSoloPrecio(){
+        const connection = await db.getConnection();
+        
+        try {
+            const [rows] = await connection.query('SELECT id, codigo, nombre FROM productos WHERE soloPrecio = 1');
+            return [rows][0];
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
     //#endregion
 
     //#region ABM
@@ -107,8 +124,8 @@ class ProductosRepository{
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,idCategoria)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,idCategoria,soloPrecio)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -122,7 +139,8 @@ class ProductosRepository{
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
-                                data.categoria.id];
+                                data.categoria.id,
+                                data.soloPrecio ? 1 : 0];
             
             await connection.query(consulta, parametros);
             return "OK";
@@ -156,7 +174,8 @@ class ProductosRepository{
                                 faltante = ?,
                                 unidad = ?,
                                 imagen = ?,
-                                idCategoria = ?
+                                idCategoria = ?,
+                                soloPrecio = ?
                                 WHERE id = ?`;
 
             const parametros = [data.codigo.toUpperCase(),
@@ -172,6 +191,7 @@ class ProductosRepository{
                                 data.unidad,
                                 data.imagen,
                                 data.categoria.id,
+                                data.soloPrecio ? 1 : 0,
                                 data.id];
 
             await connection.query(consulta, parametros);
@@ -206,7 +226,7 @@ class ProductosRepository{
             let producto: Producto = new Producto();
 
             if(existe){
-                let consulta = " SELECT id, codigo, nombre, cantidad, tipoPrecio, costo, precio, redondeo, porcentaje, vencimiento, faltante, unidad, imagen, idCategoria " +
+                let consulta = " SELECT id, codigo, nombre, cantidad, tipoPrecio, costo, precio, redondeo, porcentaje, vencimiento, faltante, unidad, imagen, idCategoria, soloPrecio " +
                                " FROM productos WHERE codigo = ? ";
                 
                 const rows = await connection.query(consulta, parametro.cod);

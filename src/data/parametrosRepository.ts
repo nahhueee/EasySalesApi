@@ -10,7 +10,7 @@ class ParametrosRepository{
         
         let consulta = `SELECT valor FROM parametros WHERE clave = ?`;
         const rows = await connection.query(consulta,[clave]);
-
+      
         if(rows[0][0]){
           if(rows[0][0].valor!="")
             return rows[0][0].valor
@@ -33,6 +33,48 @@ class ParametrosRepository{
         
         await connection.query(consulta, parametros);
         return "OK";
+
+    } catch (error:any) {
+        throw error;
+    } finally{
+        connection.release();
+    }
+  }
+
+  async ActualizarFacturacion(data:any): Promise<string>{
+    const connection = await db.getConnection();
+    try {
+        const consulta = `UPDATE parametros_facturacion 
+                          SET 
+                          condicion = ?, 
+                          cuil = ?, 
+                          puntoVta = ?,
+                          razon = ?,
+                          direccion = ?`;
+
+        const parametros = [data.condicion, data.cuil, data.puntoVta, data.razon, data.direccion];
+        
+        await connection.query(consulta, parametros);
+        return "OK";
+
+    } catch (error:any) {
+        throw error;
+    } finally{
+        connection.release();
+    }
+  }
+
+  async ObtenerParametrosFacturacion(){
+    const connection = await db.getConnection();
+
+    try {
+        
+        const rows = await connection.query(`SELECT * FROM parametros_facturacion`);
+      
+        if(rows[0][0]){
+          return rows[0][0];
+        }
+        return null;
 
     } catch (error:any) {
         throw error;

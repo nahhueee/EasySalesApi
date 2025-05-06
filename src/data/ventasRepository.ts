@@ -4,6 +4,7 @@ import { Cliente } from '../models/Cliente';
 import { pagoVenta } from '../models/PagoVenta';
 import { DetalleVenta } from '../models/DetalleVenta';
 import { Producto } from '../models/Producto';
+import { FacturaVenta } from '../models/FacturaVenta';
 const moment = require('moment');
 
 class VentasRepository{
@@ -51,6 +52,19 @@ class VentasRepository{
                         tipoPago: row['tipoPago'],
                         realizado: row['realizado'],
                     });
+
+                    venta.factura = new FacturaVenta({
+                        cae: row['cae'], 
+                        caeVto: row['caeVto'], 
+                        ticket: row['ticket'], 
+                        tipoFactura: row['tipoFactura'], 
+                        neto: parseFloat(row['neto']), 
+                        iva: parseFloat(row['iva']), 
+                        dni: row['dni'],
+                        tipoDni: row['tipoDni'],
+                        impreso: row['impreso'],
+                    });
+
 
                     //Aplicamos descuentos
                     if(venta.pago.descuento > 0)
@@ -105,14 +119,21 @@ class VentasRepository{
             await InsertVenta(connection,venta);
 
             //insertamos los datos del pago de la venta
-            await InsertPagoVenta(connection, venta);
+            venta.pago.idVenta = venta.id;
+            await InsertPagoVenta(connection, venta.pago);
 
+            //insertamos los datos de la factura de la venta
+            if(venta.factura){
+                venta.factura.idVenta = venta.id;
+                await InsertFacturaVenta(connection, venta.factura);
+            }
+             
             //Insertamos los detalles de la venta
-            venta.detalles.forEach(element => {
+            for (const element of  venta.detalles) {
                 element.idVenta = venta.id;
                 InsertDetalleVenta(connection, element);
                 ActualizarInventario(connection, element, "-")
-            });
+            };
 
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas + ? WHERE id = ?", [venta.total, venta.idCaja]);
@@ -140,6 +161,9 @@ class VentasRepository{
 
             //Eliminamos el pago relacionado
             await connection.query("DELETE FROM ventas_pago WHERE idVenta = ?", [venta.id]);
+
+             //Eliminamos la factura relacionada
+             await connection.query("DELETE FROM ventas_factura WHERE idVenta = ?", [venta.id]);
 
             //Eliminamos los detalles de la venta
             await connection.query("DELETE FROM ventas_detalle WHERE idVenta = ?", [venta.id]);
@@ -291,11 +315,14 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-                " SELECT v.*, vpag.*, " +
+                " SELECT v.*, " + 
+                " vpag.idPago, vpag.efectivo, vpag.digital, vpag.recargo, vpag.descuento, vpag.entrega, vpag.realizado, " + //Pago
+                " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.impreso, " + //Factura
                 " COALESCE(cli.nombre, 'ELIMINADO') cliente, " +
                 " COALESCE(tp.nombre, 'ELIMINADO') tipoPago " +
                 " FROM ventas v " +
                 " INNER JOIN ventas_pago vpag ON vpag.idVenta = v.id " +
+                " LEFT JOIN ventas_factura vfac ON vfac.idVenta = v.id " +
                 " LEFT JOIN tipos_pago tp ON tp.id = vpag.idPago " +
                 " LEFT JOIN clientes cli ON cli.id = v.idCliente " +
                 " WHERE 1 = 1 " +
@@ -343,12 +370,25 @@ async function InsertVenta(connection, venta):Promise<void>{
     }
 }
 
-async function InsertPagoVenta(connection, venta):Promise<void>{
+async function InsertPagoVenta(connection, pago):Promise<void>{
     try {
         const consulta = " INSERT INTO ventas_pago(idVenta, idPago, efectivo, digital, recargo, descuento, entrega, realizado) " +
                          " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [venta.id, venta.pago.idTipoPago, venta.pago.efectivo, venta.pago.digital, venta.pago.recargo, venta.pago.descuento, venta.pago.entrega, venta.pago.realizado];
+        const parametros = [pago.idVenta, pago.idTipoPago, pago.efectivo, pago.digital, pago.recargo, pago.descuento, pago.entrega, pago.realizado];
+        await connection.query(consulta, parametros);
+        
+    } catch (error) {
+        throw error; 
+    }
+}
+
+async function InsertFacturaVenta(connection, factura):Promise<void>{
+    try {
+        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, impreso) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
+
+        const parametros = [factura.idVenta, factura.cae, factura.caeVto, factura.ticket, factura.tipoFactura, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.impreso];
         await connection.query(consulta, parametros);
         
     } catch (error) {
@@ -408,7 +448,7 @@ async function InsertDetalleVenta(connection, detalle):Promise<void>{
 
 async function ActualizarInventario(connection, detalle, operacion):Promise<void>{
     try {
-        if(detalle.producto.id === 1) return; //No actualizamos el producto vario
+        if(detalle.producto.id === 1 || detalle.producto.soloPrecio) return; //No actualizamos el producto vario o productos que no trabajan cantidad
 
         const consulta = `UPDATE productos SET cantidad = cantidad ${operacion} ? 
                           WHERE id = ?`;

@@ -36,6 +36,17 @@ router.post('/buscar-productos', async (req:Request, res:Response) => {
         res.status(500).send(msg);
     }
 });
+
+router.get('/productos-soloPrecio', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ProductosRepo.ObtenerProductosSoloPrecio());
+
+    } catch(error:any){
+        let msg = "Error al obtener el listado de productos tipo soloPrecio.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
 //#endregion
 
 //#region ABM

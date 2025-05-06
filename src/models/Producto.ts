@@ -17,6 +17,7 @@ export class Producto {
     idCategoria? : number;
     categoria?: string;
     activo? : boolean;
+    soloPrecio? : boolean;
 
     constructor(data?: any) {
         if (data) {
@@ -35,7 +36,7 @@ export class Producto {
             this.imagen = data.imagen;
             this.idCategoria = data.idCategoria;
             this.categoria = data.categoria
-            this.activo = (data.activo == 1) ? true : false;
+            this.soloPrecio = data.soloPrecio;
         }
     }
 }

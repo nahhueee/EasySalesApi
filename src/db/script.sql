@@ -5,8 +5,17 @@ USE dbeasysales;
 
 DROP TABLE IF EXISTS parametros;
 CREATE TABLE parametros (
-    clave VARCHAR(15) PRIMARY KEY,
-    valor VARCHAR(30) NOT NULL DEFAULT ''
+    clave VARCHAR(30) PRIMARY KEY,
+    valor VARCHAR(50) NOT NULL DEFAULT ''
+);
+
+DROP TABLE IF EXISTS parametros_facturacion;
+CREATE TABLE parametros_facturacion (
+    condicion VARCHAR(50),
+    puntoVta INT,
+    cuil BIGINT,
+    razon VARCHAR(100),
+    direccion VARCHAR(250)
 );
 
 DROP TABLE IF EXISTS backups;
@@ -63,7 +72,8 @@ CREATE TABLE productos (
     faltante INT,
     unidad VARCHAR(3),
     imagen VARCHAR(250),
-    idCategoria INT
+    idCategoria INT,
+    soloPrecio BOOLEAN
 );
 
 DROP TABLE IF EXISTS cajas;
@@ -122,9 +132,10 @@ CREATE TABLE ventas_factura (
     caeVto DATE,
     ticket INT,
     tipoFactura INT,
+    neto DECIMAL(10,2),
+    iva DECIMAL(10,2),
     dni BIGINT,
     tipoDni INT,
-    efectivo DECIMAL(10,2),
     impreso BOOLEAN
 )
 ENGINE=InnoDB;
@@ -145,14 +156,17 @@ ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.5.0'),
+('version','1.5.4'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
 ('dias', 'Lunes, Martes, Viernes'), 
 ('hora', '20:30'), 
 ('avisoNvaVersion', 'true'),
-('actualizado', 'true');
+('actualizado', 'false');
+
+INSERT INTO parametros_facturacion(condicion, puntoVta, cuil, razon, direccion) 
+VALUES ('monotributista', 0, 0, '', '');
 
 INSERT INTO productos(id,codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,idCategoria) 
 VALUES(NULL,'*','VARIOS',1,'$',1,1,NULL,NULL,NULL,NULL,'UNI',NULL,NULL);
@@ -160,4 +174,5 @@ VALUES(NULL,'*','VARIOS',1,'$',1,1,NULL,NULL,NULL,NULL,'UNI',NULL,NULL);
 INSERT INTO tipos_pago(id, nombre) VALUES (NULL,'EFECTIVO'), (NULL,'TARJETA'), (NULL,'TRANSFERENCIA'), (NULL,'COMBINADO');
 INSERT INTO cargos(id, nombre) VALUES (NULL,'ADMINISTRADOR'), (NULL,'EMPLEADO');
 INSERT INTO clientes(id, nombre) VALUES (NULL,'CONSUMIDOR FINAL');
+INSERT INTO categorias(id, nombre) VALUES (NULL,'SIN ASIGNAR');
 INSERT INTO usuarios(id, nombre, email, pass, idCargo) VALUES (NULL, 'ADMIN', NULL, '1235', 1);
