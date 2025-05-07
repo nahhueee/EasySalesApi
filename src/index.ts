@@ -38,7 +38,7 @@ io.on('connection', (socket) => {
 });
 
 //Starting the server
-server.listen(app.get('port'), () => {
+server.listen(app.get('port'), '0.0.0.0' , () => {
     console.log('server ' + process.env.NODE_ENV + ' on port ' + app.get('port'));
 });
 
