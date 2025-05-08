@@ -10,7 +10,8 @@ async function setup() {
     const directories = [
       "out/src/upload",
       "out/src/db/seeds",
-      "out/src/db/tasks"
+      "out/src/db/tasks",
+      "out/ssl",
     ];
 
     // Crear todas las carpetas
@@ -28,7 +29,11 @@ async function setup() {
       "package.json",
       ".env",
       "knexfile.js",
-      "src/db/script.sql"
+      "src/db/script.sql",
+      "ssl/cert.crt",
+      "ssl/cert.pem",
+      "ssl/key.pem",
+      "ssl/openssl.cnf",
     ];
 
     //Archivo de configuracion dependiendo el entorno

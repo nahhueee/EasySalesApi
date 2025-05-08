@@ -2,7 +2,8 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
-
+const fs = require('fs');
+const https = require('https');
 const http = require('http');
 const path = require('path');
 const socketIo = require('socket.io');
@@ -27,20 +28,32 @@ const io = socketIo(server, {
 });
 
 // Exportartamos io para usarlo en otros módulos
-export { io };
+// export { io };
 
-io.on('connection', (socket) => {
-    console.log('SocketIo: Nuevo cliente conectado');
+// io.on('connection', (socket) => {
+//     console.log('SocketIo: Nuevo cliente conectado');
   
-    socket.on('disconnect', () => {
-      console.log('SocketIo: Cliente desconectado');
-    });
-});
+//     socket.on('disconnect', () => {
+//       console.log('SocketIo: Cliente desconectado');
+//     });
+// });
 
 //Starting the server
-server.listen(app.get('port'), '0.0.0.0' , () => {
-    console.log('server ' + process.env.NODE_ENV + ' on port ' + app.get('port'));
-});
+if(config.produccion){
+    const options = {
+        key: fs.readFileSync(path.join(__dirname, '../ssl/key.pem')),
+        cert: fs.readFileSync(path.join(__dirname, '../ssl/cert.pem'))
+      };
+    
+    https.createServer(options, app).listen(app.get('port'), () => {
+    console.log('server HTTPS productivo ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
+    });
+}else{
+    server.listen(app.get('port'),() => {
+        console.log('server desarrollo ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
+    });
+}
+
 
 //#region Rutas
 import actualizacionRuta from './routes/actualizacionRoute';
