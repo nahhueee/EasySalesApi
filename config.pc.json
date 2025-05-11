@@ -1,6 +1,7 @@
 {
     "adminUrl": "https://creationcode.store/adminserver/",
     "produccion": false,
+    "esServer":false,
     "port": 7500,
     "idApp": 1,
     "db": {

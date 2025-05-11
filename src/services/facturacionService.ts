@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { ObjFacturar } from "../models/objFacturar";
 import config from '../conf/app.config';
+import { VentasRepo } from '../data/ventasRepository';
 
 class FacturacionService{
 
@@ -93,9 +94,10 @@ class FacturacionService{
                         cae: detalle.CAE,
                         caeVto: detalle.CAEFchVto,
                         ticket: lastVoucher.CbteNro,
+                        ptoVenta: datosFacturacion.puntoVta,
                         neto,
                         iva
-                    };
+                    }; 
                 } else {
                     const observaciones = detalle?.Observaciones || [];
                     let mensajes: string[] = [];
@@ -125,6 +127,26 @@ class FacturacionService{
             }else{
                 logger.error('Ocurrió un error al intentar conectar con los servicios de arca.');
             }
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async ObtenerQRFactura(idVenta:number){
+        try {
+
+            let datosQR = await VentasRepo.ObtenerQRFactura(idVenta);
+            const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
+
+            if(datosQR){
+                datosQR.cuit = datosFacturacion.cuit;
+                const jsonBase64 = Buffer.from(JSON.stringify(datosQR)).toString('base64');
+                const url = `https://www.arca.gob.ar/fe/qr/?p=${jsonBase64}`;
+
+            }
+
+            return datosQR;
+
         } catch (error) {
             throw error;
         }

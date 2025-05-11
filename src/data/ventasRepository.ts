@@ -5,6 +5,9 @@ import { pagoVenta } from '../models/PagoVenta';
 import { DetalleVenta } from '../models/DetalleVenta';
 import { Producto } from '../models/Producto';
 import { FacturaVenta } from '../models/FacturaVenta';
+import { ObjQR } from '../models/ObjQR';
+import { ObjTicketFactura } from '../models/ObjTicketFactura';
+import { ParametrosRepo } from './parametrosRepository';
 const moment = require('moment');
 
 class VentasRepository{
@@ -274,6 +277,86 @@ class VentasRepository{
             connection.release();
         }
     }
+
+    async ObtenerDatosTicketFactura(idVenta){
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = " SELECT vf.cae, vf.caeVto, vf.ticket, vf.tipoFactura, vf.iva, vf.ptoVenta, vf.impreso, v.fecha " +
+                             " FROM ventas_factura vf "
+                             " INNER JOIN ventas v on v.id = vf.idVenta "
+                             " WHERE vf.idVenta = ? ";
+
+            const [resultado] = await connection.query(consulta, idVenta);
+            const row = resultado[0][0];
+
+            const objTicket = new ObjTicketFactura({
+                impreso: row['impreso'],
+                fecha : moment(row['fecha']).format('YYYY-MM-DD'),
+                ptoVenta : row['ptoVenta'],
+                ticket : row['ticket'],
+                iva : row['iva'],
+                caeVto : row['caeVto'],
+                cae : row['cae']
+            });
+
+            //Tipo de Factura
+            switch (row['tipoFactura']) {
+                case 1:
+                    objTicket.tipoFactura = "A";
+                    break;
+                case 6:
+                    objTicket.tipoFactura = "B";
+                    break;
+                case 11:
+                    objTicket.tipoFactura = "C";
+                    break;
+            }
+
+            return objTicket;
+
+        } catch (error) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    } 
+
+    async ObtenerQRFactura(idVenta:number){
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = " SELECT vf.cae, vf.ticket, vf.tipoFactura, vf.neto, vf.iva, vf.dni, vf.tipodni, vf.ptoVenta, vf.impreso, v.fecha " +
+                             " FROM ventas_factura vf "
+                             " INNER JOIN ventas v on v.id = vf.idVenta "
+                             " WHERE vf.idVenta = ? "
+
+            const [resultado] = await connection.query(consulta, idVenta);
+            const row = resultado[0][0];
+
+            const objQR = new ObjQR({
+                ver: 1,
+                fecha : moment(row['fecha']).format('YYYY-MM-DD'),
+                ptoVenta : row['ptoVenta'],
+                tipoCmp : row['tipoFactura'],
+                nroCmp : row['ticket'],
+                importe : row['neto'] + row['iva'],
+                moneda : "PES",
+                ctz : 1,
+                tipoDocRec : row['tipodni'],
+                nroDocRec : row['dni'],
+                tipoCodAut : "E",
+                codAut : row['cae']
+            })
+
+            return objQR;
+            
+        } catch (error) {
+            throw error;
+        }finally{
+            connection.release();
+        }
+    }
     //#endregion
 }
 
@@ -385,10 +468,10 @@ async function InsertPagoVenta(connection, pago):Promise<void>{
 
 async function InsertFacturaVenta(connection, factura):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, impreso) " +
+        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, ptoVenta, impreso) " +
                          " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [factura.idVenta, factura.cae, factura.caeVto, factura.ticket, factura.tipoFactura, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.impreso];
+        const parametros = [factura.idVenta, factura.cae, factura.caeVto, factura.ticket, factura.tipoFactura, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.ptoVenta, factura.impreso];
         await connection.query(consulta, parametros);
         
     } catch (error) {

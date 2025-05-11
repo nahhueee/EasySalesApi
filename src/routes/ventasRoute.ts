@@ -2,6 +2,7 @@ import {VentasRepo} from '../data/ventasRepository';
 import {FacturacionServ} from '../services/facturacionService';
 import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
+import { ParametrosRepo } from '../data/parametrosRepository';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -53,6 +54,29 @@ router.put('/eliminar', async (req:Request, res:Response) => {
 //#endregion
 
 //#region OTROS
+router.get('/ticket-factura/:id', async (req:Request, res:Response) => {
+    try{ 
+        const objComprobante = await VentasRepo.ObtenerDatosTicketFactura(req.params.id);
+        const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
+
+        objComprobante.cuit = datosFacturacion.cuit;
+        objComprobante.direccion = datosFacturacion.direccion
+
+        if(datosFacturacion.condicion == 'responsable_inscripto'){
+            objComprobante.condicion = "Responsable Inscripto";
+        }else{
+            objComprobante.condicion = "Monotributista";
+        }
+
+        res.json();
+
+    } catch(error:any){
+        let msg = "Error al intentar obtener los datos de la factura.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.post('/facturar', async (req:Request, res:Response) => {
     try{ 
         res.json(await FacturacionServ.Facturar(req.body));
