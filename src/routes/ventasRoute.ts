@@ -68,7 +68,7 @@ router.get('/ticket-factura/:id', async (req:Request, res:Response) => {
             objComprobante.condicion = "Monotributista";
         }
 
-        res.json();
+        res.json(objComprobante);
 
     } catch(error:any){
         let msg = "Error al intentar obtener los datos de la factura.";

@@ -283,12 +283,12 @@ class VentasRepository{
 
         try {
             const consulta = " SELECT vf.cae, vf.caeVto, vf.ticket, vf.tipoFactura, vf.iva, vf.ptoVenta, vf.impreso, v.fecha " +
-                             " FROM ventas_factura vf "
-                             " INNER JOIN ventas v on v.id = vf.idVenta "
+                             " FROM ventas_factura vf " +
+                             " INNER JOIN ventas v on v.id = vf.idVenta " +
                              " WHERE vf.idVenta = ? ";
 
             const [resultado] = await connection.query(consulta, idVenta);
-            const row = resultado[0][0];
+            const row = resultado[0];
 
             const objTicket = new ObjTicketFactura({
                 impreso: row['impreso'],
@@ -327,12 +327,12 @@ class VentasRepository{
 
         try {
             const consulta = " SELECT vf.cae, vf.ticket, vf.tipoFactura, vf.neto, vf.iva, vf.dni, vf.tipodni, vf.ptoVenta, vf.impreso, v.fecha " +
-                             " FROM ventas_factura vf "
-                             " INNER JOIN ventas v on v.id = vf.idVenta "
+                             " FROM ventas_factura vf " +
+                             " INNER JOIN ventas v on v.id = vf.idVenta " +
                              " WHERE vf.idVenta = ? "
 
             const [resultado] = await connection.query(consulta, idVenta);
-            const row = resultado[0][0];
+            const row = resultado[0];
 
             const objQR = new ObjQR({
                 ver: 1,
