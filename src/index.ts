@@ -2,11 +2,13 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
-const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
+
 const socketIo = require('socket.io');
+const { exec } = require('child_process');
 
 const app = express();
 const server = http.createServer(app);
@@ -115,7 +117,19 @@ BackupsServ.IniciarCron();
 app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
 });
-  
+ 
+//reset route
+app.get('/easysales/reset', async (req, res) => {
+
+  exec('pm2 restart easysales', (error, stdout, stderr) => {
+    if (error) {
+        res.json("ERROR")
+        return;
+    }
+    res.json("OK")
+  });
+
+});
 
 //404
 app.use((_req, res) => {

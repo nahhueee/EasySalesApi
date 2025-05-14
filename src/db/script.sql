@@ -128,7 +128,7 @@ ENGINE=InnoDB;
 DROP TABLE IF EXISTS ventas_factura;
 CREATE TABLE ventas_factura (
     idVenta INT PRIMARY KEY,
-    cae VARCHAR(80),
+    cae BIGINT,
     caeVto DATE,
     ticket INT,
     tipoFactura INT,

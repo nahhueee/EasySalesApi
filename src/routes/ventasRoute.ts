@@ -54,24 +54,11 @@ router.put('/eliminar', async (req:Request, res:Response) => {
 //#endregion
 
 //#region OTROS
-router.get('/ticket-factura/:id', async (req:Request, res:Response) => {
+router.get('/obtenerQR/:id', async (req:Request, res:Response) => {
     try{ 
-        const objComprobante = await VentasRepo.ObtenerDatosTicketFactura(req.params.id);
-        const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
-
-        objComprobante.cuit = datosFacturacion.cuit;
-        objComprobante.direccion = datosFacturacion.direccion
-
-        if(datosFacturacion.condicion == 'responsable_inscripto'){
-            objComprobante.condicion = "Responsable Inscripto";
-        }else{
-            objComprobante.condicion = "Monotributista";
-        }
-
-        res.json(objComprobante);
-
+        res.json(await FacturacionServ.ObtenerQRFactura(req.params.id));
     } catch(error:any){
-        let msg = "Error al intentar obtener los datos de la factura.";
+        let msg = "Error al intentar obtener el qr de la factura.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

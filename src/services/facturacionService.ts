@@ -8,6 +8,8 @@ import path from "path";
 import { ObjFacturar } from "../models/objFacturar";
 import config from '../conf/app.config';
 import { VentasRepo } from '../data/ventasRepository';
+import moment from "moment";
+const QRCode = require('qrcode');
 
 class FacturacionService{
 
@@ -92,7 +94,7 @@ class FacturacionService{
                     return {
                         estado: "Aprobado",
                         cae: detalle.CAE,
-                        caeVto: detalle.CAEFchVto,
+                        caeVto:  moment(detalle.CAEFchVto, "YYYYMMDD"),
                         ticket: lastVoucher.CbteNro,
                         ptoVenta: datosFacturacion.puntoVta,
                         neto,
@@ -132,20 +134,22 @@ class FacturacionService{
         }
     }
 
-    async ObtenerQRFactura(idVenta:number){
+    async ObtenerQRFactura(idVenta){
         try {
 
             let datosQR = await VentasRepo.ObtenerQRFactura(idVenta);
             const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
 
             if(datosQR){
-                datosQR.cuit = datosFacturacion.cuit;
+                datosQR.cuit = datosFacturacion.cuil;
+
                 const jsonBase64 = Buffer.from(JSON.stringify(datosQR)).toString('base64');
                 const url = `https://www.arca.gob.ar/fe/qr/?p=${jsonBase64}`;
 
+                return await QRCode.toDataURL(url);
             }
-
-            return datosQR;
+          
+            return null;
 
         } catch (error) {
             throw error;

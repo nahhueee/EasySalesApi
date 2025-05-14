@@ -16,5 +16,16 @@ router.get('/forzar', async (req:Request, res:Response) => {
     }
 });
 
+router.get('/generar', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await BackupsServ.GenerarBackupLocal());
+
+    } catch(error:any){
+        let msg = "Error al intentar generar un backup local.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 // Export the router
 export default router; 

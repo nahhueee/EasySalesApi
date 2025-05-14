@@ -1,8 +1,10 @@
 import {ParametrosRepo} from '../data/parametrosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
+const path = require('path');
+const fs = require('fs/promises'); 
 const router : Router  = Router();
-
+import config from '../conf/app.config';
 
 router.get('/obtener/:clave', async (req:Request, res:Response) => {
     try{ 
@@ -46,6 +48,27 @@ router.post('/actualizar-facturacion', async (req:Request, res:Response) => {
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }
+});
+
+//Modo en red
+router.get('/modo-server/', async (req, res) => {
+    res.json(config.esServer);
+});
+
+router.post('/modo-server/', async (req, res) => {
+    const configFilePath = path.resolve(__dirname, '../../config.pc.json'); 
+
+    // Leer archivo de configuración
+    const rawConfig = await fs.readFile(configFilePath, 'utf-8');
+    const config = JSON.parse(rawConfig);
+
+    // Actualizar la clave "esServer"
+    config.esServer = req.body.valor;
+
+    // Guardar los cambios
+    await fs.writeFile(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
+
+    res.json("OK");
 });
 
 router.post('/actualizar-backups', async (req:Request, res:Response) => {

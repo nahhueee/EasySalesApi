@@ -2,7 +2,7 @@ export class ObjQR {
     ver?:number;
     fecha?:Date;
     cuit?:number;
-    ptoVenta?:number;
+    ptoVta?:number;
     tipoCmp?:number;
     nroCmp?:number;
     importe?:number;
@@ -11,14 +11,14 @@ export class ObjQR {
     tipoDocRec?:number;
     nroDocRec?:number;
     tipoCodAut?:string;
-    codAut?:string;
+    codAut?:number;
 
     constructor(data?: any) {
         if (data) {
           this.ver = data.ver;
           this.fecha = data.fecha;
           this.cuit = data.cuit;
-          this.ptoVenta = data.ptoVenta;
+          this.ptoVta = data.ptoVta;
           this.tipoCmp = data.tipoCmp;
           this.nroCmp = data.nroCmp;
           this.importe = data.importe;

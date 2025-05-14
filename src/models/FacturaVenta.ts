@@ -7,6 +7,7 @@ export class FacturaVenta{
     iva? : number;
     dni? : number;
     tipoDni? : number;
+    ptoVenta? : number;
     impreso? : boolean;
   
     constructor(data?: any) {
@@ -19,6 +20,7 @@ export class FacturaVenta{
         this.iva = data.iva;
         this.dni = data.dni;
         this.tipoDni = data.tipoDni;
+        this.ptoVenta = data.ptoVenta;
         this.impreso = data.impreso;
       }
     }

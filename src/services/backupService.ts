@@ -19,24 +19,6 @@ const { promisify } = require('util');
 let scheduledTask; // Variable para guardar la tarea programada
 class BackupsService{
 
-    // async ConectarConMega():Promise<Storage> {
-    //     console.log(config.mega.email, config.mega.pass)
-    //     return new Promise((resolve, reject) => {
-    //         const megastorage = new Storage({
-    //             email: config.mega.email,  
-    //             password: config.mega.pass,       
-    //         }, error => {
-    //             if (error) {
-    //                 backupLogger.error('Error al intentar conectar a MEGA. ' + error);
-    //                 reject(new Error('Error al intentar conectar a MEGA: ' + error));
-    //             } else {
-    //                 backupLogger.info('Conectado a MEGA correctamente.');
-    //                 resolve(megastorage);
-    //             }
-    //         });
-    //     });
-    // }
-
     
     async IniciarCron(){
         try{ 
@@ -52,6 +34,26 @@ class BackupsService{
         } catch(error:any){
             backupLogger.error("Error al intentar iniciar los procesos de respaldo. " + error.message);
         }
+    }
+
+    async GenerarBackupLocal(){
+        try {
+            const carpeta = path.join('C:', 'backups');
+
+            if (!fs.existsSync(carpeta)) {
+                fs.mkdirSync(carpeta, { recursive: true });
+            } 
+
+            const fecha = new Date().toISOString().slice(0, 10); 
+            const archivo = path.join(carpeta, `respaldo_${fecha}.sql`);
+            await GenerarBackup(archivo);
+
+            return "OK";
+
+        } catch (error) {
+            throw error;
+        }
+       
     }
 
     //Funcion para inicar el cron de respaldo
@@ -96,7 +98,6 @@ class BackupsService{
                         backupLogger.error('Parece que ocurrio un error al intentar generar un backup.');
                         return;
                     }
-
 
                     //El servidor se encarga de verificar si el usuario tiene mas de 3 backups subidos
                     //Se borra el más antiguo, y se sube el nuevo
