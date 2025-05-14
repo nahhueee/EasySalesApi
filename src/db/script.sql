@@ -72,7 +72,6 @@ CREATE TABLE productos (
     faltante INT,
     unidad VARCHAR(3),
     imagen VARCHAR(250),
-    idCategoria INT,
     soloPrecio BOOLEAN
 );
 
@@ -157,7 +156,7 @@ ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.5.5'),
+('version','1.5.6'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

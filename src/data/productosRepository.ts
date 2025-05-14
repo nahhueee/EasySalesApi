@@ -38,7 +38,6 @@ class ProductosRepository{
                         unidad: row['unidad'],
                         imagen: row['imagen'],
                         idCategoria: row['idCategoria'],
-                        categoria: row['categoria'],
                         soloPrecio: row['soloPrecio'],
                     });
                     
@@ -124,8 +123,8 @@ class ProductosRepository{
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,idCategoria,soloPrecio)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,soloPrecio)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -139,7 +138,6 @@ class ProductosRepository{
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
-                                data.categoria.id,
                                 data.soloPrecio ? 1 : 0];
             
             await connection.query(consulta, parametros);
@@ -174,7 +172,6 @@ class ProductosRepository{
                                 faltante = ?,
                                 unidad = ?,
                                 imagen = ?,
-                                idCategoria = ?,
                                 soloPrecio = ?
                                 WHERE id = ?`;
 
@@ -190,7 +187,6 @@ class ProductosRepository{
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
-                                data.categoria.id,
                                 data.soloPrecio ? 1 : 0,
                                 data.id];
 
@@ -226,7 +222,7 @@ class ProductosRepository{
             let producto: Producto = new Producto();
 
             if(existe){
-                let consulta = " SELECT id, codigo, nombre, cantidad, tipoPrecio, costo, precio, redondeo, porcentaje, vencimiento, faltante, unidad, imagen, idCategoria, soloPrecio " +
+                let consulta = " SELECT id, codigo, nombre, cantidad, tipoPrecio, costo, precio, redondeo, porcentaje, vencimiento, faltante, unidad, imagen, soloPrecio " +
                                " FROM productos WHERE codigo = ? ";
                 
                 const rows = await connection.query(consulta, parametro.cod);
@@ -312,9 +308,6 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") 
             filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
-
-        if(filtros.categoria != 0)
-            filtro += " AND p.idCategoria = " + filtros.categoria;
         // #endregion
 
         if (esTotal)
@@ -330,9 +323,8 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-                " SELECT p.*, COALESCE(c.nombre, 'ELIMINADO') categoria " +
+                " SELECT p.* " +
                 " FROM productos p " +
-                " LEFT JOIN categorias c ON c.id = p.idCategoria " +
                 " WHERE p.id <> 1 " +
                 filtro +
                 " ORDER BY p.id DESC" +
