@@ -55,22 +55,6 @@ router.get('/modo-server/', async (req, res) => {
     res.json(config.esServer);
 });
 
-router.post('/modo-server/', async (req, res) => {
-    const configFilePath = path.resolve(__dirname, '../../config.pc.json'); 
-
-    // Leer archivo de configuración
-    const rawConfig = await fs.readFile(configFilePath, 'utf-8');
-    const config = JSON.parse(rawConfig);
-
-    // Actualizar la clave "esServer"
-    config.esServer = req.body.valor;
-
-    // Guardar los cambios
-    await fs.writeFile(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
-
-    res.json("OK");
-});
-
 router.post('/actualizar-backups', async (req:Request, res:Response) => {
     try{ 
         let data = req.body;
