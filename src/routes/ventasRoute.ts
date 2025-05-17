@@ -27,6 +27,28 @@ router.get('/selector-tpagos', async (req:Request, res:Response) => {
         res.status(500).send(msg);
     }
 });
+
+router.get('/totales-tipo-pago/:id', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await VentasRepo.TotalesXTipoPago(req.params.id));
+
+    } catch(error:any){
+        let msg = "Error al obtener los totales por tipo de pago para el resumen.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.get('/totales-pagas-impagas/:id', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await VentasRepo.TotalesPagasImpagas(req.params.id));
+
+    } catch(error:any){
+        let msg = "Error al obtener los totales de ventas paga e impagas para el resumen.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
 //#endregion
 
 //#region ABM

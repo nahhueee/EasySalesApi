@@ -179,7 +179,7 @@ async function getAfipInstance(cuilTitular): Promise<Afip> {
         key: key,
         cert: cert,
         cuit: cuilTitular,
-        production: config.produccion, 
+        production: config.produccion
     });
 
     return afip;

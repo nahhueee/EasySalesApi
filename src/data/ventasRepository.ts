@@ -106,6 +106,61 @@ class VentasRepository{
             connection.release();
         }
     }
+
+    async TotalesXTipoPago(idCaja){
+        const connection = await db.getConnection();
+        
+        try {
+            const consultaEfectivo = " SELECT SUM(efectivo) efectivo FROM ventas_pago vpag " +
+                                     " INNER JOIN ventas v ON v.id = vpag.idVenta " +
+                                     " WHERE v.idCaja = ? ";
+
+            const [resultEfectivo] = await connection.query(consultaEfectivo, [idCaja]);
+
+            const consultaDigital =  " SELECT SUM(CASE WHEN vpag.idPago = 3 THEN digital ELSE 0 END) AS transferencia, " +
+                                     " SUM(CASE WHEN vpag.idPago != 3 THEN digital ELSE 0 END) AS otros FROM ventas_pago vpag " +
+                                     " INNER JOIN ventas v ON v.id = vpag.idVenta " +
+                                     " WHERE v.idCaja = ? ";
+
+            const [resultDigital] = await connection.query(consultaDigital, [idCaja]);
+
+            return {
+                efectivo: parseFloat(resultEfectivo[0].efectivo),
+                transferencia: parseFloat(resultDigital[0].transferencia),
+                otros: parseFloat(resultDigital[0].otros)
+            };
+
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    async TotalesPagasImpagas(idCaja){
+        const connection = await db.getConnection();
+        
+        try {
+            const consulta =  " SELECT  COUNT(CASE WHEN vpag.realizado = 1 THEN 1 END) AS pagas, " +
+                              " COUNT(CASE WHEN vpag.realizado = 0 THEN 1 END) AS impagas FROM ventas_pago vpag " +
+                              " INNER JOIN ventas v ON v.id = vpag.idVenta " +
+                              " WHERE v.idCaja = ? ";
+
+            const [resultado] = await connection.query(consulta, [idCaja]);
+
+            return {
+                pagas: parseInt(resultado[0].pagas),
+                impagas: parseInt(resultado[0].impagas)
+            };
+
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
     //#endregion
 
     //#region ABM
@@ -173,7 +228,7 @@ class VentasRepository{
             await connection.query("DELETE FROM ventas_detalle WHERE idVenta = ?", [venta.id]);
 
             //Borramos la venta
-            await connection.query("DELETE FROM ventas_detalle WHERE idVenta = ?", [venta.id]);
+            await connection.query("DELETE FROM ventas WHERE id = ?", [venta.id]);
 
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [venta.total, venta.idCaja]);
