@@ -14,8 +14,6 @@ export class Producto {
     faltante? : number;
     unidad? : string;
     imagen? : string;
-    idCategoria? : number;
-    categoria?: string;
     activo? : boolean;
     soloPrecio? : boolean;
 
@@ -34,8 +32,6 @@ export class Producto {
             this.faltante = data.faltante;
             this.unidad = data.unidad;
             this.imagen = data.imagen;
-            this.idCategoria = data.idCategoria;
-            this.categoria = data.categoria
             this.soloPrecio = data.soloPrecio;
         }
     }

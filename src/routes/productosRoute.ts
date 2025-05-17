@@ -61,6 +61,51 @@ router.post('/agregar', async (req:Request, res:Response) => {
     }
 });
 
+router.post('/actualizar-varios', async (req:Request, res:Response) => {
+    try{ 
+        let errores:string[] = [];
+        let insertados:number = 0;
+        let actualizados:number = 0;
+
+        const productos = req.body.productos;
+        const actualizarExistentes = req.body.actualizarExistentes;
+        if (!productos || !Array.isArray(productos)) {
+            return res.status(400).json({ mensaje: "Formato inválido de productos." });
+        }
+
+        for (const [i, prod] of productos.entries()) {
+            try {
+            const existente = await ProductosRepo.ValidarCodigo(prod);
+            if (existente==0) {
+                await ProductosRepo.Agregar(prod);
+                insertados++;
+            } else {
+                if(actualizarExistentes){
+                    prod.id = existente;
+                    await ProductosRepo.Modificar(prod);
+                    actualizados++;
+                }else{
+                    errores.push(`Ya existe un producto con el código ${prod.codigo}.`);
+                }
+            }
+            } catch (err) { //Si se encuentran errores grabamos
+                errores.push(`Error en fila ${i + 1}: ${err}`);
+            }
+        }
+
+        return res.json({
+            insertados,
+            actualizados,
+            errores,
+        });
+
+    } catch(error:any){
+        let msg = "Error al intentar actualizar productos desde Excel.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.put('/modificar', async (req:Request, res:Response) => {
     try{ 
         res.json(await ProductosRepo.Modificar(req.body));

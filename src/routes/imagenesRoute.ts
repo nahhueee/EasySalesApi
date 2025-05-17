@@ -29,25 +29,5 @@ router.get('/obtener/:imgName', (req:Request, res:Response) => {
     }
 });
 
-
-const fs = require('fs');
-const printerName:string = "XP-58 (copy 1)";
-const printer = require('pdf-to-printer');
-
-router.post('/imprimir', upload.single('doc'), (req:Request, res:Response) => {
-    try{ 
-        printer.print(uniqueName, { printer: printerName })
-               .then(() => {
-                    res.status(200).send('Impresión exitosa');
-                    fs.unlinkSync(uniqueName); // Elimina el archivo temporal
-                });
-
-    } catch(error:any){
-        let msg = "Error al intentar imprimir el documento.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
-
 // Export the router
 export default router; 

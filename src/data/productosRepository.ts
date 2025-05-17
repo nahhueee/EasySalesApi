@@ -114,12 +114,25 @@ class ProductosRepository{
     //#endregion
 
     //#region ABM
+    async ValidarCodigo(data:any){
+        const connection = await db.getConnection();
+        
+        try {
+            return await ValidarExistencia(connection, data, false, true);
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
         let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
 
         try {
-            let existe = await ValidarExistencia(connection, data, false);
+            let existe = await ValidarExistencia(connection, data, false, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
@@ -155,7 +168,7 @@ class ProductosRepository{
         let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
 
         try {
-            let existe = await ValidarExistencia(connection, data, true);
+            let existe = await ValidarExistencia(connection, data, true, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
@@ -218,7 +231,7 @@ class ProductosRepository{
         const connection = await db.getConnection();
 
         try {
-            const existe = await ValidarExistencia(connection, {codigo:parametro.cod}, false);
+            const existe = await ValidarExistencia(connection, {codigo:parametro.cod}, false, false);
             let producto: Producto = new Producto();
 
             if(existe){
@@ -299,6 +312,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
+        let orden:string = "";
         let paginado:string = "";
     
         let count:string = "";
@@ -308,6 +322,14 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") 
             filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
+        // #endregion
+
+        // #region ORDENAMIENTO
+        if (filtros.orden != null && filtros.orden != ""){
+            orden += " ORDER BY p."+ filtros.orden + " " + filtros.direccion;
+        } else{
+            orden += " ORDER BY p.id DESC";
+        }           
         // #endregion
 
         if (esTotal)
@@ -327,7 +349,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 " FROM productos p " +
                 " WHERE p.id <> 1 " +
                 filtro +
-                " ORDER BY p.id DESC" +
+                orden +
                 paginado +
                 endCount;
 
@@ -338,15 +360,21 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
     }
 }
 
-async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
+async function ValidarExistencia(connection, data:any, modificando:boolean, consultaExcel:boolean):Promise<any>{
     try {
         let consulta = " SELECT id FROM productos WHERE codigo = ? ";
         if(modificando) consulta += " AND id <> ? ";
         const parametros = [data.codigo.toUpperCase(), data.id];
         const rows = await connection.query(consulta,parametros);
-        if(rows[0].length > 0) return true;
 
-        return false;
+        if(!consultaExcel){
+            if(rows[0].length > 0) return true;
+            return false;
+        }else{ //Si es consulta desde importacion excel necesito el ID
+            if(rows[0].length > 0) return rows[0][0].id;
+            return 0;
+        }
+        
     } catch (error) {
         throw error; 
     }

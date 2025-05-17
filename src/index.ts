@@ -101,9 +101,9 @@ app.use('/easysales/adminserver', adminServerRuta);
 import imagenesRuta from './routes/imagenesRoute';
 app.use('/easysales/imagenes', imagenesRuta);
 
-//Print docs Route
-import pdfRoute from './routes/pdfRoute';
-app.use('/easysales/docs', pdfRoute);
+//Files Route
+import filesRoute from './routes/filesRoute';
+app.use('/easysales/files', filesRoute);
 
 //#region backups y contenidos de pago
 import backupRoute from './routes/backupRoute';
@@ -118,19 +118,6 @@ app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
 });
  
-//reset route
-app.get('/easysales/reset', async (req, res) => {
-
-  exec('pm2 restart easysales', (error, stdout, stderr) => {
-    if (error) {
-        res.json("ERROR")
-        return;
-    }
-    res.json("OK")
-  });
-
-});
-
 //404
 app.use((_req, res) => {
     res.status(404).send('No se encontró el recurso solicitado.');
