@@ -45,12 +45,6 @@ CREATE TABLE clientes (
     nombre VARCHAR(100)
 );
 
-DROP TABLE IF EXISTS categorias;
-CREATE TABLE categorias (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100)
-);
-
 DROP TABLE IF EXISTS tipos_pago;
 CREATE TABLE tipos_pago (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -135,8 +129,7 @@ CREATE TABLE ventas_factura (
     iva DECIMAL(10,2),
     dni BIGINT,
     tipoDni INT,
-    ptoVenta INT,
-    impreso BOOLEAN
+    ptoVenta INT
 )
 ENGINE=InnoDB;
 
@@ -156,7 +149,7 @@ ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.5.6'),
+('version','1.6.0'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
