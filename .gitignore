@@ -6,5 +6,6 @@
 /src/upload/*
 !/src/upload/
 /update
+/ssl/server/*
 
 
