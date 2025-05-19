@@ -66,7 +66,6 @@ class VentasRepository{
                         dni: row['dni'],
                         tipoDni: row['tipoDni'],
                         ptoVenta: row['ptoVenta'],
-                        impreso: row['impreso'],
                     });
 
 
@@ -210,6 +209,21 @@ class VentasRepository{
         }
     }
 
+    async GuardarFactura(data:any){
+        const connection = await db.getConnection();
+        
+        try {
+            data.factura.idVenta = data.idVenta;
+            await InsertFacturaVenta(connection, data.factura);
+            return("OK");
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     async Eliminar(venta:any): Promise<string>{
         const connection = await db.getConnection();
         
@@ -338,7 +352,7 @@ class VentasRepository{
         const connection = await db.getConnection();
 
         try {
-            const consulta = " SELECT vf.cae, vf.ticket, vf.tipoFactura, vf.neto, vf.iva, vf.dni, vf.tipodni, vf.ptoVenta, vf.impreso, v.fecha " +
+            const consulta = " SELECT vf.cae, vf.ticket, vf.tipoFactura, vf.neto, vf.iva, vf.dni, vf.tipodni, vf.ptoVenta, v.fecha " +
                              " FROM ventas_factura vf " +
                              " INNER JOIN ventas v on v.id = vf.idVenta " +
                              " WHERE vf.idVenta = ? "
@@ -412,7 +426,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         query = count +
                 " SELECT v.*, " + 
                 " vpag.idPago, vpag.efectivo, vpag.digital, vpag.recargo, vpag.descuento, vpag.entrega, vpag.realizado, " + //Pago
-                " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.impreso, " + //Factura
+                " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, " + //Factura
                 " COALESCE(cli.nombre, 'ELIMINADO') cliente, " +
                 " COALESCE(tp.nombre, 'ELIMINADO') tipoPago " +
                 " FROM ventas v " +
@@ -485,7 +499,7 @@ async function InsertFacturaVenta(connection, factura):Promise<void>{
 
         const parametros = [factura.idVenta, factura.cae, factura.caeVto, factura.ticket, factura.tipoFactura, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.ptoVenta];
         await connection.query(consulta, parametros);
-        
+
     } catch (error) {
         throw error; 
     }

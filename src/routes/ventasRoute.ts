@@ -63,6 +63,17 @@ router.post('/agregar', async (req:Request, res:Response) => {
     }
 });
 
+router.post('/guardar-factura', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await VentasRepo.GuardarFactura(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar guardar los datos de facturacion para la venta.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.put('/eliminar', async (req:Request, res:Response) => {
     try{ 
         res.json(await VentasRepo.Eliminar(req.body));

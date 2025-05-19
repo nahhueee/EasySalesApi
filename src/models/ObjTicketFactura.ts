@@ -1,5 +1,4 @@
 export class ObjTicketFactura {
-    impreso?:boolean;
     tipoFactura?:string;
     fecha?:string;
     cuit?:number;
@@ -13,7 +12,6 @@ export class ObjTicketFactura {
     
     constructor(data?: any) {
         if (data) {
-          this.impreso = data.impreso;
           this.tipoFactura = data.tipoFactura;
           this.fecha = data.fecha;
           this.cuit = data.cuit;

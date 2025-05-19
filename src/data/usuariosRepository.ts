@@ -93,9 +93,9 @@ class UsuariosRepository{
 
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
         try {
             let existe = await ValidarExistencia(connection, data, true);
+
             if(existe)//Verificamos si ya existe un usuario con el mismo nombre o correo
                 return "Ya existe un usuario con el mismo nombre o correo.";
             
@@ -183,11 +183,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
 
 async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
-        let consulta = " SELECT id FROM usuarios WHERE nombre = ? ";
-        if(data.email != "") consulta += " OR email = ? ";
+        let consulta = " SELECT * FROM usuarios WHERE nombre = ? ";
         if(modificando) consulta += " AND id <> ? ";
 
-        const parametros = [data.nombre.toUpperCase(), data.email, data.id];
+        const parametros = [data.nombre.toUpperCase(), data.id];
 
         const rows = await connection.query(consulta,parametros);
         if(rows[0].length > 0) return true;
