@@ -1,14 +1,17 @@
 import {AdminServ} from '../services/adminService';
 import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
+import config from '../conf/app.config';
 const router : Router  = Router();
 
 //Obtiene la version en linea del sistema 
 router.get('/obtener-version/:dni', async (req:Request, res:Response) => {
     try{ 
         let habilitado = await AdminServ.ObtenerHabilitacion(req.params.dni); //Verificamos que el usuario pueda actualizar
-        if(habilitado)
-            res.json(await AdminServ.ObtenerVersionApp());
+        if(habilitado){
+            const respuesta = await AdminServ.ObtenerVersionApp();
+            respuesta.servProd = config.produccion;
+        }
         else
             res.json(null);
 
