@@ -116,8 +116,9 @@ class VentasRepository{
 
             const [resultEfectivo] = await connection.query(consultaEfectivo, [idCaja]);
 
-            const consultaDigital =  " SELECT SUM(CASE WHEN vpag.idPago = 3 THEN digital ELSE 0 END) AS transferencia, " +
-                                     " SUM(CASE WHEN vpag.idPago != 3 THEN digital ELSE 0 END) AS otros FROM ventas_pago vpag " +
+            const consultaDigital =  " SELECT SUM(CASE WHEN vpag.idPago = 2 THEN digital ELSE 0 END) AS tarjetas, " +
+                                     " SUM(CASE WHEN vpag.idPago = 3 THEN digital ELSE 0 END) AS transferencias, " +
+                                     " SUM(CASE WHEN vpag.idPago = 4 THEN digital ELSE 0 END) AS otros FROM ventas_pago vpag " +
                                      " INNER JOIN ventas v ON v.id = vpag.idVenta " +
                                      " WHERE v.idCaja = ? ";
 
@@ -125,7 +126,8 @@ class VentasRepository{
 
             return {
                 efectivo: parseFloat(resultEfectivo[0].efectivo),
-                transferencia: parseFloat(resultDigital[0].transferencia),
+                tarjetas: parseFloat(resultDigital[0].tarjetas),
+                transferencias: parseFloat(resultDigital[0].transferencias),
                 otros: parseFloat(resultDigital[0].otros)
             };
 
