@@ -69,7 +69,7 @@ router.post('/general', async (req:Request, res:Response) => {
         logs.push(req.body);
         fileServer.writeFileSync(generalPath, JSON.stringify(logs, null, 2)); 
 
-        res.status(200).send("OK");
+        res.status(200).json("OK");
 
     } catch(error:any){
         logger.error("Error al intentar guardar un log de tipo general. " + error);

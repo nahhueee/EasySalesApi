@@ -281,7 +281,8 @@ class ProductosRepository{
                              "     costo = ?, " +
                              "     precio = ?, " +
                              "     redondeo = ?, " +
-                             "     porcentaje = ? " +
+                             "     porcentaje = ?, " +
+                             "     tipoPrecio = '%' " +
                              " WHERE id = ?";
 
             const parametros = [data.costo,
@@ -307,7 +308,8 @@ class ProductosRepository{
             const consulta = " UPDATE productos " +
                              " SET " +
                              "     costo = ?, " +
-                             "     precio = ? " +
+                             "     precio = ?, " +
+                             "     tipoPrecio = '$' " +
                              " WHERE id = ?";
 
             const parametros = [data.costo,
