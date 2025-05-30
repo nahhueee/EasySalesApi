@@ -230,7 +230,6 @@ class VentasRepository{
         const connection = await db.getConnection();
         
         try {
-
             //Iniciamos una transaccion
             await connection.beginTransaction();
 

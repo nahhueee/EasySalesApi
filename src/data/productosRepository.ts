@@ -166,7 +166,6 @@ class ProductosRepository{
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
         let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
-
         try {
             let existe = await ValidarExistencia(connection, data, true, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
@@ -218,6 +217,26 @@ class ProductosRepository{
         
         try {
             await connection.query("DELETE FROM productos WHERE id = ?", [id]);
+            return "OK";
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    async AniadirCantidad(data:any): Promise<string>{
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = `UPDATE productos SET
+                                cantidad = ?
+                                WHERE id = ?`;
+
+            const parametros = [data.cant,data.idProducto];
+
+            await connection.query(consulta, parametros);
             return "OK";
 
         } catch (error:any) {
