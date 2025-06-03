@@ -11,10 +11,7 @@ async function setup() {
       "out/src/upload",
       "out/src/db/seeds",
       "out/src/db/tasks",
-      "out/src/certs",
-      "out/ssl",
-      "out/ssl/server",
-      "out/ssl/local",
+      "out/src/certs"
     ];
 
     // Crear todas las carpetas
@@ -34,11 +31,6 @@ async function setup() {
       "knexfile.js",
       "src/db/script.sql",
       "src/db/script.sql",
-      "ssl/local/cert.crt",
-      "ssl/local/cert.pem",
-      "ssl/local/key.pem",
-      "ssl/local/openssl.cnf",
-      "ssl/server/openssl.cnf",
     ];
 
     //Archivo de configuracion dependiendo el entorno

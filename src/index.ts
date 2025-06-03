@@ -41,30 +41,9 @@ const io = socketIo(server, {
 // });
 
 //Starting the server
-if(config.produccion){
-    let options;
-
-    //Si la maquina va a actuar de servidor proveemos ssl de la ip que va a proveer a las terminales
-    if(config.esServer){
-        options = {
-            key: fs.readFileSync(path.join(__dirname, '../ssl/server/key.pem')),
-            cert: fs.readFileSync(path.join(__dirname, '../ssl/server/cert.pem'))
-        };
-    }else{ //Si no es servidor, solo se va a usar en una maquina, usamos ssl de 127.0.0.1
-        options = {
-            key: fs.readFileSync(path.join(__dirname, '../ssl/local/key.pem')),
-            cert: fs.readFileSync(path.join(__dirname, '../ssl/local/cert.pem'))
-        };
-    }
-      
-    https.createServer(options, app).listen(app.get('port'), () => {
-    console.log('server HTTPS productivo ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
-    });
-}else{
-    server.listen(app.get('port'),() => {
-        console.log('server desarrollo ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
-    });
-}
+server.listen(app.get('port'),() => {
+    console.log('server ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
+});
 
 //#region Rutas
 import actualizacionRuta from './routes/actualizacionRoute';
@@ -114,6 +93,9 @@ app.use('/easysales/backup', backupRoute);
 import {BackupsServ} from './services/backupService';
 BackupsServ.IniciarCron();
 //#endregion
+
+import {ServidorServ} from './services/servidorService';
+ServidorServ.IniciarModoServidor();
 
 //Index Route
 app.get('/easysales', (req, res) => {

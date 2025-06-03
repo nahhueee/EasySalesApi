@@ -112,7 +112,7 @@ class VentasRepository{
         try {
             const consultaEfectivo = " SELECT SUM(efectivo) efectivo FROM ventas_pago vpag " +
                                      " INNER JOIN ventas v ON v.id = vpag.idVenta " +
-                                     " WHERE v.idCaja = ? ";
+                                     " WHERE v.idCaja = ? AND vpag.realizado = 1 ";
 
             const [resultEfectivo] = await connection.query(consultaEfectivo, [idCaja]);
 
