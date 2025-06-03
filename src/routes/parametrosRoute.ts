@@ -17,7 +17,7 @@ router.get('/obtener/:clave', async (req:Request, res:Response) => {
     }
 });
 
-router.post('/actualizar', async (req:Request, res:Response) => {
+router.put('/actualizar', async (req:Request, res:Response) => {
     try{ 
         res.json(await ParametrosRepo.ActualizarParametro(req.body));
 

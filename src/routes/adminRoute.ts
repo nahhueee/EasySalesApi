@@ -1,19 +1,24 @@
 import {AdminServ} from '../services/adminService';
+import {ParametrosRepo} from '../data/parametrosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
 import config from '../conf/app.config';
 const router : Router  = Router();
 
 //Obtiene la version en linea del sistema 
-router.get('/obtener-version/:dni', async (req:Request, res:Response) => {
+router.get('/obtener-version', async (req:Request, res:Response) => {
     try{ 
-        let habilitado = await AdminServ.ObtenerHabilitacion(req.params.dni); //Verificamos que el usuario pueda actualizar
-        if(habilitado){
-            const respuesta = await AdminServ.ObtenerVersionApp();
-            respuesta.servProd = config.produccion;
+        const dni = await ParametrosRepo.ObtenerParametros('dni');
+        if(dni!=""){
+            let habilitado = await AdminServ.ObtenerHabilitacion(dni); //Verificamos que el usuario pueda actualizar
+            if(habilitado){
+                const respuesta = await AdminServ.ObtenerVersionApp();
+                respuesta.servProd = config.produccion;
+                res.json(respuesta);
+            }
         }
-        else
-            res.json(null);
+
+        res.json(null);
 
     } catch(error:any){
         logger.error("Error al intentar obtener la versión de la aplicación. " + error);

@@ -21,7 +21,7 @@ interface ResultadoImportacion {
 export async function procesarExcel(filePath: string, tipoPrecio:string): Promise<ResultadoImportacion> {
   const errores: { fila: number; mensaje: string }[] = [];
   const datosValidos: FilaExcel[] = [];
-
+  console.log(errores, datosValidos)
   try {
     const workbook = XLSX.readFile(filePath);
     const sheetName = workbook.SheetNames[0];

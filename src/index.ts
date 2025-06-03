@@ -66,7 +66,6 @@ if(config.produccion){
     });
 }
 
-
 //#region Rutas
 import actualizacionRuta from './routes/actualizacionRoute';
 import usuariosRuta from './routes/usuariosRoute';
@@ -79,6 +78,7 @@ import cajasRuta from './routes/cajasRoute';
 import estadisticasRuta from './routes/estadisticasRoute';
 import parametrosRuta from './routes/parametrosRoute';
 import logsRuta from './routes/logsRoute';
+import servidorRuta from './routes/servidorRoute';
 
 app.use('/easysales/update', actualizacionRuta)
 app.use('/easysales/usuarios', usuariosRuta);
@@ -91,6 +91,7 @@ app.use('/easysales/cajas', cajasRuta);
 app.use('/easysales/estadisticas', estadisticasRuta);
 app.use('/easysales/parametros', parametrosRuta);
 app.use('/easysales/logs', logsRuta);
+app.use('/easysales/server', servidorRuta);
 
 
 //AdminServer Route
@@ -104,8 +105,9 @@ app.use('/easysales/imagenes', imagenesRuta);
 //Files Route
 import filesRoute from './routes/filesRoute';
 app.use('/easysales/files', filesRoute);
+//#endregion
 
-//#region backups y contenidos de pago
+//#region backups 
 import backupRoute from './routes/backupRoute';
 app.use('/easysales/backup', backupRoute);
 
