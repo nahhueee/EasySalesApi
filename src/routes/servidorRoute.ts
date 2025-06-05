@@ -1,30 +1,28 @@
-import {Router} from 'express';
+import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
 import {ServidorServ} from '../services/servidorService';
-import {ParametrosRepo} from '../data/parametrosRepository';
+import config from '../conf/app.config';
+
 
 const router : Router  = Router();
-
-router.post('/discovery', async (req, res) => {
+router.get('/forzar', async (req:Request, res:Response) => {
     try{ 
-        const estado = req.body.estado;
-        console.log(estado)
-        const resultado = estado
-            ? await ServidorServ.StartUDPDiscovery()
-            : ServidorServ.StopUDPDiscovery(false);
+        ServidorServ.IniciarModoServidor();
+        res.json("OK");
 
-        if (resultado) {
-            await ParametrosRepo.ActualizarParametro({clave: 'habilitaServidor', valor: estado ? 'true' : 'false'});
-        }
-
-        res.json({
-            success: resultado,
-            message: resultado
-            ? `Discovery ${estado ? 'activado' : 'desactivado'} correctamente`
-            : `No se pudo ${estado ? 'activar' : 'desactivar'} discovery`,
-        });
     } catch(error:any){
-        let msg = "Error al intentar habilitar o deshabilitar el descubrimiento del servidor.";
+        let msg = "Error al intentar forzar el inicio del modo servidor.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.get('/estado', async (req:Request, res:Response) => {
+    try{ 
+        res.json(config.esServer);
+
+    } catch(error:any){
+        let msg = "Error al intentar obtener el modo de trabajo del servidor.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

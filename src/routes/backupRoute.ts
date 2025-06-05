@@ -7,10 +7,10 @@ const router : Router  = Router();
 router.get('/forzar', async (req:Request, res:Response) => {
     try{ 
         BackupsServ.IniciarCron();
-        res.json();
+        res.json('OK');
 
     } catch(error:any){
-        let msg = "Error al intentar evaluar el inicio de cron.";
+        let msg = "Error al intentar forzar el inicio de cron.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

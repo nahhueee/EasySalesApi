@@ -2,10 +2,8 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
-const https = require('https');
 const http = require('http');
 const path = require('path');
-const fs = require('fs');
 
 const socketIo = require('socket.io');
 const { exec } = require('child_process');
@@ -41,7 +39,12 @@ const io = socketIo(server, {
 // });
 
 //Starting the server
-server.listen(app.get('port'),() => {
+let host:string = "127.0.0.1";
+if(config.esServer){
+    host = "0.0.0.0";
+}
+
+server.listen(app.get('port'), host, () => {
     console.log('server ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
 });
 

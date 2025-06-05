@@ -26,7 +26,6 @@ class ParametrosRepository{
 
   async ActualizarParametro(data:any): Promise<string>{
     const connection = await db.getConnection();
-    
     try {
         const consulta = `UPDATE parametros SET valor = ? WHERE clave = ?`;
         const parametros = [data.valor, data.clave];

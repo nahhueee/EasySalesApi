@@ -14,11 +14,11 @@ router.get('/obtener-version', async (req:Request, res:Response) => {
             if(habilitado){
                 const respuesta = await AdminServ.ObtenerVersionApp();
                 respuesta.servProd = config.produccion;
-                res.json(respuesta);
+                return res.json(respuesta);
             }
         }
 
-        res.json(null);
+        return res.json(null);
 
     } catch(error:any){
         logger.error("Error al intentar obtener la versión de la aplicación. " + error);
