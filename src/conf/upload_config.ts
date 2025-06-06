@@ -18,7 +18,12 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer(
+    { 
+        storage: storage,   
+        limits: { fileSize: 50 * 1024 * 1024 } // 50 MB
+    }
+);
 
 export { upload, uniqueName, fullPath };  //Exporto la configuracion de multer, el nombre unico y el path completo
 
