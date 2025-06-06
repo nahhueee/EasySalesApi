@@ -13,7 +13,12 @@ router.get('/obtener-version', async (req:Request, res:Response) => {
             let habilitado = await AdminServ.ObtenerHabilitacion(dni); //Verificamos que el usuario pueda actualizar
             if(habilitado){
                 const respuesta = await AdminServ.ObtenerVersionApp();
-                respuesta.servProd = config.produccion;
+
+                if(config.produccion)
+                    respuesta.serverStatus = 'production';
+                else
+                    respuesta.serverStatus = 'test';
+
                 return res.json(respuesta);
             }
         }
