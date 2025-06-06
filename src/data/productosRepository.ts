@@ -129,15 +129,14 @@ class ProductosRepository{
 
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
 
         try {
             let existe = await ValidarExistencia(connection, data, false, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen,soloPrecio)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,faltante,unidad,imagen,soloPrecio)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -147,7 +146,6 @@ class ProductosRepository{
                                 data.precio,
                                 data.redondeo,
                                 data.porcentaje,
-                                vencimiento,
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
@@ -165,7 +163,7 @@ class ProductosRepository{
 
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        let vencimiento = data.vencimiento == "" ? null : moment(data.vencimiento).format('YYYY-MM-DD');
+
         try {
             let existe = await ValidarExistencia(connection, data, true, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
@@ -180,7 +178,6 @@ class ProductosRepository{
                                 precio = ?,
                                 redondeo = ?,
                                 porcentaje = ?,
-                                vencimiento = ?,
                                 faltante = ?,
                                 unidad = ?,
                                 imagen = ?,
@@ -195,7 +192,6 @@ class ProductosRepository{
                                 data.precio,
                                 data.redondeo,
                                 data.porcentaje,
-                                vencimiento,
                                 data.faltante,
                                 data.unidad,
                                 data.imagen,
