@@ -110,15 +110,15 @@ class VentasRepository{
         const connection = await db.getConnection();
         
         try {
-            const consultaEfectivo = " SELECT SUM(efectivo) efectivo FROM ventas_pago vpag " +
+            const consultaEfectivo = " SELECT COALESCE(SUM(efectivo), 0) AS efectivo FROM ventas_pago vpag " +
                                      " INNER JOIN ventas v ON v.id = vpag.idVenta " +
                                      " WHERE v.idCaja = ? AND vpag.realizado = 1 ";
 
             const [resultEfectivo] = await connection.query(consultaEfectivo, [idCaja]);
 
-            const consultaDigital =  " SELECT SUM(CASE WHEN vpag.idPago = 2 THEN digital ELSE 0 END) AS tarjetas, " +
-                                     " SUM(CASE WHEN vpag.idPago = 3 THEN digital ELSE 0 END) AS transferencias, " +
-                                     " SUM(CASE WHEN vpag.idPago = 4 THEN digital ELSE 0 END) AS otros FROM ventas_pago vpag " +
+            const consultaDigital =  " SELECT COALESCE(SUM(CASE WHEN vpag.idPago = 2 THEN digital ELSE 0 END), 0) AS tarjetas, " +
+                                     " COALESCE(SUM(CASE WHEN vpag.idPago = 3 THEN digital ELSE 0 END), 0) AS transferencias, " +
+                                     " COALESCE(SUM(CASE WHEN vpag.idPago = 4 THEN digital ELSE 0 END), 0) AS otros FROM ventas_pago vpag " +
                                      " INNER JOIN ventas v ON v.id = vpag.idVenta " +
                                      " WHERE v.idCaja = ? ";
 

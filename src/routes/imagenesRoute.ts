@@ -6,6 +6,8 @@ const path = require('path');
 
 router.post('/subir', upload.single('image'), (req:Request, res:Response) => {
     try{ 
+        console.log(req.headers);
+        console.log(req.body);
         return res.json(uniqueName);
 
     } catch(error:any){

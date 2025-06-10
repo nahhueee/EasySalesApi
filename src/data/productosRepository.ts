@@ -111,6 +111,36 @@ class ProductosRepository{
             connection.release();
         }
     }
+
+    async ObtenerUno(id:number){
+        const connection = await db.getConnection();
+
+        try {
+            const [rows] = await connection.query('SELECT id, codigo, nombre, cantidad, costo, precio, unidad FROM productos WHERE id = ?', [id]);
+            let resultado:Producto = new Producto();
+           
+            if (Array.isArray(rows)) {
+                const row = rows[0];
+
+                resultado = new Producto({
+                    id: row['id'],
+                    codigo: row['codigo'],
+                    cantidad: row['cantidad'],
+                    nombre: row['nombre'],
+                    costo: row['costo'],
+                    precio: row['precio'],
+                    unidad: row['unidad'],
+                });
+            }
+
+            return resultado;
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
     //#endregion
 
     //#region ABM
@@ -227,8 +257,8 @@ class ProductosRepository{
 
         try {
             const consulta = `UPDATE productos SET
-                                cantidad = ?
-                                WHERE id = ?`;
+                              cantidad = ?
+                              WHERE id = ?`;
 
             const parametros = [data.cant,data.idProducto];
 

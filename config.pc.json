@@ -1,5 +1,5 @@
 {
-  "adminUrl": "https://creationcode.store/adminserver/",
+  "adminUrl": "https://creationserver.com/adminserver/",
   "produccion": false,
   "esServer": false,
   "port": 7500,

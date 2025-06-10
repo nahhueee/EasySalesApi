@@ -45,12 +45,14 @@ class ServidorService {
                 return;
             }
 
-            if(config.esServer){
+            
+          }
+
+          if(config.esServer){
               this.StartUDPDiscovery();
             }else{
               this.StopUDPDiscovery(false);
             }
-          }
                 
       } catch(error:any){
           logger.error("Error al intentar iniciar el modo servidor. " + error.message);

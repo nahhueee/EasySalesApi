@@ -1,4 +1,4 @@
-import {ProductosRepo} from '../data/productosRepository';
+import { ProductosRepo } from '../data/productosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
 const router : Router  = Router();
@@ -68,7 +68,7 @@ router.post('/actualizar-varios', async (req:Request, res:Response) => {
         let actualizados:number = 0;
 
         const productos = req.body.productos;
-        const actualizarExistentes = req.body.actualizarExistentes;
+        const accionActualizar = req.body.accion;
         if (!productos || !Array.isArray(productos)) {
             return res.status(400).json({ mensaje: "Formato inválido de productos." });
         }
@@ -80,11 +80,23 @@ router.post('/actualizar-varios', async (req:Request, res:Response) => {
                 await ProductosRepo.Agregar(prod);
                 insertados++;
             } else {
-                if(actualizarExistentes){
-                    prod.id = existente;
+                prod.id = existente;
+
+                if(accionActualizar == "ACTUALIZAR"){
                     await ProductosRepo.Modificar(prod);
                     actualizados++;
-                }else{
+                }else if(accionActualizar == "SUMARSTOCK"){
+                    const producto = await ProductosRepo.ObtenerUno(prod.id)
+                    let nvaCantidad = prod.cantidad + producto.cantidad;
+                    
+                    if(producto.id!=0){
+                        await ProductosRepo.AniadirCantidad({cant:nvaCantidad, idProducto:producto.id});
+                        actualizados++;
+                    }else{
+                        errores.push(`No se pudo actualizar el producto con código ${prod.codigo}.`);
+                    }
+                }
+                else{
                     errores.push(`Ya existe un producto con el código ${prod.codigo}.`);
                 }
             }

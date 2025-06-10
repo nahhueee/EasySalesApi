@@ -1,7 +1,7 @@
 const moment = require('moment');
 
 export class Producto {
-    id? : number;
+    id : number = 0;
     codigo? : string;
     nombre? : string;
     cantidad? : number;
