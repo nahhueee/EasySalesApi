@@ -1,8 +1,9 @@
 import mysql from 'mysql2/promise';
 import config from './conf/app.config';
 
-const password = config.produccion ? config.db.password : "";
-//const password = config.db.password;
+let password = config.db.password;
+if(config.produccion)
+    if(password==="") password = "1235";
 
 // Configuración de la conexión a la base de datos
 const conexion = {

@@ -64,6 +64,7 @@ class FacturacionService{
                     ImpNeto: neto, // Importe neto gravado
                     ImpOpEx: 0, // Importe exento de IVA
                     ImpIVA: iva, //Importe total de IVA
+                    CondicionIVAReceptorId: 5, //Condicion frente al iva del receptor
                     ImpTrib: 0, //Importe total de tributos
                     MonId: "PES", //Tipo de moneda usada en el comprobante (ver tipos disponibles)('PES' para pesos argentinos)
                     MonCotiz: 1, // Cotización de la moneda usada (1 para pesos argentinos)
@@ -79,7 +80,6 @@ class FacturacionService{
                     }
                     ];
                 }
-
                 const res = await afip.electronicBillingService.createNextVoucher(data);
 
                 //Detalle de la respuesta
