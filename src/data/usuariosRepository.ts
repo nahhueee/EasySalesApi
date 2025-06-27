@@ -7,7 +7,7 @@ class UsuariosRepository{
         const connection = await db.getConnection();
         
         try {
-             //Obtengo la query segun los filtros
+            //Obtengo la query segun los filtros
             let queryRegistros = await ObtenerQuery(filtros,false);
             let queryTotal = await ObtenerQuery(filtros,true);
 
