@@ -15,6 +15,17 @@ router.get('/datos-ventas/:id', async (req:Request, res:Response) => {
     }
 });
 
+router.post('/ventas-acumuladas', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await EstadisticasRepo.ObtenerTotalesAcumulado(req.body));
+
+    } catch(error:any){
+        let msg = "Error al obtener los datos de venta acumulados.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.get('/grafico-productos/:id', async (req:Request, res:Response) => {
     try{ 
         res.json(await EstadisticasRepo.ObtenerGraficoProductos(req.params.id));

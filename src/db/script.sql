@@ -150,7 +150,7 @@ ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.7.3'),
+('version','1.7.4'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
