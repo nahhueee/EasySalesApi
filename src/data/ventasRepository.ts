@@ -66,6 +66,7 @@ class VentasRepository{
                         dni: row['dni'],
                         tipoDni: row['tipoDni'],
                         ptoVenta: row['ptoVenta'],
+                        condReceptor: row['condReceptor'],
                     });
 
 
@@ -427,7 +428,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         query = count +
                 " SELECT v.*, " + 
                 " vpag.idPago, vpag.efectivo, vpag.digital, vpag.recargo, vpag.descuento, vpag.entrega, vpag.realizado, " + //Pago
-                " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, " + //Factura
+                " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
                 " COALESCE(cli.nombre, 'ELIMINADO') cliente, " +
                 " COALESCE(tp.nombre, 'ELIMINADO') tipoPago " +
                 " FROM ventas v " +
@@ -495,10 +496,10 @@ async function InsertPagoVenta(connection, pago):Promise<void>{
 
 async function InsertFacturaVenta(connection, factura):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, ptoVenta) " +
-                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, ptoVenta, condReceptor) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [factura.idVenta, factura.cae, moment(factura.caeVto).format('YYYY-MM-DD'), factura.ticket, factura.tipoFactura, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.ptoVenta];
+        const parametros = [factura.idVenta, factura.cae, moment(factura.caeVto).format('YYYY-MM-DD'), factura.ticket, factura.tipoFactura, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.ptoVenta, factura.condReceptor];
         await connection.query(consulta, parametros);
 
     } catch (error) {

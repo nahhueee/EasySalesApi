@@ -8,7 +8,8 @@ export class FacturaVenta{
     dni? : number;
     tipoDni? : number;
     ptoVenta? : number;
-  
+    condReceptor? : number;
+
     constructor(data?: any) {
       if (data) {
         this.cae = data.cae;
@@ -20,6 +21,7 @@ export class FacturaVenta{
         this.dni = data.dni;
         this.tipoDni = data.tipoDni;
         this.ptoVenta = data.ptoVenta;
+        this.condReceptor = data.condReceptor;
       }
     }
 }

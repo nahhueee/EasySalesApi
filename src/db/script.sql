@@ -129,7 +129,8 @@ CREATE TABLE ventas_factura (
     iva DECIMAL(10,2),
     dni BIGINT,
     tipoDni INT,
-    ptoVenta INT
+    ptoVenta INT,
+    condReceptor INT
 )
 ENGINE=InnoDB;
 
@@ -149,7 +150,7 @@ ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.6.5'),
+('version','1.7.3'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

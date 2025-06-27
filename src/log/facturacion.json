@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "message": "Error 10069: Campo DocNro no puede ser igual al del emisor.",
+    "level": "error",
+    "timestamp": "20-06-25 10:57"
+  },
+  {
+    "message": "Observación 10243: El campo Condicion IVA receptor no es valido para la clase de comprobante informado. Consular metodo FEParamGetCondicionIvaReceptor",
+    "level": "error",
+    "timestamp": "20-06-25 10:59"
+  }
+]

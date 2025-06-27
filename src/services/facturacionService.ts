@@ -12,13 +12,13 @@ import moment from "moment";
 const QRCode = require('qrcode');
 
 class FacturacionService{
-
     async Facturar(objFactura:ObjFacturar){
 
         try {
             const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
             const afip = await getAfipInstance(datosFacturacion.cuil);
 
+           
             //Verificamos el estado del servidor
             const serverStatus = await afip.electronicBillingService.getServerStatus();
             if(serverStatus && serverStatus.FEDummyResult.AppServer == "OK" && serverStatus.FEDummyResult.DbServer == "OK" && serverStatus.FEDummyResult.AuthServer == "OK")
@@ -64,7 +64,7 @@ class FacturacionService{
                     ImpNeto: neto, // Importe neto gravado
                     ImpOpEx: 0, // Importe exento de IVA
                     ImpIVA: iva, //Importe total de IVA
-                    CondicionIVAReceptorId: 5, //Condicion frente al iva del receptor
+                    CondicionIVAReceptorId: objFactura.condReceptor, //Condicion frente al iva del receptor
                     ImpTrib: 0, //Importe total de tributos
                     MonId: "PES", //Tipo de moneda usada en el comprobante (ver tipos disponibles)('PES' para pesos argentinos)
                     MonCotiz: 1, // Cotización de la moneda usada (1 para pesos argentinos)
