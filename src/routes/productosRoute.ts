@@ -141,6 +141,17 @@ router.put('/aniadir', async (req:Request, res:Response) => {
     }
 });
 
+router.put('/actualizar-faltante', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ProductosRepo.ActualizarFaltante(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar actualizar el nro aviso faltante.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.delete('/eliminar/:id', async (req:Request, res:Response) => {
     try{ 
         res.json(await ProductosRepo.Eliminar(req.params.id));

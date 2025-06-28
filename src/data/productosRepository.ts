@@ -272,6 +272,26 @@ class ProductosRepository{
         }
     }
 
+    async ActualizarFaltante(data:any): Promise<string>{
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = `UPDATE productos SET
+                              faltante = ?
+                              WHERE id = ?`;
+
+            const parametros = [data.faltante, data.idProducto];
+
+            await connection.query(consulta, parametros);
+            return "OK";
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     async VerificarYObtener(parametro:any){
         const connection = await db.getConnection();
 
@@ -369,6 +389,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") 
             filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
+
+        if (filtros.faltantes != null && filtros.faltantes == true)
+            filtro += " AND p.cantidad <= p.faltante + 5";
+
         // #endregion
 
         // #region ORDENAMIENTO
