@@ -4,6 +4,7 @@
   "esServer": false,
   "port": 7500,
   "idApp": 1,
+  "web": false,
   "db": {
     "host": "127.0.0.1",
     "user": "root",

@@ -111,7 +111,7 @@ class EstadisticasRepository{
                              " INNER JOIN cajas c ON v.idCaja = c.id " +
                                condicion + 
                              " GROUP BY c.id " +
-                             " ORDER BY c.id ASC" +
+                             " ORDER BY c.id DESC" +
                              " LIMIT 10;";
 
             const [rows] = await connection.query(consulta, [parseInt(idCaja)]);

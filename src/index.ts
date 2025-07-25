@@ -6,8 +6,6 @@ const http = require('http');
 const path = require('path');
 
 const socketIo = require('socket.io');
-const { exec } = require('child_process');
-
 const app = express();
 const server = http.createServer(app);
 
@@ -26,17 +24,6 @@ const io = socketIo(server, {
       methods: ["GET", "POST", "PUT", "DELETE"],
     },
 });
-
-// Exportartamos io para usarlo en otros módulos
-// export { io };
-
-// io.on('connection', (socket) => {
-//     console.log('SocketIo: Nuevo cliente conectado');
-  
-//     socket.on('disconnect', () => {
-//       console.log('SocketIo: Cliente desconectado');
-//     });
-// });
 
 //Starting the server
 let host:string = "127.0.0.1";
@@ -94,11 +81,13 @@ import backupRoute from './routes/backupRoute';
 app.use('/easysales/backup', backupRoute);
 
 import {BackupsServ} from './services/backupService';
-BackupsServ.IniciarCron();
+if(!config.web)
+    BackupsServ.IniciarCron();
 //#endregion
 
 import {ServidorServ} from './services/servidorService';
-ServidorServ.IniciarModoServidor();
+if(!config.web)
+    ServidorServ.IniciarModoServidor();
 
 //Index Route
 app.get('/easysales', (req, res) => {

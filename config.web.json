@@ -1,8 +1,9 @@
 {
-    "adminUrl": "https://creationcode.store/adminserver/",
+    "adminUrl": "https://creationserver.com/adminserver/",
     "produccion": true,
     "port": 7500,
     "idApp": 1,
+    "web": true,
     "db": {
         "host": "127.0.0.1",
         "user": "easysales",
