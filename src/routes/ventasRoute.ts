@@ -108,6 +108,17 @@ router.post('/facturar', async (req:Request, res:Response) => {
     }
 });
 
+router.get('/obtener-deuda/:idCliente', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await VentasRepo.ObtenerDeudaTotalCliente(req.params.idCliente));
+
+    } catch(error:any){
+        let msg = "Error al obtener la deuda de el cliente nro " + req.params.idCliente + ".";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.put('/entrega', async (req:Request, res:Response) => {
     try{ 
         res.json(await VentasRepo.EntregaDinero(req.body));

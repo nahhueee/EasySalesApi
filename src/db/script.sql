@@ -147,10 +147,27 @@ CREATE TABLE ventas_pago (
 )
 ENGINE=InnoDB;
 
+DROP TABLE IF EXISTS ventas_entrega;
+CREATE TABLE ventas_entrega (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    idCliente INT NOT NULL,
+    monto DECIMAL(10,2) NOT NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE ventas_entrega_detalle (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    idEntrega INT NOT NULL,
+    idVenta INT NOT NULL,
+    montoAplicado DECIMAL(10,2) NOT NULL
+);
+
+
+
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.7.5'),
+('version','1.7.6'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

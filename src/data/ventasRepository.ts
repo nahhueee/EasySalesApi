@@ -269,11 +269,44 @@ class VentasRepository{
     //#endregion
 
     //#region OTROS
+    async ObtenerDeudaTotalCliente(idCliente){
+        const connection = await db.getConnection();
+        
+        try {
+            const queryDeuda = `SELECT 
+                                SUM(d.cantidad * d.precio) AS totalImpagas
+                                FROM ventas v
+                                INNER JOIN ventas_pago p ON v.id = p.idVenta
+                                INNER JOIN ventas_detalle d ON v.id = d.idVenta
+                                WHERE v.idCliente = ?
+                                AND p.realizado = 0;`
+            const rows1 = await connection.query(queryDeuda, [idCliente]);
+            const resultado1 = rows1[0][0];
+
+            const queryEntregas = `SELECT SUM(vp.entrega) AS entregaTotal
+                                    FROM ventas_pago vp
+                                    INNER JOIN ventas v ON v.id = vp.idVenta
+                                    WHERE v.idCliente = ? AND vp.realizado = 0;`
+
+            const rows2 = await connection.query(queryEntregas, [idCliente]);
+            const resultado2 = rows2[0][0];
+
+            const deudaVentas = !resultado1?.totalImpagas ? 0 : resultado1.totalImpagas;
+            const totalEntregas = !resultado2?.entregaTotal ? 0 : resultado2.entregaTotal;
+
+            return deudaVentas - totalEntregas;
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     async EntregaDinero(data:any): Promise<string>{
         
         //Obtenemos el listado de ventas del cliente en estado impagas
         let resultado = await this.Obtener({cliente: data.idCliente, estado: "Impagas", caja:0});
-       
         const connection = await db.getConnection();
         
         try {
@@ -282,35 +315,35 @@ class VentasRepository{
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
-            let totalAPagar:number = 0;
-            let residuo:number = data.monto;
+                
+            //SELECT id FROM ventas_entrega WHERE idCliente = ? ORDER BY fecha DESC LIMIT 1
 
-            for (let i = 0; i < resultado.registros.length; i++) { 
-                const row = resultado.registros[i];
 
-                totalAPagar = row.total! - row.pago?.entrega!;
-                residuo = data.monto - totalAPagar;
+            let montoRestante = data.monto;
 
-                if(residuo >= 0) //Todavia hay monto para otras ventas, significa que podemos cerrar esta, y continuar con otra
-                {
-                    const consulta = " UPDATE ventas_pago " +
-                                     " SET realizado = 1, " +
-                                     "     entrega = ? " +
-                                     " WHERE idVenta = ? ";
+            for (const row of resultado.registros) {
+                const pagoEntrega = row.pago?.entrega ?? 0;
+                const totalAPagar = row.total! - pagoEntrega;
 
-                    connection.query(consulta, [row.total, row.id]);
-                    
-                    data.monto -= row.total!; //Descontamos el monto que se pagó en esta venta
-
-                    if (residuo == 0) break;
-                }
-                else if (residuo < 0) //Ya no hay monto para otras ventas, asique procedemos a colocar el resto del monto como entrega de venta
-                {
-                    const consulta = " UPDATE ventas_pago " +
-                                     " SET entrega = ? " +
-                                     " WHERE idVenta = ? ";
-
-                    connection.query(consulta, [(row.pago?.entrega + data.monto), row.id]);
+                if (montoRestante >= totalAPagar) {
+                    // Cierra completamente la venta
+                    await connection.query(
+                        `UPDATE ventas_pago 
+                        SET realizado = 1, entrega = ? 
+                        WHERE idVenta = ?`,
+                        [row.total, row.id]
+                    );
+                    montoRestante -= totalAPagar;
+                    if (montoRestante === 0) break;
+                } else {
+                    // Solo paga parcialmente
+                    await connection.query(
+                        `UPDATE ventas_pago 
+                        SET entrega = ? 
+                        WHERE idVenta = ?`,
+                        [pagoEntrega + montoRestante, row.id]
+                    );
+                    montoRestante = 0;
                     break;
                 }
             }
