@@ -48,6 +48,7 @@ import estadisticasRuta from './routes/estadisticasRoute';
 import parametrosRuta from './routes/parametrosRoute';
 import logsRuta from './routes/logsRoute';
 import servidorRuta from './routes/servidorRoute';
+import cuentasRuta from './routes/cuentasCorsRoute';
 
 app.use('/easysales/update', actualizacionRuta)
 app.use('/easysales/usuarios', usuariosRuta);
@@ -61,6 +62,7 @@ app.use('/easysales/estadisticas', estadisticasRuta);
 app.use('/easysales/parametros', parametrosRuta);
 app.use('/easysales/logs', logsRuta);
 app.use('/easysales/server', servidorRuta);
+app.use('/easysales/cuentas', cuentasRuta);
 
 
 //AdminServer Route

@@ -2,7 +2,6 @@ import {VentasRepo} from '../data/ventasRepository';
 import {FacturacionServ} from '../services/facturacionService';
 import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
-import { ParametrosRepo } from '../data/parametrosRepository';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -86,7 +85,7 @@ router.put('/eliminar', async (req:Request, res:Response) => {
 });
 //#endregion
 
-//#region OTROS
+//#region FACTURA
 router.get('/obtenerQR/:id', async (req:Request, res:Response) => {
     try{ 
         res.json(await FacturacionServ.ObtenerQRFactura(req.params.id));
@@ -103,39 +102,6 @@ router.post('/facturar', async (req:Request, res:Response) => {
 
     } catch(error:any){
         let msg = "Error al intentar facturar el comprobante.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
-
-router.get('/obtener-deuda/:idCliente', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await VentasRepo.ObtenerDeudaTotalCliente(req.params.idCliente));
-
-    } catch(error:any){
-        let msg = "Error al obtener la deuda de el cliente nro " + req.params.idCliente + ".";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
-
-router.put('/entrega', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await VentasRepo.EntregaDinero(req.body));
-
-    } catch(error:any){
-        let msg = "No se pudo realizar el proceso de entrega de dinero.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
-
-router.put('/actualizar-pago', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await VentasRepo.ActualizarEstadoPago(req.body));
-
-    } catch(error:any){
-        let msg = "No se pudo actualizar el estado de pago.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

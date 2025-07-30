@@ -153,16 +153,17 @@ CREATE TABLE ventas_entrega (
     idCliente INT NOT NULL,
     monto DECIMAL(10,2) NOT NULL,
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+)
+ENGINE=InnoDB;
 
+DROP TABLE IF EXISTS ventas_entrega_detalle;
 CREATE TABLE ventas_entrega_detalle (
     id INT AUTO_INCREMENT PRIMARY KEY,
     idEntrega INT NOT NULL,
     idVenta INT NOT NULL,
     montoAplicado DECIMAL(10,2) NOT NULL
-);
-
-
+)
+ENGINE=InnoDB;
 
 
 INSERT INTO parametros(clave, valor) 

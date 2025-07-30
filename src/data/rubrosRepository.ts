@@ -137,7 +137,6 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             paginado +
             endCount;
 
-        console.log(query)
         return query;
             
     } catch (error) {
