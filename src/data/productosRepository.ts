@@ -294,7 +294,6 @@ class ProductosRepository{
 
     async ActualizarImagen(data:any): Promise<string>{
         const connection = await db.getConnection();
-        console.log(data.imagen)
         try {
             const consulta = `UPDATE productos SET
                               imagen = ?
