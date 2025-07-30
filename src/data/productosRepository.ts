@@ -292,6 +292,26 @@ class ProductosRepository{
         }
     }
 
+    async ActualizarImagen(data:any): Promise<string>{
+        const connection = await db.getConnection();
+        console.log(data.imagen)
+        try {
+            const consulta = `UPDATE productos SET
+                              imagen = ?
+                              WHERE id = ?`;
+
+            const parametros = [data.imagen, data.idProducto];
+
+            await connection.query(consulta, parametros);
+            return "OK";
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     async VerificarYObtener(parametro:any){
         const connection = await db.getConnection();
 

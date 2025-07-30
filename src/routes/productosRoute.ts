@@ -152,6 +152,17 @@ router.put('/actualizar-faltante', async (req:Request, res:Response) => {
     }
 });
 
+router.put('/actualizar-imagen', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ProductosRepo.ActualizarImagen(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar actualizar la imagen del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.delete('/eliminar/:id', async (req:Request, res:Response) => {
     try{ 
         res.json(await ProductosRepo.Eliminar(req.params.id));
