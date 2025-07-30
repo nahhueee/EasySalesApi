@@ -71,8 +71,8 @@ class CuentasCorsRepository{
 
             //Insertamos el registro de cabecera
             const ultimoRegistro = await ObtenerUltimoRegistroEntrega(connection);
-            await connection.query("INSERT INTO ventas_entrega(idCliente, monto, fecha) VALUES(?,?,?)", 
-                [data.idCliente, data.monto, moment(Date.now()).format('YYYY-MM-DD')]);
+            await connection.query("INSERT INTO ventas_entrega(id,idCliente, monto, fecha) VALUES(?,?,?,?)", 
+                [ultimoRegistro, data.idCliente, data.monto, moment(Date.now()).format('YYYY-MM-DD')]);
 
             let montoRestante = data.monto;
 
@@ -107,7 +107,6 @@ class CuentasCorsRepository{
                             WHERE idVenta = ?`,
                             [pagoEntrega + montoRestante, row.id]
                         );
-                        console.log(pagoEntrega + montoRestante)
 
                         // Insertamos detalle de la entrega
                         await connection.query(
@@ -134,26 +133,15 @@ class CuentasCorsRepository{
         }
     }
 
-    async ReverirEntregaDinero(data:any): Promise<string>{
+    async RevertirEntregaDinero(data:any): Promise<string>{
         const connection = await db.getConnection();
         try {
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
-            //Buscar la última entrega para el cliente
-            const [ultimaEntrega] = await connection.query(
-                "SELECT id FROM ventas_entrega WHERE idCliente = ? ORDER BY fecha DESC LIMIT 1",
-                [data.idCliente]
-            );
-
-            if ((ultimaEntrega as any).length === 0) {
-                throw new Error("No hay entregas para revertir.");
-            }
-            const idEntrega = [ultimaEntrega][0][0].id;
-
             //Obtenemos los detalles de la entrega
             const consulta = " SELECT idVenta, montoAplicado FROM ventas_entrega_detalle WHERE idEntrega = ? ";
-            const [detalles] = await connection.query(consulta, [idEntrega])
+            const [detalles] = await connection.query(consulta, [data.idEntrega])
 
             if (Array.isArray(detalles)) {
                 for (let i = 0; i < detalles.length; i++) { 
@@ -175,8 +163,8 @@ class CuentasCorsRepository{
             }
 
             //Eliminamos el detalle y cabecera de la entrega revertida
-            await connection.query("DELETE FROM ventas_entrega_detalle WHERE idEntrega = ?", [idEntrega]);
-            await connection.query("DELETE FROM ventas_entrega WHERE id = ?", [idEntrega]);
+            await connection.query("DELETE FROM ventas_entrega_detalle WHERE idEntrega = ?", [data.idEntrega]);
+            await connection.query("DELETE FROM ventas_entrega WHERE id = ?", [data.idEntrega]);
             
             //Mandamos la transaccion
             await connection.commit();
@@ -273,7 +261,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-            " SELECT fecha, monto " +
+            " SELECT id, fecha, monto " +
             " FROM ventas_entrega  " +
             " WHERE idCliente = " +
             filtros.idCliente +

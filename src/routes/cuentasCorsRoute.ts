@@ -38,7 +38,7 @@ router.put('/entrega', async (req:Request, res:Response) => {
 
 router.put('/revertir-entrega', async (req:Request, res:Response) => {
     try{ 
-        res.json(await CuentasRepo.ReverirEntregaDinero(req.body));
+        res.json(await CuentasRepo.RevertirEntregaDinero(req.body));
 
     } catch(error:any){
         let msg = "No se pudo realizar la reversión de la última entrega.";
