@@ -165,6 +165,18 @@ CREATE TABLE ventas_entrega_detalle (
 )
 ENGINE=InnoDB;
 
+DROP TABLE IF EXISTS etiquetas;
+CREATE TABLE etiquetas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50),
+    tamanio VARCHAR(10),
+    mCodigo INT,
+    mPrecio INT
+    mNombre INT,
+    nombreEmpresa VARCHAR(50),
+    logoEmpresa VARCHAR(100)
+)
+ENGINE=InnoDB;
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
