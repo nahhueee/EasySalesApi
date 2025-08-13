@@ -62,7 +62,7 @@ CREATE TABLE productos (
     precio DECIMAL(10,2),
     redondeo INT,
     porcentaje DECIMAL(6,2),
-    vencimiento DATE,
+    vencimiento DATE NULL,
     faltante INT,
     unidad VARCHAR(3),
     imagen VARCHAR(250),
@@ -168,19 +168,29 @@ ENGINE=InnoDB;
 DROP TABLE IF EXISTS etiquetas;
 CREATE TABLE etiquetas (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(50),
+    descripcion VARCHAR(50),
     tamanio VARCHAR(10),
+    titulo VARCHAR(50),
+    mOferta INT,
     mCodigo INT,
-    mPrecio INT
+    mPrecio INT,
     mNombre INT,
-    nombreEmpresa VARCHAR(50),
-    logoEmpresa VARCHAR(100)
-)
-ENGINE=InnoDB;
+    mVencimiento INT,
+    bordeColor VARCHAR(10),
+    bordeAncho VARCHAR(10),
+    tituloColor VARCHAR(10),
+    tituloAlineacion VARCHAR(10),
+    ofertaFondo VARCHAR(10),
+    ofertaAlineacion VARCHAR(10),
+    nombreAlineacion VARCHAR(10),
+    vencimientoAlineacion VARCHAR(10),
+    precioAlineacion VARCHAR(10),
+    precioColor VARCHAR(10)
+);
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','1.7.7'),
+('version','2.0.0'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

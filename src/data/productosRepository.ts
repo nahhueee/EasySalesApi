@@ -165,8 +165,8 @@ class ProductosRepository{
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,faltante,unidad,imagen,soloPrecio)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -177,6 +177,7 @@ class ProductosRepository{
                                 data.redondeo,
                                 data.porcentaje,
                                 data.faltante,
+                                data.vencimiento ? moment(data.vencimiento).format('YYYY-MM-DD'): null,
                                 data.unidad,
                                 data.imagen,
                                 data.soloPrecio ? 1 : 0];
@@ -209,6 +210,7 @@ class ProductosRepository{
                                 redondeo = ?,
                                 porcentaje = ?,
                                 faltante = ?,
+                                vencimiento = ?,
                                 unidad = ?,
                                 imagen = ?,
                                 soloPrecio = ?
@@ -223,6 +225,7 @@ class ProductosRepository{
                                 data.redondeo,
                                 data.porcentaje,
                                 data.faltante,
+                                data.vencimiento ? moment(data.vencimiento).format('YYYY-MM-DD'): null,
                                 data.unidad,
                                 data.imagen,
                                 data.soloPrecio ? 1 : 0,
@@ -291,6 +294,27 @@ class ProductosRepository{
             connection.release();
         }
     }
+
+    async ActualizarVencimiento(data:any): Promise<string>{
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = `UPDATE productos SET
+                              vencimiento = ?
+                              WHERE id = ?`;
+
+            const parametros = [data.vencimiento ? moment(data.vencimiento).format('YYYY-MM-DD'): null, data.idProducto];
+
+            await connection.query(consulta, parametros);
+            return "OK";
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
 
     async ActualizarImagen(data:any): Promise<string>{
         const connection = await db.getConnection();
@@ -410,16 +434,22 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
 
         if (filtros.faltantes != null && filtros.faltantes == true)
-            filtro += " AND p.cantidad <= p.faltante + 5";
+            filtro += " AND p.cantidad <= p.faltante + 1";
+
+        if (filtros.vencimientos != null && filtros.vencimientos == true)
+            filtro += " AND p.vencimiento IS NOT NULL";
 
         // #endregion
 
         // #region ORDENAMIENTO
         if (filtros.orden != null && filtros.orden != ""){
             orden += " ORDER BY p."+ filtros.orden + " " + filtros.direccion;
-        } else{
+        }else if(filtros.vencimientos != null && filtros.vencimientos == true){
+            orden += " ORDER BY p.vencimiento ASC";
+        } 
+        else{
             orden += " ORDER BY p.id DESC";
-        }           
+        }    
         // #endregion
 
         if (esTotal)

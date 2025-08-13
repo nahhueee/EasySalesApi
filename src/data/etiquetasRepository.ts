@@ -5,19 +5,17 @@ import { Etiqueta } from '../models/Etiqueta';
 class EtiquetasRepository{
 
     //#region OBTENER
-    async Obtener(filtros:any){
+    async Obtener(descripcion:string){
         const connection = await db.getConnection();
         
         try {
-             //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let query = " SELECT * FROM etiquetas ";
+            if (descripcion != null && descripcion != "") 
+                query += " WHERE descripcion LIKE '%"+ descripcion + "%' ";
+            query += "ORDER BY id DESC"
 
-            //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
-
-            return {total:resultado[0][0].total, registros:rows[0]};
+            const rows = await connection.query(query);
+            return rows[0];
 
         } catch (error:any) {
             throw error;
@@ -26,14 +24,37 @@ class EtiquetasRepository{
         }
     }
 
-    async ObtenerEtiqueta(filtros:any){
+    async ObtenerEtiqueta(idEtiqueta){
         const connection = await db.getConnection();
         
         try {
-            let consulta = await ObtenerQuery(filtros,false);
-            const rows = await connection.query(consulta);
-           
-            return new Etiqueta(rows[0][0]);;
+            let query = " SELECT * FROM etiquetas WHERE id = ? ";
+            const rows = await connection.query(query, [idEtiqueta]);
+            
+            const row = rows[0][0];
+            let etiqueta:Etiqueta = new Etiqueta({
+                id: row['id'],
+                descripcion: row['descripcion'],
+                tamanio: row['tamanio'],
+                titulo: row['titulo'],
+                mOferta: row['mOferta'] == 1 ? true : false,
+                mCodigo: row['mCodigo'] == 1 ? true : false,
+                mPrecio: row['mPrecio'] == 1 ? true : false,
+                mNombre: row['mNombre'] == 1 ? true : false,
+                mVencimiento: row['mVencimiento'] == 1 ? true : false,
+                bordeColor: row['bordeColor'],
+                bordeAncho: row['bordeAncho'],
+                tituloColor: row['tituloColor'],
+                tituloAlineacion: row['tituloAlineacion'],
+                ofertaFondo: row['ofertaFondo'],
+                ofertaAlineacion: row['ofertaAlineacion'],
+                nombreAlineacion: row['nombreAlineacion'],
+                vencimientoAlineacion: row['vencimientoAlineacion'],
+                precioAlineacion: row['precioAlineacion'],
+                precioColor: row['precioColor'],
+            });
+
+            return etiqueta;
 
         } catch (error:any) {
             throw error;
@@ -47,15 +68,40 @@ class EtiquetasRepository{
     //#region ABM
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
         try {
             let existe = await ValidarExistencia(connection, data, false);
             if(existe)//Verificamos si ya existe una etiqueta con el mismo nombre 
                 return "Ya existe una etiqueta con el mismo nombre.";
             
-            const consulta = "INSERT INTO etiquetas(nombre) VALUES (?)";
-            const parametros = [data.nombre.toUpperCase()];
-            
+            const consulta = `
+                INSERT INTO etiquetas (
+                    descripcion,tamanio,titulo,
+                    mOferta,mCodigo,mPrecio,mNombre,mVencimiento,
+                    bordeColor,bordeAncho,tituloColor,tituloAlineacion,
+                    ofertaFondo,ofertaAlineacion,nombreAlineacion,vencimientoAlineacion,precioAlineacion,precioColor
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+
+            const parametros = [
+                data.descripcion?.toUpperCase(),
+                data.tamanio,
+                data.titulo,
+                data.mOferta,
+                data.mCodigo,
+                data.mPrecio,
+                data.mNombre,
+                data.mVencimiento,
+                data.bordeColor,
+                data.bordeAncho,
+                data.tituloColor,
+                data.tituloAlineacion,
+                data.ofertaFondo,
+                data.ofertaAlineacion,
+                data.nombreAlineacion,
+                data.vencimientoAlineacion,
+                data.precioAlineacion,
+                data.precioColor
+            ];     
+
             await connection.query(consulta, parametros);
             return "OK";
 
@@ -68,17 +114,57 @@ class EtiquetasRepository{
 
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
         try {
             let existe = await ValidarExistencia(connection, data, true);
             if(existe)//Verificamos si ya existe una etiqueta con el mismo nombre 
                 return "Ya existe una etiqueta con el mismo nombre.";
             
-                const consulta = `UPDATE etiquetas 
-                SET nombre = ?
-                WHERE id = ? `;
+            const consulta = `
+                UPDATE etiquetas 
+                SET 
+                    descripcion = ?,
+                    tamanio = ?,
+                    titulo = ?,
+                    mOferta = ?,
+                    mCodigo = ?,
+                    mPrecio = ?,
+                    mNombre = ?,
+                    mVencimiento = ?,
+                    bordeColor = ?,
+                    bordeAncho = ?,
+                    tituloColor = ?,
+                    tituloAlineacion = ?,
+                    ofertaFondo = ?,
+                    ofertaAlineacion = ?,
+                    nombreAlineacion = ?,
+                    vencimientoAlineacion = ?,
+                    precioAlineacion = ?,
+                    precioColor = ?
+                WHERE id = ?
+            `;
+            
+            const parametros = [
+                data.descripcion?.toUpperCase(),
+                data.tamanio,
+                data.titulo,
+                data.mOferta,
+                data.mCodigo,
+                data.mPrecio,
+                data.mNombre,
+                data.mVencimiento,
+                data.bordeColor,
+                data.bordeAncho,
+                data.tituloColor,
+                data.tituloAlineacion,
+                data.ofertaFondo,
+                data.ofertaAlineacion,
+                data.nombreAlineacion,
+                data.vencimientoAlineacion,
+                data.precioAlineacion,
+                data.precioColor,
+                data.id
+            ];   
 
-            const parametros = [data.nombre.toUpperCase(), data.id];
             await connection.query(consulta, parametros);
             return "OK";
 
@@ -105,57 +191,12 @@ class EtiquetasRepository{
     //#endregion
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
-    try {
-        //#region VARIABLES
-        let query:string;
-        let filtro:string = "";
-        let paginado:string = "";
-    
-        let count:string = "";
-        let endCount:string = "";
-        //#endregion
-
-        // #region FILTROS
-        if (filtros.busqueda != null && filtros.busqueda != "") 
-            filtro += " WHERE c.nombre LIKE '%"+ filtros.busqueda + "%' ";
-        if (filtros.idCliente != null && filtros.idCliente != 0) 
-            filtro += " WHERE c.id = "+ filtros.idCliente;
-        // #endregion
-
-        if (esTotal)
-        {//Si esTotal agregamos para obtener un total de la consulta
-            count = "SELECT COUNT(*) AS total FROM ( ";
-            endCount = " ) as subquery";
-        }
-        else
-        {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
-        }
-            
-        //Arma la Query con el paginado y los filtros correspondientes
-        query = count +
-            " SELECT c.* " +
-            " FROM clientes c" +
-            filtro +
-            " ORDER BY c.id DESC" +
-            paginado +
-            endCount;
-
-        return query;
-            
-    } catch (error) {
-        throw error; 
-    }
-}
-
 async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
-        let consulta = " SELECT id FROM etiquetas WHERE nombre = ? ";
+        let consulta = " SELECT id FROM etiquetas WHERE descripcion = ? ";
         if(modificando) consulta += " AND id <> ? ";
 
-        const parametros = [data.nombre.toUpperCase(), data.id];
+        const parametros = [data.descripcion.toUpperCase(), data.id];
 
         const rows = await connection.query(consulta,parametros);
         if(rows[0].length > 0) return true;
@@ -166,7 +207,7 @@ async function ValidarExistencia(connection, data:any, modificando:boolean):Prom
     }
 }
 
-export const ClientesRepo = new EtiquetasRepository();
+export const EtiquetasRepo = new EtiquetasRepository();
 
 
 

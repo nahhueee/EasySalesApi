@@ -430,7 +430,7 @@ async function InsertFacturaVenta(connection, factura):Promise<void>{
 //#region DETALLE VENTA
 async function ObtenerDetalleVenta(connection, idVenta:number){
     try {
-        const consulta = " SELECT dv.*, p.precio precioProducto, COALESCE(p.nombre, 'ELIMINADO') producto FROM ventas_detalle dv " +
+        const consulta = " SELECT dv.*, p.precio precioProducto, COALESCE(p.nombre, 'ELIMINADO') producto, p.soloPrecio FROM ventas_detalle dv " +
                          " LEFT JOIN productos p on p.id = dv.idProducto " +
                          " WHERE dv.idVenta = ?" +
                          " ORDER BY dv.id DESC ";
@@ -449,7 +449,12 @@ async function ObtenerDetalleVenta(connection, idVenta:number){
                 detalle.precio = parseFloat(row['precio']);
                 detalle.costo = parseFloat(row['costo']);
                 detalle.total = detalle.precio! * detalle.cantidad!;
-                detalle.producto = new Producto({id:row['idProducto'], nombre:row['producto'], precio:parseFloat(row['precioProducto'])});
+                detalle.producto = new Producto({
+                    id: row['idProducto'], 
+                    nombre: row['producto'], 
+                    soloPrecio: row['soloPrecio'] == 1 ? true : false, 
+                    precio: parseFloat(row['precioProducto'])
+                });
 
 
                 detalles.push(detalle)
