@@ -45,6 +45,24 @@ CREATE TABLE clientes (
     nombre VARCHAR(100)
 );
 
+DROP TABLE IF EXISTS registros;
+CREATE TABLE registros (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    descripcion VARCHAR(80),
+    prioridad INT
+);
+
+DROP TABLE IF EXISTS registros_detalle;
+CREATE TABLE registros_detalle (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    idRegistro INT,
+    accion CHAR(1),
+    monto DECIMAL(10,2),
+    observacion VARCHAR(80),
+    fecha DATE
+);
+
+
 DROP TABLE IF EXISTS tipos_pago;
 CREATE TABLE tipos_pago (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -190,7 +208,7 @@ CREATE TABLE etiquetas (
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.0.0'),
+('version','2.0.1'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
