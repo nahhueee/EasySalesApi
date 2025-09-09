@@ -49,18 +49,21 @@ DROP TABLE IF EXISTS registros;
 CREATE TABLE registros (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     descripcion VARCHAR(80),
-    prioridad INT
-);
+    prioridad INT,
+    total DECIMAL(10,2)
+)
+ENGINE=InnoDB;
 
 DROP TABLE IF EXISTS registros_detalle;
 CREATE TABLE registros_detalle (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     idRegistro INT,
-    accion CHAR(1),
+    accion VARCHAR(6),
     monto DECIMAL(10,2),
     observacion VARCHAR(80),
     fecha DATE
-);
+)
+ENGINE=InnoDB;
 
 
 DROP TABLE IF EXISTS tipos_pago;

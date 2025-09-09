@@ -1,4 +1,7 @@
+import moment from 'moment';
 import db from '../db';
+import { RegistroDetalle } from '../models/DetalleRegistro';
+import { Registro } from '../models/Registro';
 
 class RegistrosRepository{
 
@@ -12,10 +15,24 @@ class RegistrosRepository{
             let queryTotal = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros);
+            const [rows] = await connection.query(queryRegistros);
             const resultado = await connection.query(queryTotal);
 
-            return {total:resultado[0][0].total, registros:rows[0]};
+            const registros:Registro[] = [];
+           
+            if (Array.isArray(rows)) {
+                for (let i = 0; i < rows.length; i++) { 
+                    const row = rows[i];
+
+                    let reg:Registro = new Registro();
+                    reg.id = row['id'];
+                    reg.descripcion = row['descripcion'];
+                    reg.prioridad = row['prioridad'];
+                    reg.total = parseFloat(row['total']);
+                    registros.push(reg);
+                }
+            }
+            return {total:resultado[0][0].total, registros};
 
         } catch (error:any) {
             throw error;
@@ -31,8 +48,16 @@ class RegistrosRepository{
             let consulta = await ObtenerQuery(filtros,false);
             const rows = await connection.query(consulta);
            
-            return (rows[0][0]);
-
+            const row = rows[0][0];
+            let registro:Registro = new Registro({
+                id: row['id'],
+                descripcion: row['descripcion'],
+                total: parseFloat(row['total']),
+                prioridad: row['prioridad'],
+                detalles: await ObtenerDetalleRegistro(connection, row['id'])
+            });
+            
+            return registro;
         } catch (error:any) {
             throw error;
         } finally{
@@ -46,14 +71,32 @@ class RegistrosRepository{
         const connection = await db.getConnection();
         
         try {
+
             let existe = await ValidarExistencia(connection, data, false);
             if(existe)//Verificamos si ya existe un registro con la misma desc
                 return "Ya existe un registro con la misma descripcion.";
+
+            //Obtenemos el proximo nro de registro a insertar
+            data.id = await ObtenerUltimoRegistro(connection);
+
+            //Iniciamos una transaccion
+            await connection.beginTransaction();
             
-            const consulta = "INSERT INTO registros(descripcion,prioridad) VALUES (?,?)";
-            const parametros = [data.descripcion.toUpperCase(), data.prioridad];
+            const consulta = "INSERT INTO registros(descripcion,prioridad,total) VALUES (?,?,?)";
+            const parametros = [data.descripcion.toUpperCase(), data.prioridad, data.total];
             
             await connection.query(consulta, parametros);
+
+            //eliminamos los registros
+            await connection.query('DELETE FROM registros_detalle WHERE idRegistro = ?', [data.id]);
+            //Insertamos los detalles del registro
+            for (const element of  data.detalles) {
+                element.idRegistro = data.id;
+                InsertDetalleRegistro(connection, element);
+            };
+
+            //Mandamos la transaccion
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
@@ -70,14 +113,29 @@ class RegistrosRepository{
             let existe = await ValidarExistencia(connection, data, true);
             if(existe)//Verificamos si ya existe un registro con la misma desc
                 return "Ya existe un registro con la misma descripcion.";
+
+            //Iniciamos una transaccion
+            await connection.beginTransaction();
             
-                const consulta = `UPDATE registros 
+            const consulta = `UPDATE registros 
                 SET descripcion = ?,
-                    prioridad = ?
+                    prioridad = ?,
+                    total = ?
                 WHERE id = ? `;
 
-            const parametros = [data.descripcion.toUpperCase(), data.prioridad, data.id];
+            const parametros = [data.descripcion.toUpperCase(), data.prioridad, data.total, data.id];
             await connection.query(consulta, parametros);
+
+            //eliminamos los registros
+            await connection.query('DELETE FROM registros_detalle WHERE idRegistro = ?', [data.id]);
+            //Insertamos los detalles del registro
+            for (const element of  data.detalles) {
+                element.idRegistro = data.id;
+                InsertDetalleRegistro(connection, element);
+            };
+
+            //Mandamos la transaccion
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
@@ -91,6 +149,7 @@ class RegistrosRepository{
         const connection = await db.getConnection();
         
         try {
+            await connection.query("DELETE FROM registros_detalle WHERE idRegistro = ?", [id]);
             await connection.query("DELETE FROM registros WHERE id = ?", [id]);
             return "OK";
 
@@ -117,6 +176,8 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") 
             filtro += " AND r.descripcion LIKE '%"+ filtros.busqueda + "%' ";
+        if (filtros.idRegistro != null && filtros.idRegistro != "") 
+            filtro += " AND r.id = "+ filtros.idRegistro;
         // #endregion
 
         if (esTotal)
@@ -136,7 +197,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             " FROM registros r " +
             " WHERE 1 = 1" +
             filtro +
-            " ORDER BY r.id DESC " +
+            " ORDER BY r.prioridad ASC " +
             paginado +
             endCount;
 
@@ -162,5 +223,67 @@ async function ValidarExistencia(connection, data:any, modificando:boolean):Prom
         throw error; 
     }
 }
+
+async function ObtenerUltimoRegistro(connection):Promise<number>{
+    try {
+        const rows = await connection.query(" SELECT id FROM registros ORDER BY id DESC LIMIT 1 ");
+        let resultado:number = 0;
+
+        if([rows][0][0].length==0){
+            resultado = 1;
+        }else{
+            resultado = rows[0][0].id + 1;
+        }
+
+        return resultado;
+
+    } catch (error) {
+        throw error; 
+    }
+}
+
+async function ObtenerDetalleRegistro(connection, idRegistro:number){
+    try {
+        const consulta = " SELECT * FROM registros_detalle WHERE idRegistro = ?" +
+                         " ORDER BY id ASC "; 
+
+        const [rows] = await connection.query(consulta, [idRegistro]);
+
+        const detalles:RegistroDetalle[] = [];
+
+        if (Array.isArray(rows)) {
+            for (let i = 0; i < rows.length; i++) { 
+                const row = rows[i];
+                
+                let detalle:RegistroDetalle = new RegistroDetalle();
+                detalle.id = row['id'];
+                detalle.fecha = row['fecha'];
+                detalle.accion = row['accion'];
+                detalle.monto = parseFloat(row['monto']);
+                detalle.observacion = row['observacion'];
+
+                detalles.push(detalle)
+              }
+        }
+
+        return detalles;
+
+    } catch (error) {
+        throw error; 
+    }
+}
+async function InsertDetalleRegistro(connection, detalle):Promise<void>{
+    try {
+        const consulta = " INSERT INTO registros_detalle(idRegistro, accion, monto, observacion, fecha) " +
+                        " VALUES(?, ?, ?, ?, ?) ";
+
+        const parametros = [detalle.idRegistro, detalle.accion, detalle.monto, detalle.observacion, moment(detalle.fecha).format('YYYY-MM-DD')];
+        await connection.query(consulta, parametros);
+        
+    } catch (error) {
+        throw error; 
+    }
+}
+
 
 export const RegistrosRepo = new RegistrosRepository();
