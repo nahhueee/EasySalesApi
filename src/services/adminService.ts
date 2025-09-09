@@ -21,6 +21,7 @@ class AdminService{
             {
                 if(mac){
                     const resutado = (await axios.get(`${config.adminUrl}appscliente/habilitado/${dni}/${config.idApp}/${mac}`)).data
+                    console.log(resutado)
                     return resutado;
                 }
             }
