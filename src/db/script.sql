@@ -190,7 +190,7 @@ DROP TABLE IF EXISTS etiquetas;
 CREATE TABLE etiquetas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     descripcion VARCHAR(50),
-    tamanio VARCHAR(10),
+    tamanio VARCHAR(15),
     titulo VARCHAR(50),
     mOferta INT,
     mCodigo INT,

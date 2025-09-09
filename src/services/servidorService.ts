@@ -18,7 +18,7 @@ class ServidorService {
           const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
 
 
-          if(dniCliente!=""){
+          if(dniCliente && dniCliente!=""){
             //Verificamos que el cliente este habilitado para usar este modo
             const habilitado = await AdminServ.ObtenerHabilitacion(dniCliente)
             if (!habilitado) {

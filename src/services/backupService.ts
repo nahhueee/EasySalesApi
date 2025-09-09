@@ -28,7 +28,7 @@ class BackupsService{
             const expresion = await ParametrosRepo.ObtenerParametros('expresion');
             //#endregion
 
-            if(dniCliente!="")
+            if(dniCliente && dniCliente!="")
                 this.EjecutarProcesoCron(dniCliente, expresion);
                   
         } catch(error:any){
