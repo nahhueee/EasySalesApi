@@ -10,10 +10,10 @@ module.exports = {
   development: {
       client: 'mysql2', 
       connection: {
-        host: config.host,
-        user: config.user,
-        password: config.password,
-        database: config.database
+        host: config.db.host,
+        user: config.db.user,
+        password: config.db.password,
+        database: config.db.database
       },
       migrations: {
         directory: './src/db/tasks',  // Ruta donde se generan y almacenan las migraciones
