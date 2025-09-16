@@ -211,7 +211,7 @@ CREATE TABLE etiquetas (
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.0.2'),
+('version','2.0.3'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

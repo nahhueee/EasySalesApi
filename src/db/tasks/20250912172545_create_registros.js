@@ -22,11 +22,6 @@ exports.up = async function(knex) {
     table.string("observacion", 80);
     table.date("fecha");
   });
-
-  // Update de la versión en la tabla parametros
-  await knex("parametros")
-    .where("clave", "version")
-    .update({ valor: "2.0.2" });
 };
 
 /**
@@ -37,9 +32,4 @@ exports.down = async function(knex) {
   // Eliminar tablas
   await knex.schema.dropTableIfExists("registros_detalle");
   await knex.schema.dropTableIfExists("registros");
-
-  // Revertir el update de version (opcional, pongo valor anterior como ejemplo)
-  await knex("parametros")
-    .where("clave", "version")
-    .update({ valor: "2.0.1" }); // Cambiá este valor si el anterior era distinto
 };
