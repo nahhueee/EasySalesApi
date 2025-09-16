@@ -47,6 +47,17 @@ router.get('/productos-soloPrecio', async (req:Request, res:Response) => {
         res.status(500).send(msg);
     }
 });
+
+router.post('/productos-ids', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ProductosRepo.ObtenerProductosIds(req.body));
+
+    } catch(error:any){
+        let msg = "Error al obtener el listado de productos por ids.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
 //#endregion
 
 //#region ABM

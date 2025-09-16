@@ -112,6 +112,23 @@ class ProductosRepository{
         }
     }
 
+    async ObtenerProductosIds(ids:number[]){
+        const connection = await db.getConnection();
+        
+        try {
+            console.log(ids)
+            const [rows] = await connection.query('SELECT * FROM productos WHERE id IN(?)', [ids]);
+            console.log([rows])
+            return [rows][0];
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+
     async ObtenerUno(id:number){
         const connection = await db.getConnection();
 

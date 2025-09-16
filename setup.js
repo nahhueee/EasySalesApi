@@ -53,6 +53,7 @@ async function setup() {
     const config = JSON.parse(rawConfig);
 
     config.produccion = true;
+    config.db.password = "1235";
 
     // Guardar los cambios en el archivo de configuración
     await fs.writeFile(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
