@@ -79,6 +79,7 @@ CREATE TABLE productos (
     nombre VARCHAR(100),
     cantidad DECIMAL(10,2),
     tipoPrecio VARCHAR(2),
+    sumarIva INT DEFAULT 0,
     costo DECIMAL(10,2),
     precio DECIMAL(10,2),
     redondeo INT,
@@ -211,7 +212,7 @@ CREATE TABLE etiquetas (
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.0.4'),
+('version','2.0.5'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

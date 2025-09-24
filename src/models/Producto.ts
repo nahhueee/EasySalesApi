@@ -8,6 +8,7 @@ export class Producto {
     costo? : number;
     precio? : number;
     tipoPrecio? : string;
+    sumarIva? : boolean;
     redondeo? : number;
     porcentaje? : number;
     vencimiento? : Date;
@@ -26,6 +27,7 @@ export class Producto {
             this.costo = parseFloat(data.costo);
             this.precio = parseFloat(data.precio);
             this.tipoPrecio = data.tipoPrecio;
+            this.sumarIva = data.sumarIva ? true : false;
             this.redondeo = parseFloat(data.redondeo);
             this.porcentaje = parseFloat(data.porcentaje);
             this.vencimiento = moment(data.vencimiento).format('DD-MM-YYYY');

@@ -31,6 +31,7 @@ class ProductosRepository{
                         costo: row['costo'],
                         precio: row['precio'],
                         tipoPrecio: row['tipoPrecio'],
+                        sumarIva: row['sumarIva'],
                         redondeo: row['redondeo'],
                         porcentaje: row['porcentaje'],
                         vencimiento: row['vencimiento'],
@@ -182,13 +183,14 @@ class ProductosRepository{
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
             
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
                                 data.cantidad,
                                 data.tipoPrecio,
+                                data.sumarIva ? 1 : 0,
                                 data.costo,
                                 data.precio,
                                 data.redondeo,
@@ -222,6 +224,7 @@ class ProductosRepository{
                                 nombre = ?,
                                 cantidad = ?,
                                 tipoPrecio = ?,
+                                sumarIva = ?,
                                 costo = ?,
                                 precio = ?,
                                 redondeo = ?,
@@ -237,6 +240,7 @@ class ProductosRepository{
                                 data.nombre.toUpperCase(),
                                 data.cantidad,
                                 data.tipoPrecio,
+                                data.sumarIva ? 1 : 0,
                                 data.costo,
                                 data.precio,
                                 data.redondeo,
