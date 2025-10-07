@@ -28,7 +28,7 @@ class MovimientosRepository{
     //#region ABM
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        console.log(data)
+
         try {
             //Iniciamos una transaccion
             await connection.beginTransaction();

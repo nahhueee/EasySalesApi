@@ -1,5 +1,6 @@
 import db from '../db';
 import { Caja } from '../models/Caja';
+import { SesionServ } from '../services/sesionService';
 const moment = require('moment');
 
 class CajasRepository{
@@ -93,6 +94,14 @@ class CajasRepository{
             const parametros = [data.finalizada, data.idCaja];
             
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            if(data.finalizada == 1)
+                await SesionServ.RegistrarMovimiento("Finalizar la caja nro " + data.idCaja);
+            else
+                await SesionServ.RegistrarMovimiento("Revertir la caja nro " + data.idCaja);
+
+
             return "OK";
 
         } catch (error:any) {
@@ -114,6 +123,9 @@ class CajasRepository{
             const parametros = [idCaja, data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0];
             
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Agregar Nueva Caja nro " + idCaja);
 
             //Terminamos retornando el id de la caja insertada
             return idCaja;
@@ -138,6 +150,10 @@ class CajasRepository{
             
             const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.inicial, data.id];
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Modificar Caja nro " + data.id);
+
             return "OK";
 
         } catch (error:any) {
@@ -156,6 +172,10 @@ class CajasRepository{
                            " WHERE id = ?";
 
             await connection.query(consulta, [new Date(), id]);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Eliminar Caja nro " + id);
+
             return "OK";
 
         } catch (error:any) {

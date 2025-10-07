@@ -16,8 +16,12 @@ class ServidorService {
       try{ 
           //Obtenemos los parametros necesarios
           const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
-
-
+          
+          //Verificamos que este conectado a internet
+          if (!navigator.onLine) {
+            return;
+          }
+          
           if(dniCliente && dniCliente!=""){
             //Verificamos que el cliente este habilitado para usar este modo
             const habilitado = await AdminServ.ObtenerHabilitacion(dniCliente)

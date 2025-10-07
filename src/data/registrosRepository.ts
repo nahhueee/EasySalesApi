@@ -2,6 +2,7 @@ import moment from 'moment';
 import db from '../db';
 import { RegistroDetalle } from '../models/DetalleRegistro';
 import { Registro } from '../models/Registro';
+import { SesionServ } from '../services/sesionService';
 
 class RegistrosRepository{
 
@@ -95,6 +96,9 @@ class RegistrosRepository{
                 InsertDetalleRegistro(connection, element);
             };
 
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Crear nuevo registro: " + data.descripcion.toUpperCase());
+
             //Mandamos la transaccion
             await connection.commit();
             return "OK";
@@ -128,11 +132,15 @@ class RegistrosRepository{
 
             //eliminamos los registros
             await connection.query('DELETE FROM registros_detalle WHERE idRegistro = ?', [data.id]);
+            
             //Insertamos los detalles del registro
             for (const element of  data.detalles) {
                 element.idRegistro = data.id;
                 InsertDetalleRegistro(connection, element);
             };
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Modificar registro: " + data.descripcion.toUpperCase());
 
             //Mandamos la transaccion
             await connection.commit();
@@ -151,6 +159,8 @@ class RegistrosRepository{
         try {
             await connection.query("DELETE FROM registros_detalle WHERE idRegistro = ?", [id]);
             await connection.query("DELETE FROM registros WHERE id = ?", [id]);
+            await SesionServ.RegistrarMovimiento("Eliminar registro nro " + id);
+
             return "OK";
 
         } catch (error:any) {

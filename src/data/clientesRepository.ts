@@ -1,5 +1,6 @@
 import db from '../db';
 import { Cliente } from '../models/Cliente';
+import { SesionServ } from '../services/sesionService';
 
 class ClientesRepository{
 
@@ -69,6 +70,10 @@ class ClientesRepository{
             const parametros = [data.nombre.toUpperCase()];
             
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Agregar Nuevo Cliente: " + data.nombre.toUpperCase());
+
             return "OK";
 
         } catch (error:any) {
@@ -92,6 +97,10 @@ class ClientesRepository{
 
             const parametros = [data.nombre.toUpperCase(), data.id];
             await connection.query(consulta, parametros);
+
+             //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Modificar Cliente: " + data.nombre.toUpperCase());
+
             return "OK";
 
         } catch (error:any) {
@@ -106,6 +115,10 @@ class ClientesRepository{
         
         try {
             await connection.query("DELETE FROM clientes WHERE id = ?", [id]);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Eliminar Cliente nro " + id);
+
             return "OK";
 
         } catch (error:any) {

@@ -9,6 +9,7 @@ import { ObjFacturar } from "../models/objFacturar";
 import config from '../conf/app.config';
 import { VentasRepo } from '../data/ventasRepository';
 import moment from "moment";
+import { SesionServ } from "./sesionService";
 const QRCode = require('qrcode');
 
 class FacturacionService{
@@ -90,6 +91,9 @@ class FacturacionService{
                 const resultado = detalle?.Resultado;
                 if (resultado === "A") {
                     const lastVoucher = await afip.electronicBillingService.getLastVoucher(datosFacturacion.puntoVta, objFactura.tipoFactura!); //Obtenemos el nro del ultimo comprobante creado
+
+                    //Registramos el Movimiento
+                    await SesionServ.RegistrarMovimiento("Nueva Factura tipo " + objFactura.tipoFactura + " nro " + lastVoucher.CbteNro);
 
                     return {
                         estado: "Aprobado",

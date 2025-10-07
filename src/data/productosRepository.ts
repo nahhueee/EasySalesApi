@@ -1,6 +1,7 @@
 import moment from 'moment';
 import db from '../db';
 import { Producto } from '../models/Producto';
+import { SesionServ } from '../services/sesionService';
 
 class ProductosRepository{
 
@@ -69,6 +70,7 @@ class ProductosRepository{
             if (filtro.metodo == 'nombre')
                 consulta += " AND LOWER(nombre) LIKE '%" + filtro.valor + "%'";
 
+            consulta += "ORDER BY nombre ASC";
             const [rows] = await connection.query(consulta);
 
             const productos:Producto[] = [];
@@ -117,9 +119,7 @@ class ProductosRepository{
         const connection = await db.getConnection();
         
         try {
-            console.log(ids)
             const [rows] = await connection.query('SELECT * FROM productos WHERE id IN(?)', [ids]);
-            console.log([rows])
             return [rows][0];
 
         } catch (error:any) {
@@ -202,6 +202,10 @@ class ProductosRepository{
                                 data.soloPrecio ? 1 : 0];
             
             await connection.query(consulta, parametros);
+
+             //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Agregar Producto: " + data.codigo.toUpperCase());
+
             return "OK";
 
         } catch (error:any) {
@@ -253,6 +257,10 @@ class ProductosRepository{
                                 data.id];
 
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Modificar Producto: " + data.codigo.toUpperCase());
+
             return "OK";
 
         } catch (error:any) {
@@ -267,6 +275,10 @@ class ProductosRepository{
         
         try {
             await connection.query("DELETE FROM productos WHERE id = ?", [id]);
+            
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Eliminar Producto nro " + id);
+
             return "OK";
 
         } catch (error:any) {

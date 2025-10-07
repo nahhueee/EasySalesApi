@@ -1,4 +1,6 @@
+import moment from 'moment';
 import db from '../db';
+import { SesionServ } from '../services/sesionService';
 
 class UsuariosRepository{
 
@@ -67,9 +69,46 @@ class UsuariosRepository{
             connection.release();
         }
     }
+
+     async ObtenerMovimientos(filtros:any){
+        const connection = await db.getConnection();
+        
+        try {
+            //Obtengo la query segun los filtros
+            let queryRegistros = await ObtenerQueryMovimientos(filtros,false);
+            let queryTotal = await ObtenerQueryMovimientos(filtros,true);
+
+            //Obtengo la lista de registros y el total
+            const rows = await connection.query(queryRegistros);
+            const resultado = await connection.query(queryTotal);
+
+            return {total:resultado[0][0].total, registros:rows[0]};
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
     //#endregion
 
     //#region ABM
+    async RegistrarMovimiento(accion, idUsuario): Promise<string>{
+        const connection = await db.getConnection();
+        
+        try {
+            const consulta = "INSERT INTO usuarios_movimientos(fecha, accion, idUsuario) VALUES (?, ?, ?)";
+            const parametros = [moment().format('YYYY-MM-DD HH:mm:ss'), accion, idUsuario];
+            
+            await connection.query(consulta, parametros);
+            return "OK";
+
+        }catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
         
@@ -82,6 +121,10 @@ class UsuariosRepository{
             const parametros = [data.nombre.toUpperCase(), data.email, data.pass, data.cargo.id];
             
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Agregar Usuario: " + data.nombre.toUpperCase());
+
             return "OK";
 
         } catch (error:any) {
@@ -108,6 +151,10 @@ class UsuariosRepository{
 
             const parametros = [data.nombre.toUpperCase(), data.email, data.pass, data.cargo.id, data.id];
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Modificar Usuario: " + data.nombre.toUpperCase());
+
             return "OK";
 
         } catch (error:any) {
@@ -121,7 +168,12 @@ class UsuariosRepository{
         const connection = await db.getConnection();
         
         try {
+            await connection.query("DELETE FROM usuarios_movimientos WHERE idUsuario = ?", [id]);
             await connection.query("DELETE FROM usuarios WHERE id = ?", [id]);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Eliminar Usuario");
+
             return "OK";
 
         } catch (error:any) {
@@ -131,6 +183,52 @@ class UsuariosRepository{
         }
     }
     //#endregion
+}
+
+async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<string>{
+    try {
+        //#region VARIABLES
+        let query:string;
+        let filtro:string = "";
+        let paginado:string = "";
+    
+        let count:string = "";
+        let endCount:string = "";
+        //#endregion
+
+        // #region FILTROS
+        if(filtros.idUsuario != null && filtros.idUsuario != 0)
+            filtro += " AND um.idUsuario = '" + filtros.idUsuario + "'";
+        // #endregion
+
+        if (esTotal)
+        {//Si esTotal agregamos para obtener un total de la consulta
+            count = "SELECT COUNT(*) AS total FROM ( ";
+            endCount = " ) as subquery";
+        }
+        else
+        {//De lo contrario paginamos
+            if (filtros.tamanioPagina != null)
+                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+        }
+            
+        //Arma la Query con el paginado y los filtros correspondientes
+        query = count +
+            " SELECT um.*, u.nombre, c.nombre cargo" +
+            " FROM usuarios_movimientos um " +
+            " LEFT JOIN usuarios u on u.id = um.idUsuario " +
+            " LEFT JOIN cargos c on c.id = u.idCargo " +
+            " WHERE 1 = 1 " +
+            filtro +
+            " ORDER BY um.fecha DESC" +
+            paginado +
+            endCount;
+        
+        return query;
+            
+    } catch (error) {
+        throw error; 
+    }
 }
 
 async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{

@@ -33,6 +33,14 @@ CREATE TABLE usuarios (
     idCargo INT
 );
 
+DROP TABLE IF EXISTS usuarios_movimientos;
+CREATE TABLE usuarios_movimientos (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    fecha DATETIME,
+    idUsuario INT,
+    accion VARCHAR(100)
+);
+
 DROP TABLE IF EXISTS cargos;
 CREATE TABLE cargos (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -212,7 +220,7 @@ CREATE TABLE etiquetas (
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.0.5'),
+('version','2.1.0'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 

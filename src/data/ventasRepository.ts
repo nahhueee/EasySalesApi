@@ -8,6 +8,7 @@ import { FacturaVenta } from '../models/FacturaVenta';
 import { ObjQR } from '../models/ObjQR';
 import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
+import { SesionServ } from '../services/sesionService';
 const moment = require('moment');
 
 class VentasRepository{
@@ -183,6 +184,11 @@ class VentasRepository{
             venta.pago.idVenta = venta.id;
             await InsertPagoVenta(connection, venta.pago);
 
+            if(!venta.pago.realizado){
+                //Registramos el Movimiento
+                await SesionServ.RegistrarMovimiento("Nueva deuda para el cliente " + venta.cliente.nombre);
+            }
+
             //insertamos los datos de la factura de la venta
             if(venta.factura){
                 venta.factura.idVenta = venta.id;
@@ -253,6 +259,9 @@ class VentasRepository{
             venta.detalles.forEach(element => {
                 ActualizarInventario(connection, element, "+")
             });
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Eliminar Venta nro " + venta.id);
 
             //Mandamos la transaccion
             await connection.commit();

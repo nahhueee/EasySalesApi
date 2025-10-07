@@ -1,5 +1,6 @@
 import moment from 'moment';
 import db from '../db';
+import { SesionServ } from '../services/sesionService';
 
 class CuentasCorsRepository{
     
@@ -122,6 +123,10 @@ class CuentasCorsRepository{
 
             //Mandamos la transaccion
             await connection.commit();
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Nueva entrega de dinero al cliente: " + data.idCliente);
+
             return "OK";
 
         } catch (error:any) {
@@ -168,6 +173,10 @@ class CuentasCorsRepository{
             
             //Mandamos la transaccion
             await connection.commit();
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega);
+
             return "OK";
 
         } catch (error:any) {
@@ -192,6 +201,10 @@ class CuentasCorsRepository{
 
             const parametros = [data.realizado, data.total, data.idVenta];
             await connection.query(consulta, parametros);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Actualización de estado pago para la venta nro " + data.idVenta);
+
             return "OK";
 
         } catch (error:any) {
