@@ -9,7 +9,7 @@ class AdminService{
     
     async ObtenerVersionApp() {
         try {
-            const version = (await axios.get(`${config.adminUrl}apps/obtener/${config.idApp}`)).data;
+            const version = (await axios.get(`${config.adminUrl}actualizaciones/ultima-version/${config.idApp}`)).data;
             return version;
         } catch (error) {
             throw error;

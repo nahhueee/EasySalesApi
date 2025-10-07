@@ -14,6 +14,7 @@ router.get('/obtener-version', async (req:Request, res:Response) => {
             if(habilitado){
                 const respuesta = await AdminServ.ObtenerVersionApp();
 
+                //Obtenemos del config el estado del servidor
                 if(config.produccion)
                     respuesta.serverStatus = 'production';
                 else
