@@ -23,26 +23,7 @@ class ProductosRepository{
             if (Array.isArray(rows)) {
                 for (let i = 0; i < rows.length; i++) { 
                     const row = rows[i];
-
-                    let producto:Producto = new Producto({
-                        id: row['id'],
-                        codigo: row['codigo'],
-                        nombre: row['nombre'],
-                        cantidad: row['cantidad'],
-                        costo: row['costo'],
-                        precio: row['precio'],
-                        tipoPrecio: row['tipoPrecio'],
-                        sumarIva: row['sumarIva'],
-                        redondeo: row['redondeo'],
-                        porcentaje: row['porcentaje'],
-                        vencimiento: row['vencimiento'],
-                        faltante: row['faltante'],
-                        unidad: row['unidad'],
-                        imagen: row['imagen'],
-                        idCategoria: row['idCategoria'],
-                        soloPrecio: row['soloPrecio'],
-                    });
-                    
+                    let producto:Producto = this.CompletarObjeto(row);
                     productos.push(producto);
                   }
             }
@@ -54,6 +35,29 @@ class ProductosRepository{
         } finally{
             connection.release();
         }
+    }
+
+    CompletarObjeto(row){
+        let producto:Producto = new Producto({
+            id: row['id'],
+            codigo: row['codigo'],
+            nombre: row['nombre'],
+            cantidad: row['cantidad'],
+            costo: row['costo'],
+            precio: row['precio'],
+            tipoPrecio: row['tipoPrecio'],
+            sumarIva: row['sumarIva'],
+            redondeo: row['redondeo'],
+            porcentaje: row['porcentaje'],
+            vencimiento: row['vencimiento'],
+            faltante: row['faltante'],
+            unidad: row['unidad'],
+            imagen: row['imagen'],
+            idCategoria: row['idCategoria'],
+            soloPrecio: row['soloPrecio'],
+        });
+
+        return producto;
     }
 
     //Busca los productos segun lo que digite el usuario
@@ -120,7 +124,18 @@ class ProductosRepository{
         
         try {
             const [rows] = await connection.query('SELECT * FROM productos WHERE id IN(?)', [ids]);
-            return [rows][0];
+
+            const productos:Producto[] = [];
+           
+            if (Array.isArray(rows)) {
+                for (let i = 0; i < rows.length; i++) { 
+                    const row = rows[i];
+                    let producto:Producto = this.CompletarObjeto(row);
+                    productos.push(producto);
+                  }
+            }
+
+            return productos;
 
         } catch (error:any) {
             throw error;
