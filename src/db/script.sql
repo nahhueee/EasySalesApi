@@ -220,7 +220,7 @@ CREATE TABLE etiquetas (
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.1.0'),
+('version','2.1.3'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
@@ -236,7 +236,7 @@ INSERT INTO productos(id,codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo
 VALUES(NULL,'*','VARIOS',1,'$',1,1,NULL,NULL,NULL,NULL,'UNI',NULL);
 
 INSERT INTO tipos_pago(id, nombre) VALUES (NULL,'EFECTIVO'), (NULL,'TARJETA'), (NULL,'TRANSFERENCIA'), (NULL,'COMBINADO');
-INSERT INTO cargos(id, nombre) VALUES (NULL,'ADMINISTRADOR'), (NULL,'EMPLEADO');
+INSERT INTO cargos(id, nombre) VALUES (NULL,'ADMINISTRADOR'), (NULL,'ENCARGADO'), (NULL,'EMPLEADO');
 INSERT INTO clientes(id, nombre) VALUES (NULL,'CONSUMIDOR FINAL');
 INSERT INTO usuarios(id, nombre, email, pass, idCargo) VALUES (NULL, 'ADMIN', NULL, '1235', 1);
 
