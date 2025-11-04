@@ -5,6 +5,7 @@ import {AdminServ} from '../services/adminService';
 import logger from '../log/loggerGeneral';
 import config from '../conf/app.config';
 import path from 'path';
+import isOnline from 'is-online';
 const fs = require("fs-extra");
 
 let udpServer;
@@ -18,9 +19,8 @@ class ServidorService {
           const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
           
           //Verificamos que este conectado a internet
-          if (!navigator.onLine) {
-            return;
-          }
+          const conectado = await isOnline();
+          if(!conectado) return;
           
           if(dniCliente && dniCliente!=""){
             //Verificamos que el cliente este habilitado para usar este modo

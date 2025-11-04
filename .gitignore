@@ -7,5 +7,5 @@
 !/src/upload/
 /update
 /ssl/server/*
-
+/src/session.json
 

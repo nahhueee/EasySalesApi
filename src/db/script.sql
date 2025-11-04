@@ -140,6 +140,7 @@ CREATE TABLE ventas_detalle (
     id INT UNSIGNED AUTO_INCREMENT,
     idVenta INT,
     idProducto INT,
+    nomProd VARCHAR(100),
     cantidad DECIMAL(10,2),
     costo DECIMAL(10,2),
     precio DECIMAL(10,2),

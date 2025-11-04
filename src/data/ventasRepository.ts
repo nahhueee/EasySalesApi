@@ -455,6 +455,7 @@ async function ObtenerDetalleVenta(connection, idVenta:number){
                 let detalle:DetalleVenta = new DetalleVenta();
                 detalle.id = row['id'];
                 detalle.cantidad = row['cantidad'];
+                detalle.nomProd = row['nomProd'];
                 detalle.precio = parseFloat(row['precio']);
                 detalle.costo = parseFloat(row['costo']);
                 detalle.total = detalle.precio! * detalle.cantidad!;
@@ -479,10 +480,11 @@ async function ObtenerDetalleVenta(connection, idVenta:number){
 
 async function InsertDetalleVenta(connection, detalle):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_detalle(idVenta, idProducto, cantidad, costo, precio) " +
-                         " VALUES(?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas_detalle(idVenta, nomProd, idProducto, cantidad, costo, precio) " +
+                         " VALUES(?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [detalle.idVenta, detalle.producto.id, detalle.cantidad, detalle.costo, detalle.precio];
+        
+        const parametros = [detalle.idVenta, detalle.producto.nombre, detalle.producto.id, detalle.cantidad, detalle.costo, detalle.precio];
         await connection.query(consulta, parametros);
         
     } catch (error) {
