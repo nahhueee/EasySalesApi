@@ -419,13 +419,15 @@ class ProductosRepository{
                              "     precio = ?, " +
                              "     redondeo = ?, " +
                              "     porcentaje = ?, " +
-                             "     tipoPrecio = '%' " +
+                             "     tipoPrecio = '%', " +
+                             "     sumarIva = ? " +
                              " WHERE id = ?";
 
             const parametros = [data.costo,
                                 data.precio,
                                 data.redondeo,
                                 data.porcentaje,
+                                data.sumarIva ? 1 : 0,
                                 data.id];
 
             await connection.query(consulta, parametros);
@@ -446,11 +448,13 @@ class ProductosRepository{
                              " SET " +
                              "     costo = ?, " +
                              "     precio = ?, " +
-                             "     tipoPrecio = '$' " +
+                             "     tipoPrecio = '$', " +
+                             "     sumarIva = ?" +
                              " WHERE id = ?";
 
             const parametros = [data.costo,
                                 data.precio,
+                                data.sumarIva ? 1 : 0,
                                 data.id];
 
             await connection.query(consulta, parametros);
