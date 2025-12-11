@@ -275,7 +275,7 @@ class EstadisticasRepository{
                 limit = 12;
             } else if (filtros.rango === 'mes') {
                 groupBy = "CONCAT('Semana ', WEEK(v.fecha, 1))";
-                orderBy = "MIN(p.fecha)";
+                orderBy = "MIN(v.fecha)";
                 limit = 5;
             } else if (filtros.rango === 'hoy') {
                 fechaDesde = moment().subtract(5, 'days').startOf('day').format('YYYY-MM-DD HH:mm:ss');

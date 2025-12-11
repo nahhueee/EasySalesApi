@@ -183,6 +183,7 @@ class VentasRepository{
             //insertamos los datos del pago de la venta
             venta.pago.idVenta = venta.id;
             await InsertPagoVenta(connection, venta.pago);
+            console.log(venta.total)
 
             if(!venta.pago.realizado){
                 //Registramos el Movimiento

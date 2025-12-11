@@ -482,8 +482,19 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         //#endregion
 
         // #region FILTROS
-        if (filtros.busqueda != null && filtros.busqueda != "") 
-            filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
+        if (filtros.busqueda != null && filtros.busqueda != "") {
+            switch (filtros.tipoBusqueda) {
+                case 'ambas':
+                    filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
+                    break;
+                case 'codigo':
+                    filtro += " AND p.codigo = " + filtros.busqueda + "";
+                    break;
+                case 'descripcion':
+                    filtro += " AND LOWER(p.nombre) LIKE '%" + filtros.busqueda + "%'";
+                    break;
+            }
+        }
 
         if (filtros.faltantes != null && filtros.faltantes == true)
             filtro += " AND p.cantidad <= p.faltante + 1";
