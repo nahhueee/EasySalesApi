@@ -484,7 +484,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") {
             switch (filtros.tipoBusqueda) {
-                case 'ambas':
+                case 'ambos':
                     filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
                     break;
                 case 'codigo':

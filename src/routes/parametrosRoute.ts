@@ -39,12 +39,34 @@ router.get('/obtener-facturacion', async (req:Request, res:Response) => {
     }
 });
 
+router.get('/obtener-impresion', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ParametrosRepo.ObtenerParametrosImpresion());
+
+    } catch(error:any){
+        let msg = "Error al intentar obtener parametros de impresion.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.post('/actualizar-facturacion', async (req:Request, res:Response) => {
     try{ 
         res.json(await ParametrosRepo.ActualizarFacturacion(req.body));
 
     } catch(error:any){
         let msg = "Error al intentar guardar parametros de facturación.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.post('/actualizar-impresion', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await ParametrosRepo.ActualizarImpresion(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar guardar parametros de impresion.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

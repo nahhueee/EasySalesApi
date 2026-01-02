@@ -63,6 +63,50 @@ class ParametrosRepository{
     }
   }
 
+  async ActualizarImpresion(data:any): Promise<string>{
+    const connection = await db.getConnection();
+    try {
+        const consulta = `UPDATE parametros_impresion 
+                          SET 
+                          impresora = ?, 
+                          papel = ?, 
+                          margenIzq = ?,
+                          margenDer = ?,
+                          nomLocal = ?,
+                          desLocal = ?,
+                          dirLocal = ?`;
+
+        const parametros = [data.impresora, data.papel, data.margenIzq, data.margenDer, data.nomLocal, data.desLocal, data.dirLocal];
+        
+        await connection.query(consulta, parametros);
+        return "OK";
+
+    } catch (error:any) {
+        throw error;
+    } finally{
+        connection.release();
+    }
+  }
+
+  async ObtenerParametrosImpresion(){
+    const connection = await db.getConnection();
+
+    try {
+        
+        const rows = await connection.query(`SELECT * FROM parametros_impresion`);
+      
+        if(rows[0][0]){
+          return rows[0][0];
+        }
+        return null;
+
+    } catch (error:any) {
+        throw error;
+    } finally{
+        connection.release();
+    }
+  }
+  
   async ObtenerParametrosFacturacion(){
     const connection = await db.getConnection();
 

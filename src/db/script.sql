@@ -18,6 +18,17 @@ CREATE TABLE parametros_facturacion (
     direccion VARCHAR(250)
 );
 
+DROP TABLE IF EXISTS parametros_impresion;
+CREATE TABLE parametros_impresion (
+    impresora VARCHAR(100),
+    papel VARCHAR(10),
+    margenIzq INT DEFAULT 0,
+    margenDer INT DEFAULT 0,
+    nomLocal VARCHAR(100),
+    desLocal VARCHAR(100),
+    dirLocal VARCHAR(150)
+);
+
 DROP TABLE IF EXISTS backups;
 CREATE TABLE backups (
     nombre VARCHAR(30) PRIMARY KEY,
@@ -221,7 +232,7 @@ CREATE TABLE etiquetas (
 
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.1.5'),
+('version','2.2.2'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
@@ -232,6 +243,9 @@ VALUES
 
 INSERT INTO parametros_facturacion(condicion, puntoVta, cuil, razon, direccion) 
 VALUES ('monotributista', 0, 0, '', '');
+
+INSERT INTO parametros_impresion(impresora, papel, margenIzq, margenDer, nomLocal, desLocal, dirLocal)
+VALUES ('', '58mm', 0, 0, 'EASY SALES', '', '');
 
 INSERT INTO productos(id,codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen) 
 VALUES(NULL,'*','VARIOS',1,'$',1,1,NULL,NULL,NULL,NULL,'UNI',NULL);
