@@ -570,7 +570,7 @@ class ComprobanteService {
     private ArmarFactura80(comprobante:ObjComprobante, datosFactura:ObjTicketFactura){
       return {
         pageSize: {
-          width: 227,
+          width: 200,
           height: 800,
           pageOrientation: 'portrait',
         },

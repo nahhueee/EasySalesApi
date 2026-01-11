@@ -18,7 +18,6 @@ router.post('/imprimir-pdf', async (req: Request, res: Response) => {
     const venta = req.body.venta;
     const tipoComprobante = req.body.tipoComprobante;
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
-
     const pdfBuffer = await ComprobanteServ.GenerarComprobantePDF(venta, parametrosImpresion, tipoComprobante) 
 
     //Crear archivo temporal

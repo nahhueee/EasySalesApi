@@ -91,6 +91,8 @@ if(!config.web)
 //#endregion
 
 import {ServidorServ} from './services/servidorService';
+import { logger } from './log/logger';
+import { errorMiddleware } from './middlewares/errorMiddleware';
 if(!config.web)
     ServidorServ.IniciarModoServidor();
 
@@ -103,5 +105,9 @@ app.get('/easysales', (req, res) => {
 app.use((_req, res) => {
     res.status(404).send('No se encontró el recurso solicitado.');
 });
+
+//Manejo y logs de errores
+app.use(errorMiddleware);
+
   
 

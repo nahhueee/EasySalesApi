@@ -9,9 +9,12 @@ async function setup() {
     // Definir las carpetas necesarias
     const directories = [
       "out/src/upload",
+      "out/src/temp",
       "out/src/db/seeds",
       "out/src/db/tasks",
-      "out/src/certs"
+      "out/src/certs",
+      "out/src/fonts",
+      "out/src/tokens",
     ];
 
     // Crear todas las carpetas
@@ -31,6 +34,10 @@ async function setup() {
       "knexfile.js",
       "src/db/script.sql",
       "src/db/script.sql",
+      "src/fonts/Roboto-Italic.ttf",
+      "src/fonts/Roboto-Medium.ttf",
+      "src/fonts/Roboto-Regular.ttf",
+      "src/fonts/Roboto-MediumItalic.ttf",
     ];
 
     //Archivo de configuracion dependiendo el entorno

@@ -2,16 +2,28 @@ import {Router, Request, Response} from 'express';
 import logger from '../log/loggerGeneral';
 import * as path from 'path';
 import moment from 'moment';
-const fs = require('fs').promises;
+import readline from 'readline';
+
+const fsPromises = require('fs').promises;
 const fileServer = require('fs');
+import * as fs from 'fs';
 
 const router : Router  = Router();
+
+//Interfaz para exportar errores
+type Severity = 'INFO' | 'WARN' | 'ERROR';
+interface ErrorLogDTO {
+  timestamp: string;
+  code: string;
+  message: string;
+  severity: Severity;
+}
 
 router.get('/general', async (req:Request, res:Response) => {
     try{ 
         const generalPath = path.resolve(__dirname, '../log/general.json');
 
-        const data = await fs.readFile(generalPath, 'utf8');
+        const data = await fsPromises.readFile(generalPath, 'utf8');
         res.json(JSON.parse(data));
 
     } catch(error:any){
@@ -20,11 +32,38 @@ router.get('/general', async (req:Request, res:Response) => {
     }
 });
 
+router.get('/', async (req:Request, res:Response) => {
+  const ruta = path.resolve(__dirname, '../log/error.log');
+  const fileStream = fs.createReadStream(ruta);
+
+  const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity
+  });
+
+  const errors: ErrorLogDTO[] = [];
+
+  for await (const line of rl) {
+    try {
+      const log = JSON.parse(line);
+
+      errors.push({
+        timestamp: log.timestamp,
+        code: log.code,
+        message: log.message,
+        severity: log.severity
+      });
+    } catch {}
+  }
+
+  res.json(errors.slice(-20).reverse());
+});
+
 router.get('/backup', async (req:Request, res:Response) => {
     try{ 
         const backupPath = path.resolve(__dirname, '../log/backup.json');
 
-        const data = await fs.readFile(backupPath, 'utf8');
+        const data = await fsPromises.readFile(backupPath, 'utf8');
         res.json(JSON.parse(data));
 
     } catch(error:any){
@@ -37,7 +76,7 @@ router.get('/update', async (req:Request, res:Response) => {
     try{ 
         const updatePath = path.resolve(__dirname, '../log/update.json');
 
-        const data = await fs.readFile(updatePath, 'utf8');
+        const data = await fsPromises.readFile(updatePath, 'utf8');
         res.json(JSON.parse(data));
 
     } catch(error:any){
@@ -50,7 +89,7 @@ router.get('/facturacion', async (req:Request, res:Response) => {
     try{ 
         const updatePath = path.resolve(__dirname, '../log/facturacion.json');
 
-        const data = await fs.readFile(updatePath, 'utf8');
+        const data = await fsPromises.readFile(updatePath, 'utf8');
         res.json(JSON.parse(data));
 
     } catch(error:any){

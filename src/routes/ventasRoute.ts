@@ -1,7 +1,8 @@
 import {VentasRepo} from '../data/ventasRepository';
 import {FacturacionServ} from '../services/facturacionService';
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+//import logger from '../log/loggerGeneral';
+import {logger} from '../log/logger'
 const router : Router  = Router();
 
 //#region OBTENER
@@ -96,14 +97,12 @@ router.get('/obtenerQR/:id', async (req:Request, res:Response) => {
     }
 });
 
-router.post('/facturar', async (req:Request, res:Response) => {
+router.post('/facturar', async (req:Request, res:Response, next) => {
     try{ 
         res.json(await FacturacionServ.Facturar(req.body));
 
-    } catch(error:any){
-        let msg = "Error al intentar facturar el comprobante.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
+    } catch(error){
+        next(error);
     }
 });
 //#endregion
