@@ -32,5 +32,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy placeholder
-        run: echo "Deployando backend..."
+      - name: Show version
+        run: |
+            node -v
+            npm -v
+            cat package.json | grep version
