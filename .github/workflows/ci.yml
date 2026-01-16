@@ -15,16 +15,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node
+      - name: Usar Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install deps
+      - name: Instalar dependencias
         run: npm ci
 
-      - name: Build
+      - name: Buildear solucion
         run: npm run build
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: out/
 
   deploy:
     needs: build
@@ -33,13 +39,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node
-        uses: actions/setup-node@v4
+
+      - name: Descargar artefacto bacjend
+        uses: actions/download-artifact@v4
         with:
-          node-version: 18
-      
-      - name: Show version
+          name: backend-build
+          path: out
+
+      - name: Verificar artefacto
         run: |
-            node -v
-            npm -v
-            cat package.json | grep version
+          ls -la
+          ls -la our
