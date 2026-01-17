@@ -49,4 +49,4 @@ jobs:
       - name: Verificar artefacto
         run: |
           ls -la
-          ls -la our
+          ls -la out
