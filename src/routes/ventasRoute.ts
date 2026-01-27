@@ -2,7 +2,7 @@ import {VentasRepo} from '../data/ventasRepository';
 import {FacturacionServ} from '../services/facturacionService';
 import {Router, Request, Response} from 'express';
 //import logger from '../log/loggerGeneral';
-import {logger} from '../log/logger'
+import {logger} from '../logger/logger'
 const router : Router  = Router();
 
 //#region OBTENER

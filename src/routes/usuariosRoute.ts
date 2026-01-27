@@ -1,7 +1,7 @@
 import {UsuariosRepo} from '../data/usuariosRepository';
 import { SesionServ } from '../services/sesionService';
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
 
 //#region OBTENER

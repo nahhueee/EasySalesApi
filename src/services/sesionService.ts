@@ -1,4 +1,4 @@
-import logger from "../log/loggerGeneral";
+import logger from "../logger/loggerGeneral";
 import { UsuariosRepo } from "../data/usuariosRepository";
 
 const fs = require('fs');

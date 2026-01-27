@@ -1,5 +1,5 @@
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 import * as path from 'path';
 import moment from 'moment';
 import readline from 'readline';

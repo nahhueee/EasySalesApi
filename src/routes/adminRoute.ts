@@ -1,7 +1,7 @@
 import {AdminServ} from '../services/adminService';
 import {ParametrosRepo} from '../data/parametrosRepository';
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 import config from '../conf/app.config';
 const router : Router  = Router();
 

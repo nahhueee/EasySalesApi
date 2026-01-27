@@ -1,6 +1,6 @@
 import {EstadisticasRepo} from '../data/estadisticasRepository';
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
 
 router.post('/get-generales', async (req:Request, res:Response) => {

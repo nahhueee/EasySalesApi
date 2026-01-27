@@ -2,7 +2,7 @@ import dgram from 'dgram';
 import os from 'os';
 import {ParametrosRepo} from '../data/parametrosRepository';
 import {AdminServ} from '../services/adminService';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 import config from '../conf/app.config';
 import path from 'path';
 import isOnline from 'is-online';

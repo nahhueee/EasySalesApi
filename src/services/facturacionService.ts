@@ -1,4 +1,4 @@
-import loggerFacturacion from "../log/loggerFacturacion";
+import loggerFacturacion from "../logger/loggerFacturacion";
 import {ParametrosRepo} from '../data/parametrosRepository';
 import { Afip } from "afip.ts";
 import { AdminServ } from "./adminService";
@@ -10,8 +10,8 @@ import { VentasRepo } from '../data/ventasRepository';
 import moment from "moment";
 import { SesionServ } from "./sesionService";
 import { HabilitacionServ } from "./habilitacionService";
-import { AppError } from "../log/AppError";
-import { CodigoError } from "../log/CodigosError";
+import { AppError } from "../logger/AppError";
+import { CodigoError } from "../logger/CodigosError";
 
 const afipInstances: Record<string, any> = {};
 const QRCode = require('qrcode');

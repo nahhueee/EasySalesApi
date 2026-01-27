@@ -1,6 +1,6 @@
 import {Router, Request, Response} from 'express';
 import { upload, fullPath } from '../conf/upload_config'; // Importar configuración de Multer y las variables
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 import { v4 as uuid } from 'uuid';
 const router : Router  = Router();
 const path = require('path');

@@ -1,6 +1,6 @@
 import {Router, Request, Response} from 'express';
 import {BackupsServ} from '../services/backupService';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
 
 

@@ -1,0 +1,227 @@
+[
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "05-08-25 14:34"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "04-09-25 21:47"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "09-09-25 15:23"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "12-09-25 10:41"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "07-10-25 00:56"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "01-12-25 10:34"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "03-12-25 08:29"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "08-12-25 23:34"
+  },
+  {
+    "message": "Error dentro del proceso cron: getaddrinfo ENOTFOUND creationserver.com",
+    "level": "error",
+    "timestamp": "11-12-25 10:12"
+  },
+  {
+    "message": "Error dentro del proceso cron: getaddrinfo ENOTFOUND creationserver.com",
+    "level": "error",
+    "timestamp": "11-12-25 10:18"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "11-12-25 14:13"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "11-12-25 14:13"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "11-12-25 14:19"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "11-12-25 14:20"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "11-12-25 14:20"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "11-12-25 15:36"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "11-12-25 15:40"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Access denied for user 'root'@'localhost' (using password: NO)",
+    "level": "error",
+    "timestamp": "12-12-25 15:38"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "12-12-25 15:38"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "12-12-25 15:46"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "12-12-25 15:46"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "27-12-25 09:58"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "30-12-25 13:57"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "31-12-25 11:57"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "31-12-25 19:33"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:20"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:31"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:45"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:46"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:48"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:50"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:51"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:52"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "01-01-26 12:53"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "02-01-26 09:26"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "08-01-26 22:06"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 14:08"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:38"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:41"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:41"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:45"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:56"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:58"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:58"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para generar backups.",
+    "level": "info",
+    "timestamp": "09-01-26 16:59"
+  }
+]

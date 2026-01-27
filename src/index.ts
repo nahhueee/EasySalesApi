@@ -2,6 +2,7 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
+
 const http = require('http');
 const path = require('path');
 
@@ -91,14 +92,15 @@ if(!config.web)
 //#endregion
 
 import {ServidorServ} from './services/servidorService';
-import { logger } from './log/logger';
 import { errorMiddleware } from './middlewares/errorMiddleware';
-if(!config.web)
+if(!config.web){
     ServidorServ.IniciarModoServidor();
+}
+
 
 //Index Route
 app.get('/easysales', (req, res) => {
-    res.status(200).send('Servidor de EasySales funcionando en este puerto.');
+    res.status(200).send('Servidor de EasySales funcionando en este puerto y con cambios en la version 2.3.1.');
 });
  
 //404
@@ -109,5 +111,5 @@ app.use((_req, res) => {
 //Manejo y logs de errores
 app.use(errorMiddleware);
 
-  
+//Esto es un comentario de pruebas de la version 2.3.1
 

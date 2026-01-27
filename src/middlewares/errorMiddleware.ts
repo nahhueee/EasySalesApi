@@ -1,5 +1,5 @@
-import { logger } from "../log/logger";
-import { AppError } from "../log/AppError";
+import { logger } from "../logger/logger";
+import { AppError } from "../logger/AppError";
 
 type Severity = 'INFO' | 'WARN' | 'ERROR';
 

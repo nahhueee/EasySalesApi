@@ -1,6 +1,6 @@
 import {ParametrosRepo} from '../data/parametrosRepository';
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 const path = require('path');
 const fs = require('fs/promises'); 
 const router : Router  = Router();

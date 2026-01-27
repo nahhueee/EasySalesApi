@@ -1,5 +1,5 @@
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 import {ServidorServ} from '../services/servidorService';
 import config from '../conf/app.config';
 

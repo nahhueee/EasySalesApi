@@ -1,7 +1,7 @@
 import {ParametrosRepo} from '../data/parametrosRepository';
 import {BackupsRepo} from '../data/backupsRepository';
 import {AdminServ} from '../services/adminService';
-import backupLogger from '../log/loggerBackups';
+import backupLogger from '../logger/loggerBackups';
 import config from '../conf/app.config';
 import { unlink } from 'fs/promises';
 import { existsSync } from 'fs';

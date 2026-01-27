@@ -1,6 +1,6 @@
 import {CuentasRepo} from '../data/cuentasCorsRepository';
 import {Router, Request, Response} from 'express';
-import logger from '../log/loggerGeneral';
+import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
 
 router.post('/obtener', async (req:Request, res:Response) => {
