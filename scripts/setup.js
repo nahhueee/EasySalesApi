@@ -7,10 +7,11 @@ const ROOT = path.resolve(__dirname, "..");
 
 // Carpeta final del build
 const DIST_DIR = path.join(ROOT, "dist");
-await fs.ensureDir(DIST_DIR);
 
 
 async function setup() {
+  await fs.ensureDir(DIST_DIR);
+
   try {
     console.log("📦 Preparando build de servidor...");
 
