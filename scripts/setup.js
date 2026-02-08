@@ -50,17 +50,22 @@ async function setup() {
     filesToCopy.push({ from: configFile, to: configFile });
 
     for (const file of filesToCopy) {
-      await fs.copy(
-        path.join(ROOT, file.from),
-        path.join(DIST_DIR, file.to)
-      );
+      const src = path.join(ROOT, file.from);
+      const dest = path.join(DIST_DIR, file.to);
+
+      if (await fs.pathExists(src)) {
+        await fs.ensureDir(path.dirname(dest));
+        await fs.copy(src, dest);
+      }
     }
 
-    // Copiar tasks (único copy de carpetas)
-    await fs.copy(
-      path.join(ROOT, "src/db/tasks"),
-      path.join(DIST_DIR, "src/db/tasks")
-    );
+    // Copiar tasks solo si existe
+    const tasksSrc = path.join(ROOT, "src/db/tasks");
+    const tasksDest = path.join(DIST_DIR, "src/db/tasks");
+
+    if (await fs.pathExists(tasksSrc)) {
+      await fs.copy(tasksSrc, tasksDest);
+    }
 
     // Ajustar config para producción
     const configPath = path.join(DIST_DIR, configFile);
