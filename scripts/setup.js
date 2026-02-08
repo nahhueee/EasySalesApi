@@ -7,6 +7,8 @@ const ROOT = path.resolve(__dirname, "..");
 
 // Carpeta final del build
 const DIST_DIR = path.join(ROOT, "dist");
+await fs.ensureDir(DIST_DIR);
+
 
 async function setup() {
   try {
