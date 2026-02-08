@@ -24,4 +24,5 @@ zip.writeZip(zipPath);
 const ciZip = path.resolve('update.zip');
 zip.writeZip(ciZip);
 
-console.log(`📦 ZIP de actualización generado: ${zipPath}`);
+console.log(`📦 ZIP de actualización historico generado: ${zipPath}`);
+console.log(`📦 ZIP de actualización CI generado: ${ciZip}`);
