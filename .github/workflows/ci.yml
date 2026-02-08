@@ -26,12 +26,17 @@ jobs:
       - name: Generar ZIP de actualización
         run: npm run build:update
 
-      - name: Subir ZIP al servidor
+      - name: Obtener versión
+        id: pkg
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+
+      - name: Subir update
         run: |
           curl -X POST ${{ secrets.UPLOAD_URL }} \
           -H "Authorization: Bearer ${{ secrets.CI_TOKEN }}" \
           -F "file=@update.zip" \
-          -F "version=${{ github.run_number }}" \
+          -F "version=$VERSION" \
           -F "app=easysales" \
           -F "idApp=1" \
           -F "tipo=backend"
+
