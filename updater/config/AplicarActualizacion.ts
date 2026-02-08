@@ -18,6 +18,9 @@ import path from 'path';
 import unzipper from 'unzipper';
 import { execSync } from 'child_process';
 import { LoggerActualizacion as logger } from '../config/LogggerActualizacion';
+import axios from 'axios';
+import config from '../../src/conf/app.config';
+import isOnline from 'is-online';
 
 
 
@@ -235,7 +238,7 @@ export async function AplicarActualizacion() {
     }
 
     try {
-      execSync('npm run migration -- --knexfile knexfile.js', {
+      execSync('npx knex migrate:latest --knexfile knexfile.js --env development', {
         stdio: 'pipe',
         cwd: ROOT_DIR,
         timeout: 180000 // 3 minutos
@@ -261,11 +264,21 @@ export async function AplicarActualizacion() {
      * Si llegamos acá:
      * - La versión quedó aplicada
      * - Se limpian archivos temporales
+     * - Se informa al servidor
      */
-    logger.info(`Versión ${pendiente.version} aplicada exitosamente.`, {
-      fase,
-      modulo
-    });
+    logger.info(`Versión ${pendiente.version} aplicada exitosamente.`, {fase, modulo});
+    
+    const terminal = ObtenerTerminalLocal();
+    const conectado = await isOnline();
+    const REPORTE_PENDIENTE_PATH = path.join(ROOT_DIR, 'updater/reporte-version-pendiente.json');
+
+    if(conectado){ 
+      await axios.get(`${config.adminUrl}appscliente/informar/backend/${terminal}/${pendiente.version}`);
+      if (fs.existsSync(REPORTE_PENDIENTE_PATH)) fs.unlinkSync(REPORTE_PENDIENTE_PATH);
+    }else{
+      logger.warn(`Sin conectividad. Se informará la versión en el proximo arranque.`, {fase, modulo});
+      GuardarReportePendiente(pendiente.version, terminal!, REPORTE_PENDIENTE_PATH);
+    }
 
     fs.unlinkSync(PENDING_FILE);
     if (fs.existsSync(pendiente.zip)) fs.unlinkSync(pendiente.zip);
@@ -358,4 +371,29 @@ function copiarArchivos(sourcePath: string, targetPath: string) {
   } catch (err: any) {
     throw new Error(`Error copiando ${sourcePath} → ${targetPath}: ${err.message}`);
   }
+}
+
+function ObtenerTerminalLocal(): string | null {
+  const ROOT_DIR = process.cwd();
+  const TERMINAL_FILE = path.join(ROOT_DIR, 'terminal.json');
+
+    if (!fs.existsSync(TERMINAL_FILE)) throw new Error("No se ecuentra archivo terminal.json");
+
+    const data = JSON.parse(fs.readFileSync(TERMINAL_FILE, 'utf-8'));
+    return data.terminal ?? null;
+}
+
+function GuardarReportePendiente(version: string, terminal: string, path: string) {
+  fs.writeFileSync(
+    path,
+    JSON.stringify(
+      {
+        version,
+        terminal,
+        fecha: new Date().toISOString()
+      },
+      null,
+      2
+    )
+  );
 }

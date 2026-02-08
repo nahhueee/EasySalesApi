@@ -1,5 +1,6 @@
 import config from '../conf/app.config';
 import FormData from 'form-data';
+import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
 import { ParametrosRepo } from '../data/parametrosRepository';
@@ -18,20 +19,15 @@ class AdminService{
 
     async ObtenerHabilitacion(dni:string) {
         try {
-            let mac = await GetMac();
-            {
-                if(mac){
-                    const resultado = (await axios.get(`${config.adminUrl}appscliente/habilitado/${dni}/${config.idApp}/${mac}`)).data
+            const resultado = (await axios.get(`${config.adminUrl}appscliente/habilitado/${dni}/${config.idApp}`)).data
 
-                    //Informamos la versión actual
-                    if(resultado){
-                        const versionLocal = await ParametrosRepo.ObtenerParametros('version');
-                        await axios.put(`${config.adminUrl}appscliente/informar`, {dni, idApp:config.idApp, version:versionLocal})
-                    }
+            //Informamos la versión actual
+            // if(resultado){
+            //     const versionLocal = await ParametrosRepo.ObtenerParametros('version');
+            //     await axios.put(`${config.adminUrl}appscliente/informar`, {dni, idApp:config.idApp, version:versionLocal})
+            // }
 
-                    return resultado;
-                }
-            }
+            return resultado;
         } catch (error) {
             throw error;
         }
@@ -40,16 +36,14 @@ class AdminService{
     async ObtenerAppCliente(dni:string){
         try {
             let appCliente:any;
-            let mac = await GetMac();
-            if(mac){
-                //Obtiene el nro de terminal asociado a DNI y mac de esta app
-                let response = await axios.get(`${config.adminUrl}appscliente/obtener/${dni}/${config.idApp}/${mac}`);
-                if(response.data){
-                    appCliente = response.data;
-                }else{
-                    //si no hay nro terminal generamos una nueva y retornamos la appcliente
-                    appCliente = await this.GenerarAppCliente(dni, mac)
-                }
+
+            //Obtiene los datos de la app asociadas al dni del cliente
+            let response = await axios.get(`${config.adminUrl}appscliente/obtener/${dni}/${config.idApp}`);
+            if(response.data){
+                appCliente = response.data;
+            }else{
+                //si no hay nro terminal generamos una nueva y retornamos la appcliente
+                appCliente = await this.GenerarAppCliente(dni)
             }
             
             return appCliente;
@@ -59,11 +53,13 @@ class AdminService{
         }
     }
 
-    async GenerarAppCliente(dni:string, mac:string|any){
+    async GenerarAppCliente(dni:string){
         try {
-            const response = await axios.post(`${config.adminUrl}appscliente/generar`, {dni, idApp:config.idApp, mac});
-            if (response.data) 
+            const response = await axios.post(`${config.adminUrl}appscliente/generar`, {dni, idApp:config.idApp});
+            if (response.data){
+                GuardarTerminalLocal(response.data.terminal);
                 return response.data;
+            }
 
             return null;
         } catch (error) {
@@ -109,14 +105,25 @@ async function GetMac() {
     const macaddress = require('macaddress');
 
     return new Promise((resolve, reject) => {
-      macaddress.one((err, mac) => {
+        macaddress.one((err, mac) => {
         if (err) {
-          reject(err);
+            reject(err);
         } else {
-          resolve(mac);
+            resolve(mac);
         }
-      });
+        });
     });
-  }
+}
+
+function GuardarTerminalLocal(terminal: string) {
+    const ROOT_DIR = process.cwd();
+
+    const data = {
+        terminal,
+        fechaRegistro: new Date().toISOString()
+    };
+
+    fs.writeFileSync(path.join(ROOT_DIR, 'terminal.json'), JSON.stringify(data, null, 2));
+}
   
 export const AdminServ = new AdminService();

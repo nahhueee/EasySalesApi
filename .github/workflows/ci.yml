@@ -4,12 +4,9 @@ on:
   push:
     branches:
       - main
-      - "feature/**"
-      - "fix/**"
-      - "chore/**"
 
 jobs:
-  build:
+  build-and-upload:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,30 +20,18 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Buildear solucion
+      - name: Build backend
         run: npm run build
 
-      - name: Subir artefacto
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-build
-          path: out/
+      - name: Generar ZIP de actualización
+        run: npm run build:update
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Descargar artefacto bacjend
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-build
-          path: out
-
-      - name: Verificar artefacto
+      - name: Subir ZIP al servidor
         run: |
-          ls -la
-          ls -la out
+          curl -X POST ${{ secrets.UPLOAD_URL }} \
+          -H "Authorization: Bearer ${{ secrets.CI_TOKEN }}" \
+          -F "file=@update.zip" \
+          -F "version=${{ github.run_number }}" \
+          -F "app=easysales" \
+          -F "idApp=1" \
+          -F "tipo=backend"

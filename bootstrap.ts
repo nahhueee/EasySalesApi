@@ -17,6 +17,11 @@ import { CheckearActualizacion } from './updater/config/CheckearActualizacion';
 import { DescargarActualizacion } from './updater/config/DescargarActualizacion';
 import { AplicarActualizacion } from './updater/config/AplicarActualizacion';
 import { LoggerActualizacion as logger } from './updater/config/LogggerActualizacion';
+import isOnline from 'is-online';
+import axios from 'axios';
+import config from './src/conf/app.config';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Estados posibles del sistema.
@@ -81,6 +86,11 @@ statusServer.listen(7501, () => {
 async function bootstrap() {
   try {
     /**
+     * Antes que nada verificamos si hay informes pendientes, para mandarlos y luego seguir con el proceso
+    */
+    await informarVersionPendiente();
+
+    /**
      * 1️⃣ Intentar aplicar una actualización YA DESCARGADA
      * Esto permite:
      * - Que una actualización descargada en un arranque anterior se aplique correctamente
@@ -134,38 +144,53 @@ async function bootstrap() {
       estado.fase = 'verificando_actualizacion';
       estado.mensaje = 'Verificando actualizaciones disponibles...';
 
-      logger.info('Iniciando modulo CheckearActualizacion.', {
-        fase: estado.fase,
-        modulo: 'bootstrap'
-      });
+      
+      const conectado = await isOnline();
+      if(conectado){
 
-      const info = await CheckearActualizacion();
-
-      if (info.desactualizado) {
-        /**
-         * 3️⃣ Descargar actualización si el sistema está desactualizado
-         * NO se aplica acá, solo se descarga.
-         */
-        estado.fase = 'descargando_actualizacion';
-        estado.mensaje = 'Descargando actualización...';
-
-        logger.info('Iniciando modulo DescargarActualizacion.', {
+        logger.info('Iniciando modulo CheckearActualizacion.', {
           fase: estado.fase,
           modulo: 'bootstrap'
         });
 
-        await DescargarActualizacion(info);
-      } else {
-        /**
-         * Caso feliz: sistema actualizado.
-         * IMPORTANTE se logea para evitar dudas en soporte.
-         */
-        logger.info('Sistema actualizado. No se requieren acciones.', {
-          fase: estado.fase,
-          modulo: 'CheckearActualizacion',
-          versionActual: info.local
-        });
+
+        const info = await CheckearActualizacion();
+
+        if (info.desactualizado) {
+          /**
+           * 3️⃣ Descargar actualización si el sistema está desactualizado
+           * NO se aplica acá, solo se descarga.
+           */
+          estado.fase = 'descargando_actualizacion';
+          estado.mensaje = 'Descargando actualización...';
+
+          logger.info('Iniciando modulo DescargarActualizacion.', {
+            fase: estado.fase,
+            modulo: 'bootstrap'
+          });
+
+          await DescargarActualizacion(info);
+        } else {
+          /**
+           * Caso feliz: sistema actualizado.
+           * IMPORTANTE se logea para evitar dudas en soporte.
+           */
+          if(!info.error){
+            logger.info('Sistema actualizado. No se requieren acciones.', {
+              fase: estado.fase,
+              modulo: 'CheckearActualizacion',
+              versionActual: info.local
+            });
+          }
+        
+        }
+      }else{
+        logger.warn(
+          'Sin conectividad. Se omite verificación de actualizaciones.',
+          { fase: estado.fase, modulo: 'bootstrap' }
+        );
       }
+      
     } catch (checkErr) {
       /**
        * ERROR RECUPERABLE
@@ -255,6 +280,38 @@ async function iniciarApp() {
     process.exit(1);
   }
 }
+
+/**
+ * Informes Pendientes.
+ * Se encarga de informar actualizaciones si durante el proceso de aplicacición no se pudo realizar
+*/
+async function informarVersionPendiente() {
+  const ROOT_DIR = process.cwd();
+  const REPORTE_PENDIENTE_PATH = path.join(ROOT_DIR, 'updater/reporte-version-pendiente.json');
+  
+  if (!fs.existsSync(REPORTE_PENDIENTE_PATH)) return;
+
+  const data = JSON.parse(fs.readFileSync(REPORTE_PENDIENTE_PATH, 'utf-8'));
+
+  const conectado = await isOnline();
+  if (!conectado) return;
+
+  try {
+    await axios.get(
+      `${config.adminUrl}appscliente/informar/backend/${data.terminal}/${data.version}`
+    );
+
+    fs.unlinkSync(REPORTE_PENDIENTE_PATH);
+
+    logger.info(
+      'Versión pendiente informada correctamente.',
+      { modulo: 'bootstrap' }
+    );
+  } catch {
+    // se deja el archivo → próximo arranque
+  }
+}
+
 
 // Punto de entrada real
 bootstrap();

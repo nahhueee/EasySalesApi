@@ -100,7 +100,7 @@ if(!config.web){
 
 //Index Route
 app.get('/easysales', (req, res) => {
-    res.status(200).send('Servidor de EasySales funcionando en este puerto y con cambios en la version 2.3.1.');
+    res.status(200).send('Servidor de EasySales funcionando en este puerto.');
 });
  
 //404
@@ -110,6 +110,4 @@ app.use((_req, res) => {
 
 //Manejo y logs de errores
 app.use(errorMiddleware);
-
-//Esto es un comentario de pruebas de la version 2.3.1
 

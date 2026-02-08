@@ -5,10 +5,23 @@ const ROOT_DIR = path.resolve(__dirname, '../../');
 const LOG_FILE = path.join(ROOT_DIR, 'updater/actualizaciones.log');
 
 const logFormat = winston.format.printf(({ timestamp, level, message, ...meta }) => {
-  const fase = meta.fase ? ` | fase=${meta.fase}` : '';
-  const modulo = meta.modulo ? ` | modulo=${meta.modulo}` : '';
-  return `${timestamp} [${level.toUpperCase()}]${fase}${modulo} | ${message}`;
+  const known = ['fase', 'modulo'];
+  const base =
+    `${timestamp} [${level.toUpperCase()}]` +
+    (meta.fase ? ` | fase=${meta.fase}` : '') +
+    (meta.modulo ? ` | modulo=${meta.modulo}` : '');
+
+  const extras = Object.entries(meta)
+    .filter(([key]) => !known.includes(key))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' | ');
+
+  return extras
+    ? `${base} | ${message} | ${extras}`
+    : `${base} | ${message}`;
 });
+
+
 
 export const LoggerActualizacion = winston.createLogger({
   level: 'info',

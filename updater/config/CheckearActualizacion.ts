@@ -18,6 +18,8 @@
 import axios from 'axios';
 import config from '../../src/conf/app.config';
 import pkg from '../../package.json';
+import path from 'path';
+import fs from 'fs';
 import { LoggerActualizacion as logger } from '../config/LogggerActualizacion';
 
 
@@ -37,6 +39,14 @@ const modulo: string = 'CheckearActualizacion';
 export async function CheckearActualizacion() {
   try {
 
+     /**
+     * VALIDACION DE IDENTIDAD
+     * -------------
+     * Se obtiene el nro de terminal y mac del dispositivo para verificar si está usuario está habilitado para actualizar.
+     */
+
+    const terminal = ObtenerTerminalLocal(); 
+
     /**
      * CONSULTA AL SERVIDOR ADMINISTRATIVO
      * ----------------------------------
@@ -47,10 +57,25 @@ export async function CheckearActualizacion() {
      * - Decide cuál es la versión vigente
      * - Define si está habilitada para este cliente
      */
-    const { data } = await axios.get(
-      `${config.adminUrl}actualizaciones/ultima-version/${config.idApp}`,
-      { timeout: 5000 } // evita bloquear el arranque
+
+    const ambiente = config.produccion ? 'prod': 'test';
+    const url = `${config.adminUrl}actualizaciones/ultima-version-backend/${config.idApp}/${ambiente}/${terminal}`;
+    logger.info('Consultando al servidor.',{
+        fase,
+        modulo,
+        url
+      }
     );
+
+    const { data } = await axios.get(url, { timeout: 5000 });
+    const ultima = Array.isArray(data) && data.length > 0 ? data[0]: null;
+
+    if (!ultima || !ultima.version) {
+      throw new Error('Respuesta inválida del servidor de actualizaciones');
+    }
+
+    logger.info('Respuesta.',{ fase, modulo, ultima });
+
 
     /**
      * VERSIÓN LOCAL
@@ -66,7 +91,7 @@ export async function CheckearActualizacion() {
      * Proviene del backend administrativo.
      * Representa la versión más reciente publicada.
      */
-    const remoteVersion = data.version;
+    const remoteVersion = ultima.version;
 
     /**
      * COMPARACIÓN DE VERSIONES
@@ -138,17 +163,17 @@ export async function CheckearActualizacion() {
       remote: remoteVersion,      // versión disponible
       desactualizado,             // booleano simple
 
-      estado: data.estado,        // prod | test 
-      link: data.link,            // URL del ZIP
+      ambiente: ultima.estado,        // prod | test 
+      link: ultima.link,            // URL del ZIP
 
       // Información informativa (changelog)
       notas: {
-        resumen: data.resumen,
-        mejoras: data.mejoras,
-        correcciones: data.correcciones
+        resumen: ultima.resumen,
+        mejoras: ultima.mejoras,
+        correcciones: ultima.correcciones
       },
 
-      fecha: data.fecha           // fecha de publicación
+      fecha: ultima.fecha_publicacion          // fecha de publicación
     };
 
   } catch (error) {
@@ -170,10 +195,13 @@ export async function CheckearActualizacion() {
      * Se asume que NO hay actualización disponible
      * y el sistema continúa en modo normal.
      */
-    logger.warn('No se pudo verificar actualizaciones. Se continúa sin actualizar.', {
+    logger.error('No se pudo verificar actualizaciones. Se continúa sin actualizar.', {
       fase,
       modulo,
-      error: String(error)
+      error:
+          error instanceof Error
+            ? error.message
+            : error
     });
 
     return {
@@ -200,5 +228,17 @@ function compararVersiones(local: string, remote: string): number {
 
   return 0;
 }
+
+function ObtenerTerminalLocal(): string | null {
+  const ROOT_DIR = process.cwd();
+  const TERMINAL_FILE = path.join(ROOT_DIR, 'terminal.json');
+
+    if (!fs.existsSync(TERMINAL_FILE)) throw new Error("No se ecuentra archivo terminal.json");
+
+    const data = JSON.parse(fs.readFileSync(TERMINAL_FILE, 'utf-8'));
+    return data.terminal ?? null;
+}
+
+
 
 
