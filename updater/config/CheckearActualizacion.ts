@@ -67,14 +67,13 @@ export async function CheckearActualizacion() {
       }
     );
 
-    const { data } = await axios.get(url, { timeout: 5000 });
-    const ultima = Array.isArray(data) && data.length > 0 ? data[0]: null;
+    const respuesta = (await axios.get(url)).data;
 
-    if (!ultima || !ultima.version) {
+    if (!respuesta || !respuesta.version) {
       throw new Error('Respuesta inválida del servidor de actualizaciones');
     }
 
-    logger.info('Respuesta.',{ fase, modulo, ultima });
+    logger.info('Respuesta.',{ fase, modulo, respuesta });
 
 
     /**
@@ -91,7 +90,7 @@ export async function CheckearActualizacion() {
      * Proviene del backend administrativo.
      * Representa la versión más reciente publicada.
      */
-    const remoteVersion = ultima.version;
+    const remoteVersion = respuesta.version;
 
     /**
      * COMPARACIÓN DE VERSIONES
@@ -163,17 +162,17 @@ export async function CheckearActualizacion() {
       remote: remoteVersion,      // versión disponible
       desactualizado,             // booleano simple
 
-      ambiente: ultima.estado,        // prod | test 
-      link: ultima.link,            // URL del ZIP
+      ambiente: respuesta.estado,        // prod | test 
+      link: respuesta.link,            // URL del ZIP
 
       // Información informativa (changelog)
       notas: {
-        resumen: ultima.resumen,
-        mejoras: ultima.mejoras,
-        correcciones: ultima.correcciones
+        resumen: respuesta.resumen,
+        mejoras: respuesta.mejoras,
+        correcciones: respuesta.correcciones
       },
 
-      fecha: ultima.fecha_publicacion          // fecha de publicación
+      fecha: respuesta.fecha_publicacion          // fecha de publicación
     };
 
   } catch (error) {

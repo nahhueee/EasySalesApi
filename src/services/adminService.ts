@@ -3,12 +3,11 @@ import FormData from 'form-data';
 import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
-import { ParametrosRepo } from '../data/parametrosRepository';
-
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
 
 class AdminService{
-    
-    async ObtenerVersionApp() {
+     async ObtenerVersionApp() {
         try {
             const version = (await axios.get(`${config.adminUrl}actualizaciones/ultima-version/${config.idApp}`)).data;
             return version;
@@ -17,68 +16,80 @@ class AdminService{
         }
     }
 
-    async ObtenerHabilitacion(dni:string) {
+    async ValidarIdentidad(dni:string){
+        const cliente = await this.VerificarExistenciaCliente(dni);
+        if(!cliente){
+            return { existe:false };
+        }
+
+        const appCliente = await this.ObtenerAppCliente(dni);
+        return {
+            existe: true,
+            cliente: appCliente.cliente,
+            habilitado: appCliente.habilitado,
+            terminal: appCliente.terminal
+        };
+    }
+
+    async ObtenerHabilitacion(terminal:string){
         try {
-            const resultado = (await axios.get(`${config.adminUrl}appscliente/habilitado/${dni}/${config.idApp}`)).data
-
-            //Informamos la versión actual
-            // if(resultado){
-            //     const versionLocal = await ParametrosRepo.ObtenerParametros('version');
-            //     await axios.put(`${config.adminUrl}appscliente/informar`, {dni, idApp:config.idApp, version:versionLocal})
-            // }
-
-            return resultado;
+            return (await axios.get(`${config.adminUrl}appscliente/habilitado/${terminal}/${config.idApp}`)).data;
         } catch (error) {
-            throw error;
+            mapAxiosError(error,'AdminService','ObtenerHabilitacion');
         }
     }
 
     async ObtenerAppCliente(dni:string){
         try {
-            let appCliente:any;
 
-            //Obtiene los datos de la app asociadas al dni del cliente
-            let response = await axios.get(`${config.adminUrl}appscliente/obtener/${dni}/${config.idApp}`);
+            const response = await axios.get(`${config.adminUrl}appscliente/obtener/${dni}/${config.idApp}`);
+
             if(response.data){
-                appCliente = response.data;
-            }else{
-                //si no hay nro terminal generamos una nueva y retornamos la appcliente
-                appCliente = await this.GenerarAppCliente(dni)
-            }
-            
-            return appCliente;
-        
-        } catch (error) {
-            throw error;
-        }
-    }
-
-    async GenerarAppCliente(dni:string){
-        try {
-            const response = await axios.post(`${config.adminUrl}appscliente/generar`, {dni, idApp:config.idApp});
-            if (response.data){
-                GuardarTerminalLocal(response.data.terminal);
                 return response.data;
             }
 
-            return null;
+            return await this.GenerarAppCliente(dni);
+
         } catch (error) {
-            throw error;
+            mapAxiosError(error,'AdminService','ObtenerAppCliente');
         }
     }
 
-    async VerificarExistenciaCliente(DNI:string) {
+
+    async GenerarAppCliente(dni:string){
         try {
-            const response = await axios.get(`${config.adminUrl}clientes/obtener/${DNI}`);
-            if (response.data) { // Si existe el cliente con este DNI
-                return true;
-            }else{
-                return false;
+
+            const response = await axios.post(`${config.adminUrl}appscliente/generar`, {dni, idApp:config.idApp});
+
+            if(!response.data){
+                throw new AppError(
+                    CodigoError.APPCLIENTE_CREACION_ERROR,
+                    'No se pudo generar AppCliente', 500,
+                    { modulo:'AdminService', metodo:'GenerarAppCliente' }
+                );
             }
+
+            GuardarTerminalLocal(response.data.terminal);
+
+            return response.data;
+
         } catch (error) {
-            throw error;
+            mapAxiosError(error,'AdminService','GenerarAppCliente');
         }
     }
+
+
+    async VerificarExistenciaCliente(DNI:string){
+        try {
+
+            const response = await axios.get(`${config.adminUrl}clientes/obtener/${DNI}`);
+            return !!response.data;
+
+        } catch (error) {
+            mapAxiosError(error,'AdminService','VerificarExistenciaCliente');
+        }
+    }
+
 
     async SubirBackup(backupPath:string, DNI:string){
         try {
@@ -101,20 +112,6 @@ class AdminService{
     }
 }
 
-async function GetMac() {
-    const macaddress = require('macaddress');
-
-    return new Promise((resolve, reject) => {
-        macaddress.one((err, mac) => {
-        if (err) {
-            reject(err);
-        } else {
-            resolve(mac);
-        }
-        });
-    });
-}
-
 function GuardarTerminalLocal(terminal: string) {
     const ROOT_DIR = process.cwd();
 
@@ -125,5 +122,19 @@ function GuardarTerminalLocal(terminal: string) {
 
     fs.writeFileSync(path.join(ROOT_DIR, 'terminal.json'), JSON.stringify(data, null, 2));
 }
+
+function mapAxiosError(error:any, modulo:string, metodo:string){
+   throw new AppError(
+      CodigoError.ADMIN_SERVER_ERROR,
+      'Error al comunicarse con AdminServer',
+      error.response?.status || 500,
+      {
+         modulo,
+         metodo,
+         cause: error.message
+      }
+   );
+}
+
   
 export const AdminServ = new AdminService();

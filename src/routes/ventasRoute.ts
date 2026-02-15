@@ -3,6 +3,7 @@ import {FacturacionServ} from '../services/facturacionService';
 import {Router, Request, Response} from 'express';
 //import logger from '../log/loggerGeneral';
 import {logger} from '../logger/logger'
+import { TerminalServ } from '../services/terminalService';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -99,8 +100,10 @@ router.get('/obtenerQR/:id', async (req:Request, res:Response) => {
 
 router.post('/facturar', async (req:Request, res:Response, next) => {
     try{ 
-        res.json(await FacturacionServ.Facturar(req.body));
+        //Validamos permisos
+        await TerminalServ.VerificarTerminalHabilitada();
 
+        res.json(await FacturacionServ.Facturar(req.body));
     } catch(error){
         next(error);
     }

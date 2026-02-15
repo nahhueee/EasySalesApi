@@ -23,12 +23,10 @@ export function errorMiddleware(err, req, res, next) {
   });
 
   res.status(err.status || 500).json({
-    error: {
-      code: err.code || 'INTERNAL_ERROR',
-      message: isAppError
-        ? err.message
-        : 'Error interno del servidor'
-    }
+    code: err.code || 'INTERNAL_ERROR',
+    message: isAppError
+      ? err.message
+      : 'Error interno del servidor'
   });
 }
 

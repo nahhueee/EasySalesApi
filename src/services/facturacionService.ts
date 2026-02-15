@@ -9,7 +9,6 @@ import config from '../conf/app.config';
 import { VentasRepo } from '../data/ventasRepository';
 import moment from "moment";
 import { SesionServ } from "./sesionService";
-import { HabilitacionServ } from "./habilitacionService";
 import { AppError } from "../logger/AppError";
 import { CodigoError } from "../logger/CodigosError";
 
@@ -18,7 +17,6 @@ const QRCode = require('qrcode');
 
 class FacturacionService{
     async Facturar(objFactura:ObjFacturar){
-
         const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
         const afip = await ObtenerInstanciaAfip(datosFacturacion.cuil);
         
@@ -195,18 +193,6 @@ class FacturacionService{
 }
 
 async function ObtenerInstanciaAfip(cuilTitular): Promise<Afip> {
-    const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
-    if (!dniCliente) {
-        throw new AppError(
-            CodigoError.DNI_NO_ENCONTRADO,
-            'No se encontró DNI del cliente', 400,
-            { modulo: 'FacturacionService', metodo: 'ObtenerInstanciaAfip' }
-        );
-    }
-
-    //Verificar habilitacion
-    await VerificarHabilitacion(dniCliente);
-
     // Reutilizar instancia ARCA
     if (afipInstances[cuilTitular]) {
         return afipInstances[cuilTitular];
@@ -236,30 +222,6 @@ async function ObtenerInstanciaAfip(cuilTitular): Promise<Afip> {
 
     afipInstances[cuilTitular] = afip;
     return afip;
-}
-
-async function VerificarHabilitacion(dni: string): Promise<void> {
-  const token = await HabilitacionServ.Obtener(dni);
-
-  if (token && token.expiracion > new Date()) {
-    return; // cache válido 
-  }
-
-  //Obtener Habilitacion en la web
-  const habilitado = await AdminServ.ObtenerHabilitacion(dni);
-  if (!habilitado) {
-    throw new AppError(
-        CodigoError.AUTH_NO_HABILITADO, 
-        'Cliente inexistente o inhabilitado para generar facturas', 401,
-        { modulo: 'FacturacionService', metodo: 'ObtenerInstanciaAfip' }
-    );
-  }
-
-  await HabilitacionServ.Guardar({
-    dni,
-    habilitado: true,
-    expiracion: new Date(Date.now() + 1000 * 60 * 60 * 24) // 24 hs
-  });
 }
 
 export const FacturacionServ = new FacturacionService();

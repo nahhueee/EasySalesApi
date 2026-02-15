@@ -7,6 +7,7 @@ import { unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import { createWriteStream } from 'fs';
+import { TerminalServ } from './terminalService';
 const moment = require('moment');
 const cron = require('node-cron');
 const path = require('path');
@@ -22,6 +23,9 @@ class BackupsService{
     
     async IniciarCron(){
         try{ 
+            //Validamos permisos
+            await TerminalServ.VerificarTerminalHabilitada();
+
             //Obtenemos los parametros necesarios
             //#region PARAMETROS
             const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
@@ -71,13 +75,6 @@ class BackupsService{
                 //Solo si el parametro de activar esta habilitado, iniciamos el proceso de cron
                 const activarBackup = await ParametrosRepo.ObtenerParametros('backups');
                 if (activarBackup !== "true") {
-                    return;
-                }
-
-                //Verificamos que el cliente este habilitado para sincronizar
-                const habilitado = await AdminServ.ObtenerHabilitacion(DNI)
-                if (!habilitado) {
-                    backupLogger.info('Cliente inexistente o inhabilitado para generar backups.');
                     return;
                 }
 

@@ -38,5 +38,6 @@ jobs:
           -F "version=$VERSION" \
           -F "app=easysales" \
           -F "idApp=1" \
-          -F "tipo=backend"
+          -F "tipo=backend" \
+          -F "firma=\"\""
 

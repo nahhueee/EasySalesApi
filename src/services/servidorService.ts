@@ -1,11 +1,9 @@
 import dgram from 'dgram';
 import os from 'os';
-import {ParametrosRepo} from '../data/parametrosRepository';
-import {AdminServ} from '../services/adminService';
 import logger from '../logger/loggerGeneral';
 import config from '../conf/app.config';
-import path from 'path';
 import isOnline from 'is-online';
+import { TerminalServ } from './terminalService';
 const fs = require("fs-extra");
 
 let udpServer;
@@ -15,48 +13,18 @@ class ServidorService {
 
   async IniciarModoServidor(){
       try{ 
-          //Obtenemos los parametros necesarios
-          const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
-          
           //Verificamos que este conectado a internet
           const conectado = await isOnline();
           if(!conectado) return;
           
-          if(dniCliente && dniCliente!=""){
-            //Verificamos que el cliente este habilitado para usar este modo
-            const habilitado = await AdminServ.ObtenerHabilitacion(dniCliente)
-            if (!habilitado) {
-                logger.info('Cliente inexistente o inhabilitado para activar modo servidor.');
-                this.StopUDPDiscovery(false);
-
-                //Si esta activo, pero el usuario ya no esta habilitado, cambiamos el estado de la variable en el config
-                if(config.esServer){
-                  //#region Cambiar la propiedad 'esServer' a false en el archivo de configuración
-                  const configFilePath = path.resolve(__dirname, '../../config.pc.json');
-                  
-                  const rawConfig = await fs.readFile(configFilePath, 'utf-8');
-                  const configuracion = JSON.parse(rawConfig);
-
-                  configuracion.esServer = false;
-
-                  // Guardar los cambios en el archivo de configuración
-                  await fs.writeFile(configFilePath, JSON.stringify(configuracion, null, 2), 'utf-8');
-
-                  logger.info('Se desactivó la clave en el servidor.');
-                  //#endregion
-                }
-
-                return;
-            }
-
-            
-          }
-
+          //Verificamos que el cliente este habilitado para usar este modo
+          await TerminalServ.VerificarTerminalHabilitada();
+          
           if(config.esServer){
-              this.StartUDPDiscovery();
-            }else{
-              this.StopUDPDiscovery(false);
-            }
+            this.StartUDPDiscovery();
+          }else{
+            this.StopUDPDiscovery(false);
+          }
                 
       } catch(error:any){
           logger.error("Error al intentar iniciar el modo servidor. " + error.message);

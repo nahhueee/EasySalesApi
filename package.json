@@ -1,10 +1,10 @@
 {
   "name": "easysalesapi",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsc && nodemon --ignore src/log/backup.json --ignore src/log/general.json --ignore src/log/update.json src/index.ts --ignore src/session.json",
+    "dev": "tsc && nodemon --ignore src/logger/backup.json --ignore src/logger/general.json --ignore src/logger/update.json src/index.ts --ignore src/session.json",
     "tsc": "tsc",
     "build": "tsc && node scripts/setup.js",
     "build:update": "node scripts/build-update.js",

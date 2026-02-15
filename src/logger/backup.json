@@ -223,5 +223,35 @@
     "message": "Cliente inexistente o inhabilitado para generar backups.",
     "level": "info",
     "timestamp": "09-01-26 16:59"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 00:06"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 00:12"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 00:15"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 01:37"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 01:38"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 01:39"
   }
 ]

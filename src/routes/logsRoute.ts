@@ -21,7 +21,7 @@ interface ErrorLogDTO {
 
 router.get('/general', async (req:Request, res:Response) => {
     try{ 
-        const generalPath = path.resolve(__dirname, '../log/general.json');
+        const generalPath = path.resolve(__dirname, '../logger/general.json');
 
         const data = await fsPromises.readFile(generalPath, 'utf8');
         res.json(JSON.parse(data));
@@ -33,7 +33,7 @@ router.get('/general', async (req:Request, res:Response) => {
 });
 
 router.get('/', async (req:Request, res:Response) => {
-  const ruta = path.resolve(__dirname, '../log/error.log');
+  const ruta = path.resolve(__dirname, '../logger/error.log');
   const fileStream = fs.createReadStream(ruta);
 
   const rl = readline.createInterface({
@@ -61,7 +61,7 @@ router.get('/', async (req:Request, res:Response) => {
 
 router.get('/backup', async (req:Request, res:Response) => {
     try{ 
-        const backupPath = path.resolve(__dirname, '../log/backup.json');
+        const backupPath = path.resolve(__dirname, '../logger/backup.json');
 
         const data = await fsPromises.readFile(backupPath, 'utf8');
         res.json(JSON.parse(data));
@@ -74,7 +74,7 @@ router.get('/backup', async (req:Request, res:Response) => {
 
 router.get('/update', async (req:Request, res:Response) => {
     try{ 
-        const updatePath = path.resolve(__dirname, '../log/update.json');
+        const updatePath = path.resolve(__dirname, '../logger/update.json');
 
         const data = await fsPromises.readFile(updatePath, 'utf8');
         res.json(JSON.parse(data));
@@ -87,7 +87,7 @@ router.get('/update', async (req:Request, res:Response) => {
 
 router.get('/facturacion', async (req:Request, res:Response) => {
     try{ 
-        const updatePath = path.resolve(__dirname, '../log/facturacion.json');
+        const updatePath = path.resolve(__dirname, '../logger/facturacion.json');
 
         const data = await fsPromises.readFile(updatePath, 'utf8');
         res.json(JSON.parse(data));
@@ -101,7 +101,7 @@ router.get('/facturacion', async (req:Request, res:Response) => {
 
 router.post('/general', async (req:Request, res:Response) => {
     try{ 
-        const generalPath = path.resolve(__dirname, '../log/general.json');
+        const generalPath = path.resolve(__dirname, '../logger/general.json');
         req.body.timestamp = moment().format('DD-MM-YY HH:mm');
 
         const logs = JSON.parse(fileServer.readFileSync(generalPath, 'utf8'));
@@ -118,10 +118,10 @@ router.post('/general', async (req:Request, res:Response) => {
 
 router.delete('/', async (req:Request, res:Response) => {
     try{ 
-        const generalPath = path.resolve(__dirname, '../log/general.json');
-        const backupPath = path.resolve(__dirname, '../log/backup.json');
-        const updatePath = path.resolve(__dirname, '../log/update.json');
-        const facturacionPath = path.resolve(__dirname, '../log/facturacion.json');
+        const generalPath = path.resolve(__dirname, '../logger/general.json');
+        const backupPath = path.resolve(__dirname, '../logger/backup.json');
+        const updatePath = path.resolve(__dirname, '../logger/update.json');
+        const facturacionPath = path.resolve(__dirname, '../logger/facturacion.json');
 
         fileServer.writeFileSync(generalPath, '[]'); // Borramos archivo general
         fileServer.writeFileSync(backupPath, '[]'); // Borramos archivo buckups

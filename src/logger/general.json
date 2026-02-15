@@ -78,5 +78,315 @@
     "message": "Cannot read properties of null (reading 'cae')",
     "level": "error",
     "timestamp": "11-01-26 13:58"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:47"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:47"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:48"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:48"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:48"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:48"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:48"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:48"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "09-02-26 20:50"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para activar modo servidor.",
+    "level": "info",
+    "timestamp": "09-02-26 21:00"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se ecuentra archivo terminal.json",
+    "level": "error",
+    "timestamp": "09-02-26 21:05"
+  },
+  {
+    "message": "Error al intentar guardar un log de tipo general. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al intentar guardar un log de tipo general. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al obtener listado de logs generales. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al obtener listado de logs facturacion. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\facturacion.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al obtener listado de logs backups. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\backup.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al intentar guardar un log de tipo general. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al obtener listado de logs updates. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\update.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:09"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se ecuentra archivo terminal.json",
+    "level": "error",
+    "timestamp": "09-02-26 21:10"
+  },
+  {
+    "message": "Error al obtener listado de logs generales. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:12"
+  },
+  {
+    "message": "Error al obtener listado de logs facturacion. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\facturacion.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:12"
+  },
+  {
+    "message": "Error al obtener listado de logs updates. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\update.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:12"
+  },
+  {
+    "message": "Error al intentar guardar un log de tipo general. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:12"
+  },
+  {
+    "message": "Error al obtener listado de logs backups. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\backup.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:12"
+  },
+  {
+    "message": "Error al intentar guardar un log de tipo general. Error: ENOENT: no such file or directory, open 'C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\log\\general.json'",
+    "level": "error",
+    "timestamp": "09-02-26 21:12"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se ecuentra archivo terminal.json",
+    "level": "error",
+    "timestamp": "09-02-26 21:15"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":404,\"error\":\"No se encontró el recurso solicitado.\"}",
+    "level": "error",
+    "timestamp": "09-02-26 21:15"
+  },
+  {
+    "message": "Error al intentar obtener la habilitacion de terminal asociada al cliente. No se ecuentra archivo terminal.json",
+    "level": "error",
+    "timestamp": "09-02-26 21:17"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al intentar obtener la habilitacion de terminal asociada al cliente.\"}",
+    "level": "error",
+    "timestamp": "09-02-26 21:17"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se ecuentra archivo terminal.json",
+    "level": "error",
+    "timestamp": "09-02-26 21:17"
+  },
+  {
+    "message": "Error al intentar obtener la habilitacion de terminal asociada al cliente. No se ecuentra archivo terminal.json",
+    "level": "error",
+    "timestamp": "09-02-26 21:17"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al intentar obtener la habilitacion de terminal asociada al cliente.\"}",
+    "level": "error",
+    "timestamp": "09-02-26 21:17"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para activar modo servidor.",
+    "level": "info",
+    "timestamp": "09-02-26 21:18"
+  },
+  {
+    "message": "Cliente inexistente o inhabilitado para activar modo servidor.",
+    "level": "info",
+    "timestamp": "09-02-26 21:18"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":401,\"error\":\"Cliente no autenticado.\"}",
+    "level": "error",
+    "timestamp": "09-02-26 21:48"
+  },
+  {
+    "message": "Error al intentar obtener la habilitacion de terminal asociada al cliente. Cannot set headers after they are sent to the client",
+    "level": "error",
+    "timestamp": "09-02-26 21:48"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":401,\"error\":\"Cliente no autenticado.\"}",
+    "level": "error",
+    "timestamp": "09-02-26 21:50"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":401,\"error\":\"Cliente no autenticado.\"}",
+    "level": "error",
+    "timestamp": "09-02-26 21:52"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:03"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:04"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:09"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:09"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:10"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:10"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró TERMINAL del cliente",
+    "level": "error",
+    "timestamp": "09-02-26 22:10"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 00:06"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":400,\"error\":{\"error\":{\"code\":\"TERMINAL_NO_ENCONTRADA\",\"message\":\"No se encontró archivo terminal.json\"}}}",
+    "level": "error",
+    "timestamp": "10-02-26 00:08"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 00:12"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":400,\"error\":{\"error\":{\"code\":\"TERMINAL_NO_ENCONTRADA\",\"message\":\"No se encontró archivo terminal.json\"}}}",
+    "level": "error",
+    "timestamp": "10-02-26 00:12"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 00:15"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":400,\"error\":{\"error\":{\"code\":\"TERMINAL_NO_ENCONTRADA\",\"message\":\"No se encontró archivo terminal.json\"}}}",
+    "level": "error",
+    "timestamp": "10-02-26 00:16"
+  },
+  {
+    "message": "Error al intentar obtener la terminal asociada al cliente 43797231. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "10-02-26 00:43"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "10-02-26 00:43"
+  },
+  {
+    "message": "Error al intentar obtener la terminal asociada al cliente 43797231. Request failed with status code 404",
+    "level": "error",
+    "timestamp": "10-02-26 00:45"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "10-02-26 00:45"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 01:37"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 01:38"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. No se encontró archivo terminal.json",
+    "level": "error",
+    "timestamp": "10-02-26 01:39"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "10-02-26 01:41"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "10-02-26 19:34"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "10-02-26 19:41"
+  },
+  {
+    "message": "Uncaught (in promise): Error: SERVER_TIMEOUT\nError: SERVER_TIMEOUT\n    at http://localhost:4200/main.js:27506:17\n    at Generator.next (<anonymous>)\n    at asyncGeneratorStep (http://localhost:4200/vendor.js:236147:24)\n    at _next (http://localhost:4200/vendor.js:236166:9)\n    at _ZoneDelegate.invoke (http://localhost:4200/polyfills.js:8209:158)\n    at Object.onInvoke (http://localhost:4200/vendor.js:149436:25)\n    at _ZoneDelegate.invoke (http://localhost:4200/polyfills.js:8209:46)\n    at Zone.run (http://localhost:4200/polyfills.js:7994:35)\n    at http://localhost:4200/polyfills.js:9070:28\n    at _ZoneDelegate.invokeTask (http://localhost:4200/polyfills.js:8236:171)",
+    "level": "error",
+    "timestamp": "10-02-26 20:53"
   }
 ]

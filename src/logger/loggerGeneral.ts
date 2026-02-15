@@ -9,7 +9,6 @@ const timezoned = () => {
 
 
 const logFilePath = path.resolve(__dirname, 'general.json');
-
 // Asegurar que el archivo existe y contiene un array JSON válido
 if (!fs.existsSync(logFilePath)) {
   fs.writeFileSync(logFilePath, '[]'); // Iniciar con un array vacío

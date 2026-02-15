@@ -103,6 +103,10 @@ app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto.');
 });
  
+app.get('/easysales/status', (req, res) => {
+    res.status(200).send('Servidor de En Linea');
+});
+ 
 //404
 app.use((_req, res) => {
     res.status(404).send('No se encontró el recurso solicitado.');
