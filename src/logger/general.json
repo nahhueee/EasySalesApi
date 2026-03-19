@@ -388,5 +388,550 @@
     "message": "Uncaught (in promise): Error: SERVER_TIMEOUT\nError: SERVER_TIMEOUT\n    at http://localhost:4200/main.js:27506:17\n    at Generator.next (<anonymous>)\n    at asyncGeneratorStep (http://localhost:4200/vendor.js:236147:24)\n    at _next (http://localhost:4200/vendor.js:236166:9)\n    at _ZoneDelegate.invoke (http://localhost:4200/polyfills.js:8209:158)\n    at Object.onInvoke (http://localhost:4200/vendor.js:149436:25)\n    at _ZoneDelegate.invoke (http://localhost:4200/polyfills.js:8209:46)\n    at Zone.run (http://localhost:4200/polyfills.js:7994:35)\n    at http://localhost:4200/polyfills.js:9070:28\n    at _ZoneDelegate.invokeTask (http://localhost:4200/polyfills.js:8236:171)",
     "level": "error",
     "timestamp": "10-02-26 20:53"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "26-02-26 17:48"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "26-02-26 17:48"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "26-02-26 17:50"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "26-02-26 17:50"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "26-02-26 17:50"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "26-02-26 17:50"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "26-02-26 17:52"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "26-02-26 17:52"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "27-02-26 23:22"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "27-02-26 23:22"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "27-02-26 23:25"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "27-02-26 23:25"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "27-02-26 23:25"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "27-02-26 23:25"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "27-02-26 23:28"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "27-02-26 23:28"
+  },
+  {
+    "message": "Error al obtener el listado de cajas. Incorrect DATE value: 'Invalid date'",
+    "level": "error",
+    "timestamp": "02-03-26 09:04"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "02-03-26 09:04"
+  },
+  {
+    "message": "NG01050: formControlName must be used with a parent formGroup directive.  You'll want to add a formGroup\n      directive and pass it an existing FormGroup instance (you can create one in your class).\n\n    Example:\n\n    \n  <div [formGroup]=\"myGroup\">\n    <input formControlName=\"firstName\">\n  </div>\n\n  In your class:\n\n  this.myGroup = new FormGroup({\n      firstName: new FormControl()\n  });",
+    "level": "error",
+    "timestamp": "02-03-26 10:06"
+  },
+  {
+    "message": "NG01050: formControlName must be used with a parent formGroup directive.  You'll want to add a formGroup\n      directive and pass it an existing FormGroup instance (you can create one in your class).\n\n    Example:\n\n    \n  <div [formGroup]=\"myGroup\">\n    <input formControlName=\"firstName\">\n  </div>\n\n  In your class:\n\n  this.myGroup = new FormGroup({\n      firstName: new FormControl()\n  });",
+    "level": "error",
+    "timestamp": "02-03-26 10:07"
+  },
+  {
+    "message": "Cannot read properties of undefined (reading 'opened')",
+    "level": "error",
+    "timestamp": "02-03-26 13:44"
+  },
+  {
+    "message": "Cannot find control with name: 'start'",
+    "level": "error",
+    "timestamp": "02-03-26 16:18"
+  },
+  {
+    "message": "Cannot find control with name: 'end'",
+    "level": "error",
+    "timestamp": "02-03-26 16:18"
+  },
+  {
+    "message": "Cannot find control with name: 'start'",
+    "level": "error",
+    "timestamp": "02-03-26 16:19"
+  },
+  {
+    "message": "Cannot find control with name: 'end'",
+    "level": "error",
+    "timestamp": "02-03-26 16:19"
+  },
+  {
+    "message": "Cannot find control with name: 'start'",
+    "level": "error",
+    "timestamp": "02-03-26 16:19"
+  },
+  {
+    "message": "Cannot find control with name: 'end'",
+    "level": "error",
+    "timestamp": "02-03-26 16:19"
+  },
+  {
+    "message": "Cannot find control with name: 'start'",
+    "level": "error",
+    "timestamp": "02-03-26 16:20"
+  },
+  {
+    "message": "Cannot find control with name: 'end'",
+    "level": "error",
+    "timestamp": "02-03-26 16:20"
+  },
+  {
+    "message": "Cannot find control with name: 'start'",
+    "level": "error",
+    "timestamp": "02-03-26 16:21"
+  },
+  {
+    "message": "Cannot find control with name: 'end'",
+    "level": "error",
+    "timestamp": "02-03-26 16:21"
+  },
+  {
+    "message": "Cannot find control with name: 'start'",
+    "level": "error",
+    "timestamp": "02-03-26 16:21"
+  },
+  {
+    "message": "Cannot find control with name: 'end'",
+    "level": "error",
+    "timestamp": "02-03-26 16:21"
+  },
+  {
+    "message": "NG01203: No value accessor for form control unspecified name attribute. Find more at https://angular.io/errors/NG01203",
+    "level": "error",
+    "timestamp": "02-03-26 23:36"
+  },
+  {
+    "message": "Cannot read properties of undefined (reading 'replace')",
+    "level": "error",
+    "timestamp": "06-03-26 20:31"
+  },
+  {
+    "message": "Cannot find control with name: 'total1'",
+    "level": "error",
+    "timestamp": "07-03-26 00:52"
+  },
+  {
+    "message": "Cannot find control with name: 'total2'",
+    "level": "error",
+    "timestamp": "07-03-26 00:52"
+  },
+  {
+    "message": "Cannot read properties of undefined (reading 'nativeElement')",
+    "level": "error",
+    "timestamp": "08-03-26 18:35"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":404,\"error\":\"No se encontró el recurso solicitado.\"}",
+    "level": "error",
+    "timestamp": "08-03-26 18:38"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":404,\"error\":\"No se encontró el recurso solicitado.\"}",
+    "level": "error",
+    "timestamp": "08-03-26 18:38"
+  },
+  {
+    "message": "Uncaught (in promise): TypeError: Cannot read properties of undefined (reading 'replace')\nTypeError: Cannot read properties of undefined (reading 'replace')\n    at GlobalesService.EstandarizarDecimal (http://localhost:4200/main.js:26894:28)\n    at http://localhost:4200/main.js:5509:93\n    at new ZoneAwarePromise (http://localhost:4200/polyfills.js:9222:21)\n    at RegistrarVentaComponent.Guardar (http://localhost:4200/main.js:5485:12)\n    at RegistrarVentaComponent_Template_form_keyup_enter_9_listener (http://localhost:4200/main.js:5683:22)\n    at executeListenerWithErrorHandling (http://localhost:4200/vendor.js:157739:12)\n    at wrapListenerIn_markDirtyAndPreventDefault (http://localhost:4200/vendor.js:157770:18)\n    at http://localhost:4200/vendor.js:220961:112\n    at http://localhost:4200/vendor.js:221244:31\n    at _ZoneDelegate.invoke (http://localhost:4200/polyfills.js:8209:158)",
+    "level": "error",
+    "timestamp": "08-03-26 18:41"
+  },
+  {
+    "message": "Uncaught (in promise): TypeError: Cannot read properties of undefined (reading 'replace')\nTypeError: Cannot read properties of undefined (reading 'replace')\n    at GlobalesService.EstandarizarDecimal (http://localhost:4200/main.js:26913:28)\n    at http://localhost:4200/main.js:5523:93\n    at new ZoneAwarePromise (http://localhost:4200/polyfills.js:9222:21)\n    at RegistrarVentaComponent.Guardar (http://localhost:4200/main.js:5499:12)\n    at RegistrarVentaComponent_Template_button_click_52_listener (http://localhost:4200/main.js:5761:22)\n    at executeListenerWithErrorHandling (http://localhost:4200/vendor.js:157739:12)\n    at wrapListenerIn_markDirtyAndPreventDefault (http://localhost:4200/vendor.js:157770:18)\n    at HTMLButtonElement.<anonymous> (http://localhost:4200/vendor.js:220961:112)\n    at _ZoneDelegate.invokeTask (http://localhost:4200/polyfills.js:8236:171)\n    at http://localhost:4200/vendor.js:151913:49",
+    "level": "error",
+    "timestamp": "08-03-26 21:38"
+  },
+  {
+    "message": "Uncaught (in promise): TypeError: Cannot read properties of undefined (reading 'replace')\nTypeError: Cannot read properties of undefined (reading 'replace')\n    at GlobalesService.EstandarizarDecimal (http://localhost:4200/main.js:26913:28)\n    at http://localhost:4200/main.js:5523:93\n    at new ZoneAwarePromise (http://localhost:4200/polyfills.js:9222:21)\n    at RegistrarVentaComponent.Guardar (http://localhost:4200/main.js:5499:12)\n    at RegistrarVentaComponent_Template_button_click_52_listener (http://localhost:4200/main.js:5761:22)\n    at executeListenerWithErrorHandling (http://localhost:4200/vendor.js:157739:12)\n    at wrapListenerIn_markDirtyAndPreventDefault (http://localhost:4200/vendor.js:157770:18)\n    at HTMLButtonElement.<anonymous> (http://localhost:4200/vendor.js:220961:112)\n    at _ZoneDelegate.invokeTask (http://localhost:4200/polyfills.js:8236:171)\n    at http://localhost:4200/vendor.js:151913:49",
+    "level": "error",
+    "timestamp": "08-03-26 21:38"
+  },
+  {
+    "message": "NG01050: formControlName must be used with a parent formGroup directive.  You'll want to add a formGroup\n      directive and pass it an existing FormGroup instance (you can create one in your class).\n\n    Example:\n\n    \n  <div [formGroup]=\"myGroup\">\n    <input formControlName=\"firstName\">\n  </div>\n\n  In your class:\n\n  this.myGroup = new FormGroup({\n      firstName: new FormControl()\n  });",
+    "level": "error",
+    "timestamp": "10-03-26 08:49"
+  },
+  {
+    "message": "NG01050: formControlName must be used with a parent formGroup directive.  You'll want to add a formGroup\n      directive and pass it an existing FormGroup instance (you can create one in your class).\n\n    Example:\n\n    \n  <div [formGroup]=\"myGroup\">\n    <input formControlName=\"firstName\">\n  </div>\n\n  In your class:\n\n  this.myGroup = new FormGroup({\n      firstName: new FormControl()\n  });",
+    "level": "error",
+    "timestamp": "10-03-26 08:53"
+  },
+  {
+    "message": "NG01050: formControlName must be used with a parent formGroup directive.  You'll want to add a formGroup\n      directive and pass it an existing FormGroup instance (you can create one in your class).\n\n    Example:\n\n    \n  <div [formGroup]=\"myGroup\">\n    <input formControlName=\"firstName\">\n  </div>\n\n  In your class:\n\n  this.myGroup = new FormGroup({\n      firstName: new FormControl()\n  });",
+    "level": "error",
+    "timestamp": "10-03-26 09:31"
+  },
+  {
+    "message": "value should be string",
+    "level": "error",
+    "timestamp": "10-03-26 10:13"
+  },
+  {
+    "message": "value should be string",
+    "level": "error",
+    "timestamp": "10-03-26 10:15"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "11-03-26 23:25"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al intentar agregar la venta.\"}",
+    "level": "error",
+    "timestamp": "12-03-26 08:35"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al intentar agregar la venta.\"}",
+    "level": "error",
+    "timestamp": "12-03-26 08:37"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al intentar agregar la venta.\"}",
+    "level": "error",
+    "timestamp": "12-03-26 08:38"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al intentar agregar la venta.\"}",
+    "level": "error",
+    "timestamp": "12-03-26 08:38"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 08:56"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 08:57"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 08:59"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 09:00"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 09:14"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 09:14"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 09:15"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 09:15"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "12-03-26 09:16"
+  },
+  {
+    "message": "Cannot read properties of null (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "12-03-26 09:31"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "12-03-26 10:44"
+  },
+  {
+    "message": "Error al obtener datos de estadistica generales. Unknown column 'total' in 'field list'",
+    "level": "error",
+    "timestamp": "12-03-26 21:07"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "12-03-26 21:07"
+  },
+  {
+    "message": "Error al obtener datos de estadistica generales. Unknown column 'fechaBaja' in 'where clause'",
+    "level": "error",
+    "timestamp": "13-03-26 07:58"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 07:58"
+  },
+  {
+    "message": "Error al obtener datos de estadistica generales. Column 'fechaBaja' in where clause is ambiguous",
+    "level": "error",
+    "timestamp": "13-03-26 08:08"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 08:08"
+  },
+  {
+    "message": "Error al obtener datos de estadistica generales. Column 'fechaBaja' in where clause is ambiguous",
+    "level": "error",
+    "timestamp": "13-03-26 08:09"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 08:09"
+  },
+  {
+    "message": "Error al obtener datos de estadistica generales. Unknown column 'v.fecha' in 'where clause'",
+    "level": "error",
+    "timestamp": "13-03-26 08:10"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 08:10"
+  },
+  {
+    "message": "Error al obtener datos de estadistica generales. Unknown column 'vp.id' in 'on clause'",
+    "level": "error",
+    "timestamp": "13-03-26 08:12"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 08:12"
+  },
+  {
+    "message": "Error al obtener datos totales por tipo de pago. Unknown column 'p.fecha' in 'where clause'",
+    "level": "error",
+    "timestamp": "13-03-26 23:26"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 23:26"
+  },
+  {
+    "message": "Error al obtener datos totales por tipo de pago. Unknown column 'p.fecha' in 'where clause'",
+    "level": "error",
+    "timestamp": "13-03-26 23:26"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 23:26"
+  },
+  {
+    "message": "Error al obtener datos totales por tipo de pago. Unknown column 'p.id' in 'on clause'",
+    "level": "error",
+    "timestamp": "13-03-26 23:29"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 23:29"
+  },
+  {
+    "message": "Error al obtener datos totales por tipo de pago. Unknown column 'p.id' in 'on clause'",
+    "level": "error",
+    "timestamp": "13-03-26 23:30"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 23:30"
+  },
+  {
+    "message": "Error al obtener datos totales por tipo de pago. Unknown column 'vpd.idPedido' in 'on clause'",
+    "level": "error",
+    "timestamp": "13-03-26 23:30"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 23:30"
+  },
+  {
+    "message": "Error al obtener datos totales por tipo de pago. Unknown column 'vpd.idPedido' in 'on clause'",
+    "level": "error",
+    "timestamp": "13-03-26 23:31"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "13-03-26 23:31"
+  },
+  {
+    "message": "Could not find column with id \"nro\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:40"
+  },
+  {
+    "message": "Could not find column with id \"nro\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:40"
+  },
+  {
+    "message": "Could not find column with id \"nro\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:40"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
+  },
+  {
+    "message": "Could not find column with id \"hora\".",
+    "level": "error",
+    "timestamp": "14-03-26 00:43"
   }
 ]

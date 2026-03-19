@@ -1,4 +1,5 @@
 export class FacturaVenta{
+    idVenta? : number;
     cae?: string;
     caeVto?: Date;
     ticket? : number;
@@ -12,6 +13,7 @@ export class FacturaVenta{
 
     constructor(data?: any) {
       if (data) {
+        this.idVenta = data.idVenta;
         this.cae = data.cae;
         this.caeVto = data.caeVto;
         this.ticket = data.ticket;

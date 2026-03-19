@@ -2,6 +2,7 @@ import { Producto } from "./Producto";
 
 export class DetalleVenta {
     id?: number;
+    idVenta?: number;
     producto?: Producto;
     nomProd?: string;
     cantidad?: number;
@@ -12,6 +13,8 @@ export class DetalleVenta {
     constructor(data?: any) {
         if (data) {
           this.id = data.id;
+          this.idVenta = data.idVenta;
+          this.producto = data.producto;
           this.cantidad = data.cantidad;
           this.nomProd = data.nomProd;
           this.precio = data.precio;

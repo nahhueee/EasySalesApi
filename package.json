@@ -1,6 +1,6 @@
 {
   "name": "easysalesapi",
-  "version": "2.3.5",
+  "version": "2.4.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -8,9 +8,9 @@
     "tsc": "tsc",
     "build": "tsc && node scripts/setup.js",
     "build:update": "node scripts/build-update.js",
-    "migration": "npx knex migrate:latest --env development",
-    "rollback": "npx knex migrate:rollback",
-    "new-migration": "npx knex migrate:make"
+    "migrate:make": "cd scripts && knex migrate:make",
+    "migrate:latest": "cd scripts && knex migrate:latest",
+    "migrate:rollback": "cd scripts && knex migrate:rollback"
   },
   "keywords": [],
   "author": "",

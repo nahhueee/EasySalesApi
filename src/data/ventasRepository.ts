@@ -9,6 +9,8 @@ import { ObjQR } from '../models/ObjQR';
 import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
 import { SesionServ } from '../services/sesionService';
+import { DetallePago } from '../models/DetallePago';
+import { TipoPago } from '../models/TipoPago';
 const moment = require('moment');
 
 class VentasRepository{
@@ -37,26 +39,34 @@ class VentasRepository{
                     venta.idCaja = row['idCaja'];
                     venta.fecha = row['fecha'];
                     venta.hora = row['hora'];
+                    venta.fechaBaja = row['fechaBaja'];
+                    venta.obsBaja = row['obsBaja'];
                     
                     //Obtiene la lista de detalles de la venta
                     venta.detalles = await ObtenerDetalleVenta(connection, row['id']); 
 
-                    //Obtenemos la suma total de las ventas
-                    venta.total = venta.detalles.reduce((accum, detalle) => {
-                        return accum + detalle.total!;
-                    }, 0);
-
                     venta.cliente = new Cliente({id: row['idCliente'], nombre: row['cliente']});
                     venta.pago = new pagoVenta({
-                        efectivo: parseFloat(row['efectivo']), 
-                        digital: parseFloat(row['digital']), 
                         recargo: parseFloat(row['recargo']), 
                         descuento: parseFloat(row['descuento']), 
                         entrega: parseFloat(row['entrega']), //Dinero entregado a la venta
-                        tipoPago: row['tipoPago'],
+                        monto: parseFloat(row['monto']), //Monto de la venta
+                        tipoModificador: row['tipoModificador'],
                         realizado: row['realizado'],
                     });
 
+                    //Obtenemos detalle de pagos
+                    venta.detallePago = await ObtenerDetallePagos(connection, row['id']);
+
+                    //Obtenemos la suma total de las ventas
+                    venta.total = venta.pago.monto ?? 0;
+                    if(venta.total == 0){
+                        //Obtenemos la suma total de las ventas
+                        venta.total = venta.detalles.reduce((accum, detalle) => {
+                            return accum + detalle.total!;
+                        }, 0);
+                    }
+                    
                     venta.factura = new FacturaVenta({
                         cae: row['cae'], 
                         caeVto: row['caeVto'], 
@@ -71,13 +81,22 @@ class VentasRepository{
                     });
 
 
-                    //Aplicamos descuentos
-                    if(venta.pago.descuento > 0)
-                        venta.total = venta.total - (venta.total * (venta.pago.descuento / 100));
+                    let ajuste = 0;
+                    if (venta.pago.descuento > 0) {
+                        ajuste = venta.pago.tipoModificador === 'porcentaje'
+                            ? venta.total * (venta.pago.descuento / 100)
+                            : venta.pago.descuento;
 
-                    //Aplicamos recargos
-                    if(venta.pago.recargo > 0)
-                        venta.total = venta.total + (venta.total * (venta.pago.recargo / 100));
+                        venta.total -= ajuste;
+                    }
+
+                    if (venta.pago.recargo > 0) {
+                        ajuste = venta.pago.tipoModificador === 'porcentaje'
+                            ? venta.total * (venta.pago.recargo / 100)
+                            : venta.pago.recargo;
+
+                        venta.total += ajuste;
+                    }
 
                     venta.pago.restante = venta.total - venta.pago.entrega!, //Restante a pagar
 
@@ -98,7 +117,7 @@ class VentasRepository{
         const connection = await db.getConnection();
         
         try {
-            const [rows] = await connection.query('SELECT * FROM tipos_pago');
+            const [rows] = await connection.query('SELECT * FROM tipos_pago ORDER BY orden ASC');
             return [rows][0];
 
         } catch (error:any) {
@@ -167,7 +186,7 @@ class VentasRepository{
     //#endregion
 
     //#region ABM
-    async Agregar(venta:any): Promise<string>{
+    async Agregar(venta:Venta): Promise<string>{
         const connection = await db.getConnection();
         
         try {
@@ -183,6 +202,11 @@ class VentasRepository{
             //insertamos los datos del pago de la venta
             venta.pago.idVenta = venta.id;
             await InsertPagoVenta(connection, venta.pago);
+            for (const element of  venta.detallePago!) {
+                element.idVenta = venta.id;
+                if(venta.pago.entrega! > 0)
+                    await InsertPagoVentaDetalle(connection, element);
+            }
 
             if(!venta.pago.realizado){
                 //Registramos el Movimiento
@@ -207,7 +231,7 @@ class VentasRepository{
             
             //Mandamos la transaccion
             await connection.commit();
-            return venta.id;
+            return venta.id.toString();
 
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
@@ -233,29 +257,20 @@ class VentasRepository{
         }
     }
 
-    async Eliminar(venta:any): Promise<string>{
+    async Eliminar(venta:any, obs:string): Promise<string>{
         const connection = await db.getConnection();
         
         try {
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
-            //Eliminamos el pago relacionado
-            await connection.query("DELETE FROM ventas_pago WHERE idVenta = ?", [venta.id]);
-
-             //Eliminamos la factura relacionada
-             await connection.query("DELETE FROM ventas_factura WHERE idVenta = ?", [venta.id]);
-
-            //Eliminamos los detalles de la venta
-            await connection.query("DELETE FROM ventas_detalle WHERE idVenta = ?", [venta.id]);
-
-            //Borramos la venta
-            await connection.query("DELETE FROM ventas WHERE id = ?", [venta.id]);
+            //Damos de baja la venta
+            await connection.query("UPDATE ventas SET fechaBaja = NOW(), obsBaja = ? WHERE id = ?", [obs, venta.id]);
 
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [venta.total, venta.idCaja]);
             
-            //EActualizamos el inventario
+            //Actualizamos el inventario
             venta.detalles.forEach(element => {
                 ActualizarInventario(connection, element, "+")
             });
@@ -355,7 +370,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
                 " SELECT v.*, " + 
-                " vpag.idPago, vpag.efectivo, vpag.digital, vpag.recargo, vpag.descuento, vpag.entrega, vpag.realizado, " + //Pago
+                " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
                 " COALESCE(cli.nombre, 'ELIMINADO') cliente, " +
                 " COALESCE(tp.nombre, 'ELIMINADO') tipoPago " +
@@ -411,10 +426,23 @@ async function InsertVenta(connection, venta):Promise<void>{
 
 async function InsertPagoVenta(connection, pago):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_pago(idVenta, idPago, efectivo, digital, recargo, descuento, entrega, realizado) " +
-                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas_pago(idVenta, monto, recargo, descuento, entrega, tipoModificador, realizado) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [pago.idVenta, pago.idTipoPago, pago.efectivo, pago.digital, pago.recargo, pago.descuento, pago.entrega, pago.realizado];
+        const parametros = [pago.idVenta, pago.monto, pago.recargo, pago.descuento, pago.entrega, pago.tipoModificador, pago.realizado];
+        await connection.query(consulta, parametros);
+        
+    } catch (error) {
+        throw error; 
+    }
+}
+
+async function InsertPagoVentaDetalle(connection, pago):Promise<void>{
+    try {
+        const consulta = " INSERT INTO ventas_pagos_detalle(idVenta, idTPago, monto) " +
+                         " VALUES(?, ?, ?) ";
+
+        const parametros = [pago.idVenta, pago.tipoPago.id, pago.monto];
         await connection.query(consulta, parametros);
         
     } catch (error) {
@@ -467,6 +495,40 @@ async function ObtenerDetalleVenta(connection, idVenta:number){
                 });
 
 
+                detalles.push(detalle)
+              }
+        }
+
+        return detalles;
+
+    } catch (error) {
+        throw error; 
+    }
+}
+
+async function ObtenerDetallePagos(connection, idPedido:number){
+    try {
+        const consulta = " SELECT vd.*, tp.id idTipoPago, tp.nombre, tp.icono, tp.color FROM ventas_pagos_detalle vd " +
+                         " INNER JOIN tipos_pago tp ON tp.id = vd.idTPago " +
+                         " WHERE vd.idVenta = ?";
+
+        const [rows] = await connection.query(consulta, [idPedido]);
+
+        const detalles:DetallePago[] = [];
+
+        if (Array.isArray(rows)) {
+            for (let i = 0; i < rows.length; i++) { 
+                const row = rows[i];
+                
+                let detalle:DetallePago = new DetallePago();
+                detalle.idVenta = row['idVenta'];
+                detalle.tipoPago = new TipoPago({
+                    id: row['idTipoPago'],
+                    nombre: row['nombre'],
+                    icono: row['icono'],
+                    color: row['color'],
+                });
+                detalle.monto = parseFloat(row['monto']);
                 detalles.push(detalle)
               }
         }

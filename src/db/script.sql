@@ -3,11 +3,7 @@ CREATE DATABASE dbeasysales;
 
 USE dbeasysales;
 
-DROP TABLE IF EXISTS parametros;
-CREATE TABLE parametros (
-    clave VARCHAR(30) PRIMARY KEY,
-    valor VARCHAR(50) NOT NULL DEFAULT ''
-);
+
 
 DROP TABLE IF EXISTS parametros_facturacion;
 CREATE TABLE parametros_facturacion (
@@ -84,12 +80,6 @@ CREATE TABLE registros_detalle (
 )
 ENGINE=InnoDB;
 
-
-DROP TABLE IF EXISTS tipos_pago;
-CREATE TABLE tipos_pago (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(15)
-);
 
 DROP TABLE IF EXISTS productos;
 CREATE TABLE productos (
@@ -179,12 +169,11 @@ ENGINE=InnoDB;
 DROP TABLE IF EXISTS ventas_pago;
 CREATE TABLE ventas_pago (
     idVenta INT PRIMARY KEY,
-    idPago INT,
-    efectivo DECIMAL(10,2),
-    digital DECIMAL(10,2),
-    descuento DECIMAL(4,2),
-    recargo DECIMAL(4,2),
+    descuento DECIMAL(10,2),
+    recargo DECIMAL(10,2),
     entrega DECIMAL(10,2),
+    monto DECIMAL(10,2) DEFAULT 0,
+    tipoModificador ENUM('porcentaje','monto') NULL,
     realizado BOOLEAN
 )
 ENGINE=InnoDB;
@@ -230,9 +219,40 @@ CREATE TABLE etiquetas (
     precioColor VARCHAR(10)
 );
 
+CREATE TABLE ventas_pagos_detalle (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    idVenta INT NOT NULL,
+    idTPago INT NOT NULL,
+    monto DECIMAL(10,2) NOT NULL,
+    fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (idVenta) REFERENCES ventas(id)
+);
+
+
+DROP TABLE IF EXISTS tipos_pago;
+CREATE TABLE tipos_pago (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(15),
+    icono VARCHAR(15),
+    color VARCHAR(15),
+    orden INT
+);
+INSERT INTO tipos_pago(nombre, icono, color, orden) 
+VALUES 
+('EFECTIVO', 'monetization_on', '#2dc051', 1), 
+('TRANSFERENCIA', 'account_balance', '#2db6c8', 2), 
+('QR', 'qr_code', '#fc7b9b', 3)
+('TARJETA', 'credit_card', '#ee8b29', 4), 
+('COMBINADO', 'autorenew', '#7d7d7d', 5);
+
+
+DROP TABLE IF EXISTS parametros;
+CREATE TABLE parametros (
+    clave VARCHAR(30) PRIMARY KEY,
+    valor VARCHAR(50) NOT NULL DEFAULT ''
+);
 INSERT INTO parametros(clave, valor) 
 VALUES 
-('version','2.3.0'),
 ('dni',''), 
 ('expresion',''), 
 ('backups', 'false'), 
@@ -250,7 +270,6 @@ VALUES ('', '58mm', 0, 0, 'EASY SALES', '', '');
 INSERT INTO productos(id,codigo,nombre,cantidad,tipoPrecio,costo,precio,redondeo,porcentaje,vencimiento,faltante,unidad,imagen) 
 VALUES(NULL,'*','VARIOS',1,'$',1,1,NULL,NULL,NULL,NULL,'UNI',NULL);
 
-INSERT INTO tipos_pago(id, nombre) VALUES (NULL,'EFECTIVO'), (NULL,'TARJETA'), (NULL,'TRANSFERENCIA'), (NULL,'COMBINADO');
 INSERT INTO cargos(id, nombre) VALUES (NULL,'ADMINISTRADOR'), (NULL,'ENCARGADO'), (NULL,'EMPLEADO');
 INSERT INTO clientes(id, nombre) VALUES (NULL,'CONSUMIDOR FINAL');
 INSERT INTO usuarios(id, nombre, email, pass, idCargo) VALUES (NULL, 'ADMIN', NULL, '1235', 1);

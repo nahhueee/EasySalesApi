@@ -33,6 +33,8 @@ if(config.esServer){
 }
 
 server.listen(app.get('port'), host, () => {
+    console.log(path.resolve(__dirname, '../src/db/tasks'));
+
     console.log('server ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
 });
 

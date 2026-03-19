@@ -253,5 +253,10 @@
     "message": "Error al intentar iniciar los procesos de respaldo. No se encontró archivo terminal.json",
     "level": "error",
     "timestamp": "10-02-26 01:39"
+  },
+  {
+    "message": "Error al intentar iniciar los procesos de respaldo. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "11-03-26 23:25"
   }
 ]

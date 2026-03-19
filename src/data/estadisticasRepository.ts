@@ -13,28 +13,16 @@ class EstadisticasRepository{
             const { fechaDesde, fechaHasta } = obtenerRangosFecha(filtros);
 
             //#region CONSULTAS
-            const consulta1 = 
-                              " SELECT SUM(t.total_venta) AS total_ventas, COUNT(*) AS cant_ventas FROM (" +
-                              " SELECT SUM(dv.cantidad * dv.precio) AS total_venta from ventas v " +
-                              " INNER JOIN ventas_detalle dv ON dv.idVenta = v.id " +
-                              " INNER JOIN cajas c ON c.id = v.idCaja " +
-                              " WHERE (v.fecha BETWEEN ? AND ?) AND c.fechaBaja IS NULL " +
-                              " GROUP BY v.id " +
-                              " ) AS t";
-            
+            const consulta1 = " SELECT COUNT(*) AS cant_ventas,  SUM(vp.monto) AS total_ventas FROM ventas v " +
+                              " INNER JOIN ventas_pago vp ON vp.idVenta = v.id " +
+                              " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL";
             const [consultaTotalesVentas] = await connection.query(consulta1, [fechaDesde, fechaHasta]);
 
-            const consulta2 = 
-                              " SELECT SUM(t.total_factura) AS total_facturas, COUNT(*) AS cant_facturas FROM (" +
-                              " SELECT SUM(dv.cantidad * dv.precio) AS total_factura " +
+            const consulta2 = " SELECT COUNT(*) AS cantidad_facturas, SUM(neto + iva) AS total_facturas " +
                               " FROM ventas_factura vf " +
                               " INNER JOIN ventas v ON v.id = vf.idVenta " +
-                              " INNER JOIN ventas_detalle dv ON dv.idVenta = v.id " +
-                              " INNER JOIN cajas c ON c.id = v.idCaja " +
-                              " WHERE (v.fecha BETWEEN ? AND ?) AND c.fechaBaja IS NULL " +
-                              " GROUP BY v.id " +
-                              " ) AS t";
-            
+                              " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL";
+
             const [consultaTotalesFactura] = await connection.query(consulta2, [fechaDesde, fechaHasta]);
             //#endregion
 
@@ -60,43 +48,60 @@ class EstadisticasRepository{
         
         try {
             const { fechaDesde, fechaHasta } = obtenerRangosFecha(filtros);
+            let adicional = filtros.caja && filtros.caja != 0 ? " AND v.idCaja = " + filtros.caja : " AND (v.fecha BETWEEN ? AND ?) ";
 
             //#region CONSULTAS
             const consultaTotales =  " SELECT  " +
-                                     " COALESCE(SUM(CASE WHEN vpag.idPago = 1 THEN efectivo ELSE 0 END), 0) AS efectivo, " +
-                                     " COALESCE(SUM(CASE WHEN vpag.idPago = 2 THEN digital ELSE 0 END), 0) AS tarjetas, " +
-                                     " COALESCE(SUM(CASE WHEN vpag.idPago = 3 THEN digital ELSE 0 END), 0) AS transferencias, " +
-                                     " COALESCE(SUM(CASE WHEN vpag.idPago = 4 THEN digital ELSE 0 END), 0) AS otros " +
-                                     " FROM ventas_pago vpag " +
-                                     " INNER JOIN ventas v ON v.id = vpag.idVenta " +
-                                     " INNER JOIN cajas c ON c.id = v.idCaja " +
-                                     " WHERE (v.fecha BETWEEN ? AND ?) AND vpag.realizado = 1 AND c.fechaBaja IS NULL ";
+                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 1 THEN vpd.monto ELSE 0 END), 0) AS efectivo, " +
+                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 2 THEN vpd.monto ELSE 0 END), 0) AS tarjetas, " +
+                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 3 THEN vpd.monto ELSE 0 END), 0) AS transferencias, " +
+                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 5 THEN vpd.monto ELSE 0 END), 0) AS qr " +
+                                     " FROM ventas_pagos_detalle vpd " +
+                                     " INNER JOIN ventas v ON v.id = vpd.idVenta " +
+                                     " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " +
+                                     " WHERE v.fechaBaja IS NULL " +
+                                     adicional;
 
             const [resultTotales] = await connection.query(consultaTotales, [fechaDesde, fechaHasta]);
 
+
             const consultaCantidad = " SELECT  " +
-                                     " SUM(CASE WHEN vpag.idPago = 1 THEN 1 ELSE 0 END) AS cant_efectivo, " +
-                                     " SUM(CASE WHEN vpag.idPago = 2 THEN 1 ELSE 0 END) AS cant_tarjetas, " +
-                                     " SUM(CASE WHEN vpag.idPago = 3 THEN 1 ELSE 0 END) AS cant_transferencias, " +
-                                     " SUM(CASE WHEN vpag.idPago = 4 THEN 1 ELSE 0 END) AS cant_otros " +
-                                     " FROM ventas_pago vpag " +
-                                     " INNER JOIN ventas v ON v.id = vpag.idVenta " +
-                                     " INNER JOIN cajas c ON c.id = v.idCaja " +
-                                     " WHERE (v.fecha BETWEEN ? AND ?)AND  vpag.realizado = 1 AND c.fechaBaja IS NULL ";
+                                     " SUM(categoria = 'EFECTIVO') AS cant_efectivo, " +
+                                     " SUM(categoria = 'TARJETA') AS cant_tarjetas, " +
+                                     " SUM(categoria = 'TRANSFERENCIA') AS cant_transferencias, " +
+                                     " SUM(categoria = 'QR') AS cant_qr, " +
+                                     " SUM(categoria = 'COMBINADO') AS cant_combinado " +
+                                     " FROM ( " +
+                                     " SELECT  v.id, " +
+                                     " CASE " +
+                                     "  WHEN COUNT(DISTINCT vpd.idTPago) > 1 THEN 'COMBINADO' " +
+                                     " WHEN MIN(vpd.idTPago) = 1 THEN 'EFECTIVO' " + 
+                                     " WHEN MIN(vpd.idTPago) = 2 THEN 'TARJETA' " + 
+                                     " WHEN MIN(vpd.idTPago) = 3 THEN 'TRANSFERENCIA' " + 
+                                     " WHEN MIN(vpd.idTPago) = 5 THEN 'QR' " + 
+                                     " END AS categoria " + 
+                                     " FROM ventas v " + 
+                                     " INNER JOIN ventas_pagos_detalle vpd ON v.id = vpd.idVenta " + 
+                                     " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " + 
+                                     " WHERE v.fechaBaja IS NULL AND vpag.realizado = 1" + 
+                                     adicional +
+                                     " GROUP BY v.id " + 
+                                     " ) t;";
 
             const [resultCantidad] = await connection.query(consultaCantidad, [fechaDesde, fechaHasta]);
             //#endregion
 
-            return {
+           return {
                 total_efectivo: parseFloat(resultTotales[0].efectivo),
                 total_tarjetas: parseFloat(resultTotales[0].tarjetas),
                 total_transferencias: parseFloat(resultTotales[0].transferencias),
-                total_otros: parseFloat(resultTotales[0].otros),
-
+                total_qr: parseFloat(resultTotales[0].qr),
+                
                 cantidad_efectivo:resultCantidad[0].cant_efectivo,
                 cantidad_tarjetas:resultCantidad[0].cant_tarjetas,
                 cantidad_transferencias:resultCantidad[0].cant_transferencias,
-                cantidad_otros:resultCantidad[0].cant_otros,
+                cantidad_qr:resultCantidad[0].cant_qr,
+                cantidad_combinado:resultCantidad[0].cant_combinado,
             };
 
         } catch (error:any) {

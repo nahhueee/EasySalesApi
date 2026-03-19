@@ -77,7 +77,7 @@ router.post('/guardar-factura', async (req:Request, res:Response) => {
 
 router.put('/eliminar', async (req:Request, res:Response) => {
     try{ 
-        res.json(await VentasRepo.Eliminar(req.body));
+        res.json(await VentasRepo.Eliminar(req.body.venta, req.body.observacion));
 
     } catch(error:any){
         let msg = "Error al intentar eliminar la venta.";

@@ -1,22 +1,21 @@
 export class pagoVenta {
-    efectivo?: number;
-    digital?: number;
+    idVenta?: number;
+    monto?: number;
     entrega?: number;
     restante?: number;
     recargo: number = 0;
     descuento: number = 0;
+    tipoModificador?: 'porcentaje' | 'monto';
     realizado?: boolean;
-    tipoPago?: string;
 
     constructor(data?: any) {
         if (data) {
-          this.efectivo = data.efectivo;
-          this.digital = data.digital;
           this.entrega = data.entrega;
           this.restante = data.restante;
-          this.tipoPago = data.tipoPago;
+          this.monto = data.monto;
           this.descuento = data.descuento;
           this.recargo = data.recargo;
+          this.tipoModificador = data.tipoModificador;
           this.realizado = (data.realizado==1) ? true : false;
         }
     }

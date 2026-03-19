@@ -1,10 +1,9 @@
 import loggerFacturacion from "../logger/loggerFacturacion";
 import {ParametrosRepo} from '../data/parametrosRepository';
 import { Afip } from "afip.ts";
-import { AdminServ } from "./adminService";
 import fs from "fs";
 import path from "path";
-import { ObjFacturar } from "../models/objFacturar";
+import { ObjFacturar, TipoComprobante } from "../models/objFacturar";
 import config from '../conf/app.config';
 import { VentasRepo } from '../data/ventasRepository';
 import moment from "moment";
@@ -48,13 +47,26 @@ class FacturacionService{
         
         const date = new Date(Date.now() - ((new Date()).getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 
+        if (requiereAsociacion(objFactura.tipoComprobante!) && !objFactura.comprobanteAsociado) {
+            throw new AppError(CodigoError.VALIDACION, 'Las notas requieren comprobante asociado',400);
+        }
+
         // Factura A discrimina IVA
         // Factura B no discrimina IVA pero es necesario pasar el IVA incluido en ImpIVA
         // Factura C no necesita de IVA en ningun sentido, neto será igual al total
         let neto = 0;
         let iva = 0;
 
-        if(objFactura.tipoFactura === 1 || objFactura.tipoFactura === 6){
+        const discriminaIVA = [
+            TipoComprobante.FACTURA_A,
+            TipoComprobante.FACTURA_B,
+            TipoComprobante.NC_A,
+            TipoComprobante.NC_B,
+            TipoComprobante.ND_A,
+            TipoComprobante.ND_B
+        ].includes(objFactura.tipoComprobante!);
+
+        if(discriminaIVA){
             neto = Math.round((objFactura.total! / 1.21) * 100) / 100;
             iva = Math.round((objFactura.total! - neto) * 100) / 100;
         }else{
@@ -64,7 +76,7 @@ class FacturacionService{
         let data : any = {
             CantReg: 1, // Cantidad de comprobantes a registrar
             PtoVta: datosFacturacion.puntoVta, // Punto de venta
-            CbteTipo: objFactura.tipoFactura, // Tipo de comprobante (ver tipos disponibles)
+            CbteTipo: objFactura.tipoComprobante, // Tipo de comprobante (ver tipos disponibles)
             Concepto: 1, // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
             DocTipo: objFactura.docTipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
             DocNro: objFactura.docNro, // Número de documento del comprador (0 consumidor final)
@@ -82,14 +94,25 @@ class FacturacionService{
             MonCotiz: 1, // Cotización de la moneda usada (1 para pesos argentinos)
         };
 
-        // Solo agregamos el campo `Iva` si es una Factura A o B
-        if (objFactura.tipoFactura === 1 || objFactura.tipoFactura === 6) {
+        // Solo agregamos el campo `Iva` si es una Factura/Nota A o B
+        if (discriminaIVA) {
             data.Iva = [
             {
                 Id: 5, // 21%
                 BaseImp: neto,
                 Importe: iva
             }
+            ];
+        }
+
+        //Si estamos haciendo Nota credito/debito
+        if (objFactura.comprobanteAsociado) {
+            data.CbtesAsoc = [
+                {
+                Tipo: objFactura.comprobanteAsociado.tipo,
+                PtoVta: objFactura.comprobanteAsociado.puntoVenta,
+                Nro: objFactura.comprobanteAsociado.numero
+                }
             ];
         }
 
@@ -119,11 +142,11 @@ class FacturacionService{
         if (detalle?.Resultado === 'A') {
             const lastVoucher = await afip.electronicBillingService.getLastVoucher(
                 datosFacturacion.puntoVta,
-                objFactura.tipoFactura!
+                objFactura.tipoComprobante!
             );
 
             await SesionServ.RegistrarMovimiento(
-                `Nueva Factura tipo ${objFactura.tipoFactura} nro ${lastVoucher.CbteNro}`
+                `Nueva Factura tipo ${objFactura.tipoComprobante} nro ${lastVoucher.CbteNro}`
             );
 
             return {
@@ -222,6 +245,17 @@ async function ObtenerInstanciaAfip(cuilTitular): Promise<Afip> {
 
     afipInstances[cuilTitular] = afip;
     return afip;
+}
+
+function requiereAsociacion(tipo: TipoComprobante): boolean {
+  return [
+    TipoComprobante.NC_A,
+    TipoComprobante.NC_B,
+    TipoComprobante.NC_C,
+    TipoComprobante.ND_A,
+    TipoComprobante.ND_B,
+    TipoComprobante.ND_C
+  ].includes(tipo);
 }
 
 export const FacturacionServ = new FacturacionService();
