@@ -233,7 +233,7 @@ export async function AplicarActualizacion() {
      */
     logger.info('Verificando y ejecutando migraciones.', { fase, modulo });
 
-    if (!fs.existsSync(path.join(ROOT_DIR, 'knexfile.js'))) {
+    if (!fs.existsSync(path.join(ROOT_DIR, 'scripts/knexfile.js'))) {
       throw new Error('Falta knexfile.js.');
     }
 

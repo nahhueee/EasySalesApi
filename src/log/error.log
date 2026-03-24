@@ -17,3 +17,4 @@
 {"level":"error","message":"Error al intentar agregar la venta. Column 'idTPago' cannot be null","timestamp":"12/3/2026, 08:38:35"}
 {"level":"error","message":"Error al obtener el listado de ventas de la caja. Unknown column 'vpag' in 'field list'","timestamp":"12/3/2026, 09:16:39"}
 {"level":"error","message":"Error al obtener el listado de ventas de la caja. Unknown column 'vpag' in 'field list'","timestamp":"12/3/2026, 10:44:35"}
+{"level":"error","message":"Error al intentar agregar la venta. Duplicate entry '38432-701' for key 'ventas.PRIMARY'","timestamp":"23/3/2026, 06:54:17"}

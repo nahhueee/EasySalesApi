@@ -72,8 +72,10 @@ class CuentasCorsRepository{
 
             //Insertamos el registro de cabecera
             const ultimoRegistro = await ObtenerUltimoRegistroEntrega(connection);
-            await connection.query("INSERT INTO ventas_entrega(id,idCliente, monto, fecha) VALUES(?,?,?,?)", 
-                [ultimoRegistro, data.idCliente, data.monto, moment(Date.now()).format('YYYY-MM-DD')]);
+            await connection.query(
+                "INSERT INTO ventas_entrega(id,idCliente, monto, fecha) VALUES(?,?,?,NOW())", 
+                [ultimoRegistro, data.idCliente, data.monto]
+            );
 
             let montoRestante = data.monto;
 
@@ -98,6 +100,13 @@ class CuentasCorsRepository{
                             [ultimoRegistro, row.id, row.total]
                         );
 
+                        //Insertamos metodo de pago de la entrega
+                        await connection.query(
+                            `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega)
+                            VALUES (?, ?, ?, ?)`,
+                            [row.id, data.idTPago, totalAPagar, ultimoRegistro]
+                        );
+
                         montoRestante -= totalAPagar;
                         if (montoRestante === 0) break;
                     } else {
@@ -113,6 +122,13 @@ class CuentasCorsRepository{
                         await connection.query(
                             "INSERT INTO ventas_entrega_detalle (idEntrega, idVenta, montoAplicado) VALUES (?, ?, ?)",
                             [ultimoRegistro, row.id, montoRestante]
+                        );
+
+                        //Insertamos metodo de pago de la entrega
+                        await connection.query(
+                            `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega)
+                            VALUES (?, ?, ?, ?)`,
+                            [row.id, data.idTPago, montoRestante, ultimoRegistro]
                         );
 
                         montoRestante = 0;
@@ -170,12 +186,13 @@ class CuentasCorsRepository{
             //Eliminamos el detalle y cabecera de la entrega revertida
             await connection.query("DELETE FROM ventas_entrega_detalle WHERE idEntrega = ?", [data.idEntrega]);
             await connection.query("DELETE FROM ventas_entrega WHERE id = ?", [data.idEntrega]);
-            
-            //Mandamos la transaccion
-            await connection.commit();
-
+            await connection.query("DELETE FROM ventas_pagos_detalle WHERE idEntrega = ?",[data.idEntrega]);
+                        
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega);
+
+            //Mandamos la transaccion
+            await connection.commit();
 
             return "OK";
 
@@ -192,22 +209,69 @@ class CuentasCorsRepository{
         const connection = await db.getConnection();
         try {
 
-            if (data.realizado==0) data.total = 0;  //Si resulta que esta revirtiendo, quitamos la entrega
-
+            //Iniciamos una transaccion
+            await connection.beginTransaction();
+            
             const consulta = " UPDATE ventas_pago " +
-                             " SET realizado = ?, " +
-                             " entrega = ? " +
+                             " SET realizado = 1, " +
+                             " entrega = monto " +
                              " WHERE idVenta = ?";
 
-            const parametros = [data.realizado, data.total, data.idVenta];
+            const parametros = [data.idVenta];
             await connection.query(consulta, parametros);
 
+            //Insertamos el idTipoPago
+            await connection.query(
+                `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto) VALUES (?, ?, ?)`,
+                [data.idVenta, data.idTPago, data.total]
+            );
+
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Actualización de estado pago para la venta nro " + data.idVenta);
+            await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta);
+            
+            //Mandamos la transaccion
+            await connection.commit();
 
             return "OK";
 
         } catch (error:any) {
+            //Si ocurre un error volvemos todo para atras
+            await connection.rollback();
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    async RevertirEstadoPago(idVenta:string): Promise<string>{
+        const connection = await db.getConnection();
+        try {
+
+            //Iniciamos una transaccion
+            await connection.beginTransaction();
+
+            const consulta = " UPDATE ventas_pago " +
+                             " SET realizado = 0, " +
+                             " entrega = 0 " +
+                             " WHERE idVenta = ?";
+
+            const parametros = [idVenta];
+            await connection.query(consulta, parametros);
+
+            //Quitamos los registros de pago
+            await connection.query("DELETE FROM ventas_pagos_detalle WHERE idVenta = ?",[idVenta]);
+
+            //Registramos el Movimiento
+            await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta);
+
+            //Mandamos la transaccion
+            await connection.commit();
+
+            return "OK";
+
+        } catch (error:any) {
+            //Si ocurre un error volvemos todo para atras
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();

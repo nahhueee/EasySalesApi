@@ -126,13 +126,11 @@ CREATE TABLE cajas_movimientos (
 
 DROP TABLE IF EXISTS ventas;
 CREATE TABLE ventas (
-    id INT,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     idCaja INT,
     idCliente INT,
     fecha DATE,
-    hora VARCHAR(5),
-
-    PRIMARY KEY(id,idCaja)
+    hora VARCHAR(5)
 )
 ENGINE=InnoDB;
 

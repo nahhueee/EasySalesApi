@@ -1,5 +1,28 @@
 exports.up = async function(knex) {
   // =========================
+  // 0. Fix PK ventas (CRÍTICO)
+  // =========================
+  const pkInfo = await knex.raw(`
+    SHOW KEYS FROM ventas WHERE Key_name = 'PRIMARY'
+  `);
+
+  const primaryKeys = pkInfo[0].map(r => r.Column_name);
+
+  // Si la PK es compuesta (tiene idCaja)
+  if (primaryKeys.includes('idCaja')) {
+
+    console.log('⚠️ Corrigiendo PK compuesta en ventas...');
+
+    // ⚠️ IMPORTANTE: esto falla si hay duplicados
+    await knex.raw(`
+      ALTER TABLE ventas
+      DROP PRIMARY KEY,
+      MODIFY id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      ADD PRIMARY KEY (id)
+    `);
+  }
+
+  // =========================
   // 1. Crear tabla si no existe
   // =========================
   const exists = await knex.schema.hasTable('ventas_pagos_detalle');

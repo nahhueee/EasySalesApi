@@ -83,10 +83,11 @@ class EstadisticasRepository{
                                      " FROM ventas v " + 
                                      " INNER JOIN ventas_pagos_detalle vpd ON v.id = vpd.idVenta " + 
                                      " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " + 
-                                     " WHERE v.fechaBaja IS NULL AND vpag.realizado = 1" + 
+                                     " WHERE v.fechaBaja IS NULL " + 
                                      adicional +
                                      " GROUP BY v.id " + 
                                      " ) t;";
+
 
             const [resultCantidad] = await connection.query(consultaCantidad, [fechaDesde, fechaHasta]);
             //#endregion

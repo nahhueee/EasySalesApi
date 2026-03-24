@@ -24,6 +24,7 @@ async function setup() {
       "src/temp",
       "src/tokens",
       "src/upload",
+      "scripts"
     ];
 
     for (const dir of directories) {
@@ -35,8 +36,9 @@ async function setup() {
     // Archivos base que el server necesita para correr
     const filesToCopy = [
       { from: "package.json", to: "package.json" },
-      { from: "scripts/knexfile.js", to: "knexfile.js" },
+      { from: "scripts/knexfile.js", to: "scripts/knexfile.js" },
       { from: "src/db/script.sql", to: "src/db/script.sql" },
+      { from: ".env", to: ".env"},
 
       { from: "src/fonts/Roboto-Italic.ttf", to: "src/fonts/Roboto-Italic.ttf" },
       { from: "src/fonts/Roboto-Medium.ttf", to: "src/fonts/Roboto-Medium.ttf" },

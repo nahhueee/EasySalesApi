@@ -23,20 +23,27 @@ class AdminService{
         }
 
         const appCliente = await this.ObtenerAppCliente(dni);
+
+       if (!EsTerminalValida(appCliente?.terminal)) {
+            throw new AppError(
+                CodigoError.TERMINAL_NO_ENCONTRADA,
+                'Cliente sin terminal válida',
+                400,
+                { modulo: 'AdminService', metodo: 'ValidarIdentidad' }
+            );
+        }
+
+        // Aseguramos consistencia local
+        if (!ExisteTerminalValida()) {
+            GuardarTerminalLocal(appCliente.terminal);
+        }
+        
         return {
             existe: true,
             cliente: appCliente.cliente,
             habilitado: appCliente.habilitado,
             terminal: appCliente.terminal
         };
-    }
-
-    async ObtenerHabilitacion(terminal:string){
-        try {
-            return (await axios.get(`${config.adminUrl}appscliente/habilitado/${terminal}/${config.idApp}`)).data;
-        } catch (error) {
-            mapAxiosError(error,'AdminService','ObtenerHabilitacion');
-        }
     }
 
     async ObtenerAppCliente(dni:string){
@@ -51,10 +58,9 @@ class AdminService{
             return await this.GenerarAppCliente(dni);
 
         } catch (error) {
-            mapAxiosError(error,'AdminService','ObtenerAppCliente');
+            throw mapAxiosError(error,'AdminService','ObtenerAppCliente');
         }
     }
-
 
     async GenerarAppCliente(dni:string){
         try {
@@ -78,6 +84,13 @@ class AdminService{
         }
     }
 
+    async ObtenerHabilitacion(terminal:string){
+        try {
+            return (await axios.get(`${config.adminUrl}appscliente/habilitado/${terminal}/${config.idApp}`)).data;
+        } catch (error) {
+            mapAxiosError(error,'AdminService','ObtenerHabilitacion');
+        }
+    }
 
     async VerificarExistenciaCliente(DNI:string){
         try {
@@ -89,7 +102,6 @@ class AdminService{
             mapAxiosError(error,'AdminService','VerificarExistenciaCliente');
         }
     }
-
 
     async SubirBackup(backupPath:string, DNI:string){
         try {
@@ -109,6 +121,29 @@ class AdminService{
         } catch (error) {
             throw error;
         }
+    }
+}
+function EsTerminalValida(terminal: any): boolean {
+    return typeof terminal === 'string' && terminal.trim().length > 0;
+}
+
+function ExisteTerminalValida(): boolean {
+    try {
+        const ROOT_DIR = process.cwd();
+        const TERMINAL_FILE = path.join(ROOT_DIR, 'terminal.json');
+        
+        if (!fs.existsSync(TERMINAL_FILE)) return false;
+
+        const raw = fs.readFileSync(TERMINAL_FILE, 'utf-8');
+        if (!raw || raw.trim().length === 0) return false;
+
+        const data = JSON.parse(raw);
+        if (!data?.terminal) return false;
+
+        return true;
+
+    } catch {
+        return false;
     }
 }
 
