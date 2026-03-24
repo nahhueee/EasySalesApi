@@ -2,10 +2,11 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
-const packageJson = require('./package.json');
+import pkg from '../package.json';
 
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
 
 const socketIo = require('socket.io');
 const app = express();
@@ -110,12 +111,20 @@ if(!config.web){
 
 //Index Route
 app.get('/easysales', (req, res) => {
-    res.status(200).send('Servidor de EasySales funcionando en este puerto. En la versión ' + packageJson.version + '');
+    res.status(200).send('Servidor de EasySales funcionando en este puerto. En la versión ' + pkg.version + '');
 });
  
 app.get('/easysales/status', (req, res) => {
     res.status(200).send('Servidor de En Linea');
 });
+app.get('/easysales/pendiente', (req, res) =>{
+    const PENDING_FILE = path.join(__dirname, '..', 'updater', 'pendiente.json');
+    const existe = fs.existsSync(PENDING_FILE);
+
+    return res.json({
+        pendiente: existe
+    });
+})
  
 //404
 app.use((_req, res) => {

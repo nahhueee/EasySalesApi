@@ -210,6 +210,7 @@ export async function AplicarActualizacion() {
         execSync('npm install', {
           stdio: 'pipe',
           cwd: ROOT_DIR,
+          windowsHide: true,
           timeout: 300000 // 5 minutos
         });
 
@@ -233,16 +234,26 @@ export async function AplicarActualizacion() {
      */
     logger.info('Verificando y ejecutando migraciones.', { fase, modulo });
 
-    if (!fs.existsSync(path.join(ROOT_DIR, 'scripts/knexfile.js'))) {
+    const knexfilePath = path.join(__dirname, '..', '..', 'scripts', 'knexfile.js');
+    if (!fs.existsSync(knexfilePath)) {
       throw new Error('Falta knexfile.js.');
     }
 
     try {
-      execSync('npx knex migrate:latest --knexfile knexfile.js --env development', {
-        stdio: 'pipe',
-        cwd: ROOT_DIR,
-        timeout: 180000 // 3 minutos
-      });
+      execSync(
+        `npx knex migrate:latest --knexfile "${knexfilePath}" --env development`,
+        {
+          windowsHide: true,
+          stdio: 'pipe'
+        }
+      );
+
+      // execSync('npx run migrate:latest --knexfile knexfile.js --env development', {
+      //   stdio: 'pipe',
+      //   cwd: ROOT_DIR,
+      //   windowsHide: true,
+      //   timeout: 180000 // 3 minutos
+      // });
 
       logger.info('Migraciones aplicadas correctamente.', { fase, modulo });
     } catch (migrationError) {
