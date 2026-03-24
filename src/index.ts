@@ -2,6 +2,7 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
+const packageJson = require('./package.json');
 
 const http = require('http');
 const path = require('path');
@@ -42,8 +43,6 @@ if(config.esServer){
 }
 
 server.listen(app.get('port'), host, () => {
-    console.log(path.resolve(__dirname, '../src/db/tasks'));
-
     console.log('server ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
 });
 
@@ -111,7 +110,7 @@ if(!config.web){
 
 //Index Route
 app.get('/easysales', (req, res) => {
-    res.status(200).send('Servidor de EasySales funcionando en este puerto.');
+    res.status(200).send('Servidor de EasySales funcionando en este puerto. En la versión ' + packageJson.version + '');
 });
  
 app.get('/easysales/status', (req, res) => {
