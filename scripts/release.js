@@ -77,7 +77,7 @@ run("git push");
 // 4. Build + setup + zip
 // =========================
 
-run("node setup.js");
+run("npm run build");
 run("npm run build:update");
 
 // =========================

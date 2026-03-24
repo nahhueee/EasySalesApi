@@ -8,6 +8,7 @@
     "tsc": "tsc",
     "build": "tsc && node scripts/setup.js",
     "build:update": "node scripts/build-update.js",
+    "release": "node scripts/release.js",
     "migrate:make": "cd scripts && knex migrate:make",
     "migrate:latest": "cd scripts && knex migrate:latest",
     "migrate:rollback": "cd scripts && knex migrate:rollback"
