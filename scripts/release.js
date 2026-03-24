@@ -78,7 +78,7 @@ run("git push");
 // =========================
 
 run("npm run build");
-run("npm run build:update");
+run("node build-update.js");
 
 // =========================
 // 5. Buscar ZIP
@@ -107,5 +107,7 @@ run(`git push origin ${tag}`);
 run(
   `gh release create ${tag} "${zipPath}" --title "${tag}" --notes "Backend release ${tag}"`
 );
+
+fs.unlinkSync(zipPath);
 
 console.log("\n🚀 Release backend creada con éxito");

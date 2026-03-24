@@ -13,16 +13,8 @@ zip.addLocalFolder('dist/src', 'src');
 // Package.json
 zip.addLocalFile(pkgPath);
 
-const outputDir = path.resolve('actualizaciones');
-if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
-
-//Guarda para historial
-const zipPath = path.join(outputDir, `update-${pkg.version}.zip`);
+// ZIP único (temporal)
+const zipPath = path.resolve('update.zip');
 zip.writeZip(zipPath);
 
-// ZIP para CI (raíz del proyecto)
-const ciZip = path.resolve('update.zip');
-zip.writeZip(ciZip);
-
-console.log(`📦 ZIP de actualización historico generado: ${zipPath}`);
-console.log(`📦 ZIP de actualización CI generado: ${ciZip}`);
+console.log(`📦 ZIP generado: ${zipPath}`);

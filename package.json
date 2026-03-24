@@ -1,17 +1,17 @@
 {
   "name": "easysalesapi",
-  "version": "2.4.3",
+  "version": "2.4.2",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "tsc && nodemon --ignore src/logger/backup.json --ignore src/logger/general.json --ignore src/logger/update.json src/index.ts --ignore src/session.json",
     "tsc": "tsc",
     "build": "tsc && node scripts/setup.js",
-    "build:update": "node scripts/build-update.js",
     "release": "node scripts/release.js",
     "migrate:make": "cd scripts && knex migrate:make",
     "migrate:latest": "cd scripts && knex migrate:latest",
-    "migrate:rollback": "cd scripts && knex migrate:rollback"
+    "migrate:rollback": "cd scripts && knex migrate:rollback",
+    "delete-tag": "node scripts/delete-tag.js"
   },
   "keywords": [],
   "author": "",
