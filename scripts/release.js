@@ -78,7 +78,7 @@ run("git push");
 // =========================
 
 run("npm run build");
-run("node build-update.js");
+run("node scripts/build-update.js");
 
 // =========================
 // 5. Buscar ZIP
