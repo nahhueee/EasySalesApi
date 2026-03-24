@@ -1,43 +1,48 @@
-name: CI Backend
+name: Publicar actualización
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
 
 jobs:
-  build-and-upload:
+  upload:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Usar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
+      - name: Ensure GitHub CLI
+        run: gh --version
 
-      - name: Instalar dependencias
-        run: npm ci
+      - name: Set version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Build backend
-        run: npm run build
+      - name: Descargar assets release
+        run: |
+          gh release download ${{ github.ref_name }} --pattern "update.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generar ZIP de actualización
-        run: npm run build:update
+      - name: Debug archivos descargados
+        run: ls -la
 
-      - name: Obtener versión
-        id: pkg
-        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+      - name: Validate ruta archivos
+        run: |
+          if [ ! -f "update.zip" ]; then
+            echo "❌ No se encontró update.zip"
+            exit 1
+          fi
 
-      - name: Subir update
+      - name: Subir archivos al servidor
         run: |
           curl -X POST ${{ secrets.UPLOAD_URL }} \
-          -H "Authorization: Bearer ${{ secrets.CI_TOKEN }}" \
-          -F "file=@update.zip" \
-          -F "version=$VERSION" \
-          -F "app=easysales" \
-          -F "idApp=1" \
-          -F "tipo=backend" \
-          -F "firma=\"\""
+            -H "Authorization: Bearer ${{ secrets.CI_TOKEN }}" \
+            -F "file=@update.zip" \
+            -F "version=$VERSION" \
+            -F "app=easysales" \
+            -F "idApp=1" \
+            -F "tipo=backend"
 
