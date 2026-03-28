@@ -18,7 +18,7 @@ class FacturacionService{
     async Facturar(objFactura:ObjFacturar){
         const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
         const afip = await ObtenerInstanciaAfip(datosFacturacion.cuil);
-        
+
         //Verificamos el estado del servidor ARCA
         const serverStatus = await afip.electronicBillingService.getServerStatus();
         if (

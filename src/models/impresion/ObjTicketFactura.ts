@@ -1,6 +1,6 @@
 export class ObjTicketFactura {
-    nroTipoFactura?:number;
-    tipoFactura?:string;
+    tipoComprobante?:number;
+    desTipoComprobante?:string;
     CUIL?:number;
     condicion?:string;
     puntoVta?:number;
@@ -20,8 +20,8 @@ export class ObjTicketFactura {
     
     constructor(data?: any) {
         if (data) {
-          this.nroTipoFactura = data.nroTipoFactura;
-          this.tipoFactura = data.tipoFactura;
+          this.tipoComprobante = data.tipoComprobante;
+          this.desTipoComprobante = data.desTipoComprobante;
           this.CUIL = data.CUIL;
           this.condicion = data.condicion;
           this.puntoVta = data.puntoVta;

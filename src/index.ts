@@ -125,6 +125,11 @@ app.get('/easysales/pendiente', (req, res) =>{
         pendiente: existe
     });
 })
+app.get('/easysales/version', (req, res) =>{
+    return res.json({
+        version: pkg.version
+    });
+})
  
 //404
 app.use((_req, res) => {

@@ -50,7 +50,7 @@ class ComprobanteService {
                 neto : pedido.factura?.neto,
                 iva : pedido.factura?.iva,
                 cae : pedido.factura?.cae,
-                nroTipoFactura: pedido.factura?.tipoFactura,
+                tipoComprobante: pedido.factura?.tipoFactura,
                 DNI: pedido.factura?.dni,
                 tipoDNI: pedido.factura?.tipoDni
             });
@@ -62,15 +62,15 @@ class ComprobanteService {
             });
     
             //Indicamos el tipo de factura realizada
-            switch (datosFactura.nroTipoFactura) {
+            switch (datosFactura.tipoComprobante) {
             case 1:
-                datosFactura.tipoFactura = "A";
+                datosFactura.desTipoComprobante = "A";
                 break;
             case 6:
-                datosFactura.tipoFactura = "B";
+                datosFactura.desTipoComprobante = "B";
                 break;
             case 11:
-                datosFactura.tipoFactura = "C";
+                datosFactura.desTipoComprobante = "C";
                 break;
             }
     
@@ -86,7 +86,7 @@ class ComprobanteService {
             datosFactura.razon = parametrosFacturacion.razon;
 
             //Definimos datos del receptor
-            if(datosFactura.nroTipoFactura == 1){
+            if(datosFactura.tipoComprobante == 1){
             datosFactura.condReceptor = "IVA Responsable Inscripto";
             }else{
             datosFactura.condReceptor = "Consumidor Final";
@@ -436,8 +436,8 @@ class ComprobanteService {
         },
         pageMargins: [comprobante.margenIzq, 0, comprobante.margenDer, 0],
         content: [
-          { text: datosFactura.tipoFactura, style:"tipoComprobante", alignment: 'center'},
-          { text: "Cod." + datosFactura.nroTipoFactura, fontSize: 5,  alignment: 'center', margin: [0, 0, 0, 3]},
+          { text: datosFactura.desTipoComprobante, style:"tipoComprobante", alignment: 'center'},
+          { text: "Cod." + datosFactura.tipoComprobante, fontSize: 5,  alignment: 'center', margin: [0, 0, 0, 3]},
 
   
           { text: comprobante.nombreLocal?.toUpperCase(), style: 'titulo', alignment: 'center' },
@@ -478,7 +478,7 @@ class ComprobanteService {
           { text: `Recargo: ${comprobante.recargo}%`, style: 'recargaDescuento', alignment: 'right' },
           { text: `Total: $${comprobante.totalFinal?.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, style: 'total', alignment: 'right' },
   
-         ...((datosFactura.nroTipoFactura != 11) ? [
+         ...((datosFactura.tipoComprobante != 11) ? [
             { text: 'IVA 21% Incluido', fontSize: 6, margin: [0, 5, 0, 3], alignment: 'center' },
             { text: `NETO: $${datosFactura.neto?.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, alignment: 'center', fontSize: 8 },
             { text: `IVA: $${datosFactura.iva?.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, alignment: 'center', fontSize: 8, margin: [0, 0, 0, 3] }
@@ -576,8 +576,8 @@ class ComprobanteService {
         },
         pageMargins: [comprobante.margenIzq, 0, comprobante.margenDer, 0],
         content: [
-          { text: datosFactura.tipoFactura, style:"tipoComprobante", alignment: 'center'},
-          { text: "Cod." + datosFactura.nroTipoFactura, fontSize: 7,  alignment: 'center', margin: [0, 0, 0, 3]},
+          { text: datosFactura.desTipoComprobante, style:"tipoComprobante", alignment: 'center'},
+          { text: "Cod." + datosFactura.tipoComprobante, fontSize: 7,  alignment: 'center', margin: [0, 0, 0, 3]},
 
   
           { text: comprobante.nombreLocal?.toUpperCase(), style: 'titulo', alignment: 'center' },
@@ -618,7 +618,7 @@ class ComprobanteService {
           { text: `Recargo: ${comprobante.recargo}%`, style: 'recargaDescuento', alignment: 'right' },
           { text: `Total: $${comprobante.totalFinal?.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, style: 'total', alignment: 'right' },
   
-         ...((datosFactura.nroTipoFactura != 11) ? [
+         ...((datosFactura.tipoComprobante != 11) ? [
             { text: 'IVA 21% Incluido', fontSize: 10, margin: [0, 5, 0, 3], alignment: 'center' },
             { text: `NETO: $${datosFactura.neto?.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, alignment: 'center', fontSize: 11 },
             { text: `IVA: $${datosFactura.iva?.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, alignment: 'center', fontSize: 11, margin: [0, 0, 0, 3] }
@@ -748,8 +748,8 @@ class ComprobanteService {
                   },
                   {
                     stack: [
-                      { text: datosFactura.tipoFactura, style: 'tipoComprobante' },
-                      { text: "Cod." + datosFactura.nroTipoFactura, fontSize: 7 }
+                      { text: datosFactura.desTipoComprobante, style: 'tipoComprobante' },
+                      { text: "Cod." + datosFactura.tipoComprobante, fontSize: 7 }
                     ],
                     alignment: 'center'
                   },
@@ -791,7 +791,7 @@ class ComprobanteService {
           },
 
           //Datos Receptor
-          ...((datosFactura.nroTipoFactura != 11) ? [ //Ocultamos para facturas C
+          ...((datosFactura.tipoComprobante != 11) ? [ //Ocultamos para facturas C
             {
               table: {
                 widths: ['*'],
@@ -902,7 +902,7 @@ class ComprobanteService {
               },
 
               // Columna derecha descripcion del IVA
-              ...((datosFactura.nroTipoFactura != 11) ? [ //Ocultamos para facturas C
+              ...((datosFactura.tipoComprobante != 11) ? [ //Ocultamos para facturas C
                 {
                   stack: [
                     { text: 'IVA 21% Incluido', fontSize: 10, margin: [0, 12, 0, 5] },
