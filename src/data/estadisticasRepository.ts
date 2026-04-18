@@ -15,13 +15,17 @@ class EstadisticasRepository{
             //#region CONSULTAS
             const consulta1 = " SELECT COUNT(*) AS cant_ventas,  SUM(vp.monto) AS total_ventas FROM ventas v " +
                               " INNER JOIN ventas_pago vp ON vp.idVenta = v.id " +
-                              " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL";
+                              " INNER JOIN cajas c on c.id = v.idCaja " +
+                              " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL" +
+                              " AND c.fechaBaja IS NULL";
             const [consultaTotalesVentas] = await connection.query(consulta1, [fechaDesde, fechaHasta]);
 
             const consulta2 = " SELECT COUNT(*) AS cantidad_facturas, SUM(neto + iva) AS total_facturas " +
                               " FROM ventas_factura vf " +
                               " INNER JOIN ventas v ON v.id = vf.idVenta " +
-                              " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL";
+                              " INNER JOIN cajas c on c.id = v.idCaja " +
+                              " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL " +
+                              " AND c.fechaBaja IS NULL ";
 
             const [consultaTotalesFactura] = await connection.query(consulta2, [fechaDesde, fechaHasta]);
             //#endregion
@@ -52,41 +56,48 @@ class EstadisticasRepository{
 
             //#region CONSULTAS
             const consultaTotales =  " SELECT  " +
-                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 1 THEN vpd.monto ELSE 0 END), 0) AS efectivo, " +
-                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 2 THEN vpd.monto ELSE 0 END), 0) AS tarjetas, " +
-                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 3 THEN vpd.monto ELSE 0 END), 0) AS transferencias, " +
-                                     " COALESCE(SUM(CASE WHEN vpd.idTPago = 5 THEN vpd.monto ELSE 0 END), 0) AS qr " +
+                                     " COALESCE(SUM(CASE WHEN tp.nombre = 'EFECTIVO' THEN vpd.monto ELSE 0 END), 0) AS efectivo, " +
+                                     " COALESCE(SUM(CASE WHEN tp.nombre = 'TARJETA' THEN vpd.monto ELSE 0 END), 0) AS tarjetas, " +
+                                     " COALESCE(SUM(CASE WHEN tp.nombre = 'TRANSFERENCIA' THEN vpd.monto ELSE 0 END), 0) AS transferencias, " +
+                                     " COALESCE(SUM(CASE WHEN tp.nombre = 'QR' THEN vpd.monto ELSE 0 END), 0) AS qr " +
                                      " FROM ventas_pagos_detalle vpd " +
                                      " INNER JOIN ventas v ON v.id = vpd.idVenta " +
                                      " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " +
+                                     " INNER JOIN tipos_pago tp ON tp.id = vpd.idTPago " +
+                                     " INNER JOIN cajas c on c.id = v.idCaja " +
                                      " WHERE v.fechaBaja IS NULL " +
+                                     " AND c.fechaBaja IS NULL " +
                                      adicional;
+
 
             const [resultTotales] = await connection.query(consultaTotales, [fechaDesde, fechaHasta]);
 
 
             const consultaCantidad = " SELECT  " +
-                                     " SUM(categoria = 'EFECTIVO') AS cant_efectivo, " +
-                                     " SUM(categoria = 'TARJETA') AS cant_tarjetas, " +
-                                     " SUM(categoria = 'TRANSFERENCIA') AS cant_transferencias, " +
-                                     " SUM(categoria = 'QR') AS cant_qr, " +
-                                     " SUM(categoria = 'COMBINADO') AS cant_combinado " +
-                                     " FROM ( " +
-                                     " SELECT  v.id, " +
-                                     " CASE " +
-                                     "  WHEN COUNT(DISTINCT vpd.idTPago) > 1 THEN 'COMBINADO' " +
-                                     " WHEN MIN(vpd.idTPago) = 1 THEN 'EFECTIVO' " + 
-                                     " WHEN MIN(vpd.idTPago) = 2 THEN 'TARJETA' " + 
-                                     " WHEN MIN(vpd.idTPago) = 3 THEN 'TRANSFERENCIA' " + 
-                                     " WHEN MIN(vpd.idTPago) = 5 THEN 'QR' " + 
-                                     " END AS categoria " + 
-                                     " FROM ventas v " + 
-                                     " INNER JOIN ventas_pagos_detalle vpd ON v.id = vpd.idVenta " + 
-                                     " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " + 
-                                     " WHERE v.fechaBaja IS NULL " + 
-                                     adicional +
-                                     " GROUP BY v.id " + 
-                                     " ) t;";
+                                    " SUM(categoria = 'EFECTIVO') AS cant_efectivo, " +
+                                    " SUM(categoria = 'TARJETA') AS cant_tarjetas, " +
+                                    " SUM(categoria = 'TRANSFERENCIA') AS cant_transferencias, " +
+                                    " SUM(categoria = 'QR') AS cant_qr, " +
+                                    " SUM(categoria = 'COMBINADO') AS cant_combinado " +
+                                    " FROM ( " +
+                                    " SELECT v.id, " +
+                                    " CASE " +
+                                    "  WHEN COUNT(DISTINCT vpd.idTPago) > 1 THEN 'COMBINADO' " +
+                                    "  WHEN MIN(tp.nombre) = 'EFECTIVO' THEN 'EFECTIVO' " +
+                                    "  WHEN MIN(tp.nombre) = 'TARJETA' THEN 'TARJETA' " +
+                                    "  WHEN MIN(tp.nombre) = 'TRANSFERENCIA' THEN 'TRANSFERENCIA' " +
+                                    "  WHEN MIN(tp.nombre) = 'QR' THEN 'QR' " +
+                                    " END AS categoria " +
+                                    " FROM ventas v " +
+                                    " INNER JOIN ventas_pagos_detalle vpd ON v.id = vpd.idVenta " +
+                                    " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " +
+                                    " INNER JOIN tipos_pago tp ON tp.id = vpd.idTPago " +
+                                    " INNER JOIN cajas c on c.id = v.idCaja " +
+                                    " WHERE v.fechaBaja IS NULL " +
+                                    " AND c.fechaBaja IS NULL " +
+                                    adicional +
+                                    " GROUP BY v.id " +
+                                    " ) t;";
 
 
             const [resultCantidad] = await connection.query(consultaCantidad, [fechaDesde, fechaHasta]);

@@ -372,12 +372,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 " SELECT v.*, " + 
                 " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
-                " COALESCE(cli.nombre, 'ELIMINADO') cliente, " +
-                " COALESCE(tp.nombre, 'ELIMINADO') tipoPago " +
+                " COALESCE(cli.nombre, 'ELIMINADO') cliente " +
                 " FROM ventas v " +
                 " INNER JOIN ventas_pago vpag ON vpag.idVenta = v.id " +
                 " LEFT JOIN ventas_factura vfac ON vfac.idVenta = v.id " +
-                " LEFT JOIN tipos_pago tp ON tp.id = vpag.idPago " +
                 " LEFT JOIN clientes cli ON cli.id = v.idCliente " +
                 " WHERE 1 = 1 " +
                 filtro +

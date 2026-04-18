@@ -1,27 +1,16 @@
 import {AdminServ} from '../services/adminService';
-import {ParametrosRepo} from '../data/parametrosRepository';
 import {Router, Request, Response} from 'express';
-import logger from '../logger/loggerGeneral';
-import config from '../conf/app.config';
 import { TerminalServ } from '../services/terminalService';
 const router : Router  = Router();
 
 //Obtiene la version en linea del sistema 
-router.get('/obtener-version', async (req:Request, res:Response) => {
+router.get('/obtener-version', async (req:Request, res:Response, next) => {
     try{ 
-        const respuesta = await AdminServ.ObtenerVersionApp();
-
-        //Obtenemos del config el estado del servidor
-        if(config.produccion)
-            respuesta.serverStatus = 'production';
-        else
-            respuesta.serverStatus = 'test';
-
+        const respuesta = await AdminServ.ObtenerVersionWeb();
         return res.json(respuesta);
 
     } catch(error:any){
-        logger.error("Error al intentar obtener la versión de la aplicación. " + error);
-        res.status(200).send(null);
+       next(error);
     }
 });
 

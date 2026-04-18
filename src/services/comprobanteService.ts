@@ -357,7 +357,7 @@ class ComprobanteService {
       return {
         pageSize: 'A4',
         pageOrientation: 'portrait',
-        pageMargins: [comprobante.margenIzq, 0, comprobante.margenDer, 0],
+        pageMargins: [comprobante.margenIzq, 30, comprobante.margenDer, 30],
         content: [
           {
             columns: [
@@ -711,7 +711,7 @@ class ComprobanteService {
       return {
         pageSize: 'A4',
         pageOrientation: 'portrait',
-        pageMargins: [30, 30, 30, 30],
+        pageMargins: [comprobante.margenIzq, 30, comprobante.margenDer, 30],
         content: [
 
           //Datos de Factura y titular

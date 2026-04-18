@@ -3,6 +3,8 @@ import morgan from 'morgan';
 import cors from 'cors';
 import config from './conf/app.config';
 import pkg from '../package.json';
+import { DescargarActualizacion } from '../updater/config/DescargarActualizacion';
+import { CheckearActualizacion } from '../updater/config/CheckearActualizacion';
 
 const http = require('http');
 const path = require('path');
@@ -114,8 +116,15 @@ app.get('/easysales', (req, res) => {
     res.status(200).send('Servidor de EasySales funcionando en este puerto. En la versión ' + pkg.version + '');
 });
  
+
+//Mantenimiento
 app.get('/easysales/status', (req, res) => {
     res.status(200).send('Servidor de En Linea');
+});
+app.get('/easysales/version', (req, res) =>{
+    return res.json({
+        version: pkg.version
+    });
 });
 app.get('/easysales/pendiente', (req, res) =>{
     const PENDING_FILE = path.join(__dirname, '..', 'updater', 'pendiente.json');
@@ -124,12 +133,25 @@ app.get('/easysales/pendiente', (req, res) =>{
     return res.json({
         pendiente: existe
     });
-})
-app.get('/easysales/version', (req, res) =>{
-    return res.json({
-        version: pkg.version
+});
+app.get('/easysales/forzar-descarga', async (req, res) => {
+  try {
+    const info = await CheckearActualizacion();
+    if (info.desactualizado) {
+      await DescargarActualizacion(info);
+      console.log("Se descargo la actualizacion")
+    }
+
+    return res.status(200).json("OK");
+
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: 'Error al forzar descarga'
     });
-})
+  }
+});
+
  
 //404
 app.use((_req, res) => {

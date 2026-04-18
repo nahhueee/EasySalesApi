@@ -7,12 +7,22 @@ import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 
 class AdminService{
-     async ObtenerVersionApp() {
+    async ObtenerVersionWeb() {
         try {
-            const version = (await axios.get(`${config.adminUrl}actualizaciones/ultima-version/${config.idApp}`)).data;
-            return version;
+            const ambiente = config.produccion ? 'prod': 'test';
+            const terminal = ObtenerTerminalLocal(); 
+
+            const data = (await axios.get(`${config.adminUrl}actualizaciones/ultima-version-backend/${config.idApp}/${ambiente}/${terminal}`)).data;
+            
+            //Obtenemos del config el estado del servidor
+            if(config.produccion)
+                data.serverStatus = 'production';
+            else
+                data.serverStatus = 'test';
+
+            return data;
         } catch (error) {
-            throw error;
+            throw mapAxiosError(error,'AdminService','ObtenerVersionWeb');
         }
     }
 
@@ -145,6 +155,16 @@ function ExisteTerminalValida(): boolean {
     } catch {
         return false;
     }
+}
+
+function ObtenerTerminalLocal(): string | null {
+    const ROOT_DIR = process.cwd();
+    const TERMINAL_FILE = path.join(ROOT_DIR, 'terminal.json');
+
+    if (!fs.existsSync(TERMINAL_FILE)) throw new Error("No se ecuentra archivo terminal.json");
+
+    const data = JSON.parse(fs.readFileSync(TERMINAL_FILE, 'utf-8'));
+    return data.terminal ?? null;
 }
 
 function GuardarTerminalLocal(terminal: string) {

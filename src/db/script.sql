@@ -97,8 +97,10 @@ CREATE TABLE productos (
     faltante INT,
     unidad VARCHAR(3),
     imagen VARCHAR(250),
-    soloPrecio BOOLEAN
+    soloPrecio BOOLEAN,
+    idCategoria INT DEFAULT 0
 );
+
 
 DROP TABLE IF EXISTS cajas;
 CREATE TABLE cajas (
@@ -130,7 +132,9 @@ CREATE TABLE ventas (
     idCaja INT,
     idCliente INT,
     fecha DATE,
-    hora VARCHAR(5)
+    hora VARCHAR(5),
+    fechaBaja DATE,
+    obsBaja VARCHAR(200)
 )
 ENGINE=InnoDB;
 
@@ -194,6 +198,15 @@ CREATE TABLE ventas_entrega_detalle (
 )
 ENGINE=InnoDB;
 
+CREATE TABLE ventas_pagos_detalle (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    idVenta INT NOT NULL,
+    idTPago INT NOT NULL,
+    idEntrega INT,
+    monto DECIMAL(10,2) NOT NULL,
+    fecha DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 DROP TABLE IF EXISTS etiquetas;
 CREATE TABLE etiquetas (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -217,16 +230,6 @@ CREATE TABLE etiquetas (
     precioColor VARCHAR(10)
 );
 
-CREATE TABLE ventas_pagos_detalle (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    idVenta INT NOT NULL,
-    idTPago INT NOT NULL,
-    monto DECIMAL(10,2) NOT NULL,
-    fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (idVenta) REFERENCES ventas(id)
-);
-
-
 DROP TABLE IF EXISTS tipos_pago;
 CREATE TABLE tipos_pago (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -239,7 +242,7 @@ INSERT INTO tipos_pago(nombre, icono, color, orden)
 VALUES 
 ('EFECTIVO', 'monetization_on', '#2dc051', 1), 
 ('TRANSFERENCIA', 'account_balance', '#2db6c8', 2), 
-('QR', 'qr_code', '#fc7b9b', 3)
+('QR', 'qr_code', '#fc7b9b', 3),
 ('TARJETA', 'credit_card', '#ee8b29', 4), 
 ('COMBINADO', 'autorenew', '#7d7d7d', 5);
 
