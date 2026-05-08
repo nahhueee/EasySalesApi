@@ -5,10 +5,11 @@
   "port": 7500,
   "idApp": 1,
   "web": false,
+  "cuilTest": "27411750723",
   "db": {
     "host": "127.0.0.1",
     "user": "root",
     "password": "1235",
-    "database": "dbeasysales"
+    "database": "dbeasysalestest"
   }
 }

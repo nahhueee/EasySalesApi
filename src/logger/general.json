@@ -1,1 +1,227 @@
-[]
+[
+  {
+    "message": "Error al imprimir el documento. Command failed: C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\node_modules\\pdf-to-printer\\dist\\SumatraPDF-3.4.6-32.exe -print-to Brother HL-1200 series -silent -print-settings portrait,noscale C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\temp\\impresion_ca4dab1c-67fe-43cc-8422-03aaf0e2f36d.pdf\n",
+    "level": "error",
+    "timestamp": "27-04-26 23:37"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al imprimir el documento.\"}",
+    "level": "error",
+    "timestamp": "27-04-26 23:37"
+  },
+  {
+    "message": "Error al imprimir el documento. Command failed: C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\node_modules\\pdf-to-printer\\dist\\SumatraPDF-3.4.6-32.exe -print-to Brother HL-1200 series -silent -print-settings portrait,noscale C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\temp\\impresion_9fde76fa-e83e-4d72-8988-16206d60b707.pdf\n",
+    "level": "error",
+    "timestamp": "27-04-26 23:38"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":500,\"error\":\"Error al imprimir el documento.\"}",
+    "level": "error",
+    "timestamp": "27-04-26 23:38"
+  },
+  {
+    "message": "Uncaught (in promise): Object: {\"status\":404,\"error\":\"No se encontró el recurso solicitado.\"}",
+    "level": "error",
+    "timestamp": "28-04-26 23:23"
+  },
+  {
+    "message": "Cannot read properties of undefined (reading 'nativeElement')",
+    "level": "error",
+    "timestamp": "29-04-26 09:12"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:09"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:09"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:10"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:10"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:11"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:11"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:12"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:12"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:15"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:15"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:16"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:16"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:17"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:17"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:17"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:17"
+  },
+  {
+    "message": "Error al generar el comprobante. undefined",
+    "level": "error",
+    "timestamp": "29-04-26 10:18"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:18"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:45"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:45"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:47"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:47"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:48"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:48"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:49"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:49"
+  },
+  {
+    "message": "Error al generar el comprobante. Cannot read properties of undefined (reading 'toLocaleString')",
+    "level": "error",
+    "timestamp": "29-04-26 10:49"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:49"
+  },
+  {
+    "message": "Error al generar el comprobante. undefined",
+    "level": "error",
+    "timestamp": "29-04-26 10:54"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:54"
+  },
+  {
+    "message": "Error al generar el comprobante. undefined",
+    "level": "error",
+    "timestamp": "29-04-26 10:55"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:55"
+  },
+  {
+    "message": "Error al generar el comprobante. undefined",
+    "level": "error",
+    "timestamp": "29-04-26 10:57"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:57"
+  },
+  {
+    "message": "Error al generar el comprobante. undefined",
+    "level": "error",
+    "timestamp": "29-04-26 10:57"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 10:57"
+  },
+  {
+    "message": "Error al generar el comprobante. undefined",
+    "level": "error",
+    "timestamp": "29-04-26 22:42"
+  },
+  {
+    "message": "Error desconocido",
+    "level": "error",
+    "timestamp": "29-04-26 22:42"
+  },
+  {
+    "message": "Cannot read properties of undefined (reading 'nativeElement')",
+    "level": "error",
+    "timestamp": "08-05-26 13:18"
+  }
+]

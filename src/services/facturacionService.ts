@@ -221,9 +221,23 @@ async function ObtenerInstanciaAfip(cuilTitular): Promise<Afip> {
         return afipInstances[cuilTitular];
     }
 
+    //#region Definir carpeta de certificados según entorno
+    const certFolder = config.produccion
+        ? path.resolve(__dirname, `../certs/`)
+        : path.resolve(__dirname, `../certs/test`);
+console.log(certFolder)
+    if (!fs.existsSync(certFolder)) {
+        throw new AppError(
+            CodigoError.CERTIFICADOS,
+            `No existe la carpeta de certificados: ${certFolder}`,
+            400
+        );
+    }
+    //#endregion
+
     //#region Certificados y Token TA
-    const certPath = path.resolve(__dirname, '../certs/cert');
-    const keyPath  = path.resolve(__dirname, '../certs/key');
+    const certPath = path.join(certFolder, 'cert');
+    const keyPath  = path.join(certFolder, 'key');
 
     if (!fs.existsSync(certPath)) throw new AppError(CodigoError.CERTIFICADOS, 'No se encontró archivo cert',400);
     if (!fs.existsSync(keyPath)) throw new AppError(CodigoError.CERTIFICADOS, 'No se encontró archivo key',400);

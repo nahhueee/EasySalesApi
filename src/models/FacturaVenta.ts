@@ -8,6 +8,7 @@ export class FacturaVenta{
     iva? : number;
     dni? : number;
     tipoDni? : number;
+    tipoDniDesc? : string;
     ptoVenta? : number;
     condReceptor? : number;
 

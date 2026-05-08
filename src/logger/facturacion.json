@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "27-04-26 23:57"
+  },
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "27-04-26 23:58"
+  },
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "28-04-26 00:30"
+  },
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "28-04-26 00:30"
+  },
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "28-04-26 23:23"
+  },
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "28-04-26 23:50"
+  },
+  {
+    "message": "ERR 600: ValidacionDeToken: No apareció CUIT en lista de relaciones: 20328751780",
+    "level": "error",
+    "timestamp": "29-04-26 00:02"
+  },
+  {
+    "message": "OBS 10243: El campo Condicion IVA receptor no es valido para la clase de comprobante informado. Consular metodo FEParamGetCondicionIvaReceptor",
+    "level": "error",
+    "timestamp": "29-04-26 23:40"
+  }
+]

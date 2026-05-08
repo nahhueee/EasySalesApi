@@ -7,11 +7,13 @@ const path = require('path');
 
 import { procesarExcel } from '../services/excelService';
 import { ParametrosRepo } from '../data/parametrosRepository';
-import ComprobanteServ from '../services/comprobanteService';
+import { ComprobanteService } from '../services/comprobanteService';
+const ComprobanteServ = new ComprobanteService();
 
 //#region IMPRESION DE PDFS
 const printer = require('pdf-to-printer');
 const fs = require('fs');
+
 
 router.post('/imprimir-pdf', async (req: Request, res: Response) => {
   try {
@@ -48,7 +50,9 @@ router.post('/imprimir-pdf', async (req: Request, res: Response) => {
 router.post('/ver-comprobante/:tipoComprobante', async (req: Request, res: Response) => {
   try {
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
-    const pdfBuffer = await ComprobanteServ.GenerarComprobantePDF(req.body, parametrosImpresion, req.params.tipoComprobante);
+    const tipo = req.params.tipoComprobante;
+
+    const pdfBuffer = await ComprobanteServ.GenerarComprobantePDF(req.body, parametrosImpresion, tipo);
 
     // Devolver el PDF
     res.setHeader('Content-Type', 'application/pdf');
