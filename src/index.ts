@@ -5,6 +5,29 @@ import config from './conf/app.config';
 import pkg from '../package.json';
 import { DescargarActualizacion } from '../updater/config/DescargarActualizacion';
 import { CheckearActualizacion } from '../updater/config/CheckearActualizacion';
+import { logger } from './logger/logger';
+import { CodigoError } from './logger/CodigosError';
+
+// Captura de errores no controlados.
+// Garantiza que promesas rechazadas sin .catch() y excepciones síncronas
+// fuera de Express queden logueadas (y lleguen a AdminServer vía ErrorBatchTransport).
+process.on('unhandledRejection', (reason: unknown) => {
+    logger.error({
+        code:    CodigoError.INTERNAL_ERROR,
+        message: reason instanceof Error ? reason.message : String(reason),
+        type:    'UNHANDLED_REJECTION',
+        stack:   reason instanceof Error ? reason.stack : undefined,
+    });
+});
+
+process.on('uncaughtException', (err: Error) => {
+    logger.error({
+        code:    CodigoError.INTERNAL_ERROR,
+        message: err.message,
+        type:    'UNCAUGHT_EXCEPTION',
+        stack:   err.stack,
+    });
+});
 
 const http = require('http');
 const path = require('path');
@@ -106,8 +129,17 @@ if(!config.web)
 
 import {ServidorServ} from './services/servidorService';
 import { errorMiddleware } from './middlewares/errorMiddleware';
+import { HeartbeatServ } from './services/heartbeatService';
+import { ErrorBatchServ } from './services/errorBatchService';
+
 if(!config.web){
     ServidorServ.IniciarModoServidor();
+}
+
+// Heartbeat y batch de errores: corren en toda instancia con terminal.json presente
+if(!config.web){
+    HeartbeatServ.IniciarCron();
+    ErrorBatchServ.IniciarCron();
 }
 
 

@@ -22,6 +22,14 @@ import path from 'path';
 import fs from 'fs';
 import { LoggerActualizacion as logger } from '../config/LogggerActualizacion';
 
+/**
+ * Umbral para auto-apply.
+ * Si tamanoBytes < este valor, la actualización se descarga Y se aplica
+ * en el mismo arranque (sin esperar el siguiente boot).
+ * 50 MB es un límite conservador para actualizaciones de código sin assets pesados.
+ */
+const AUTO_APPLY_THRESHOLD_BYTES = 50 * 1024 * 1024; // 50 MB
+
 
 /**
  * Metadatos fijos para logging estructurado.
@@ -157,22 +165,34 @@ export async function CheckearActualizacion() {
      * - DescargarActualizacion
      * - AplicarActualizacion
      */
+    const tamanoBytes: number | null = respuesta.tamanoBytes ?? null;
+
     return {
       local: localVersion,        // versión instalada
       remote: remoteVersion,      // versión disponible
       desactualizado,             // booleano simple
 
-      ambiente: respuesta.estado,        // prod | test 
-      link: respuesta.link,            // URL del ZIP
+      link: respuesta.link,       // URL del ZIP
+
+      // Flags de instalación
+      requiereNpmInstall: respuesta.requiereNpmInstall ?? true, // default seguro: asumir que sí
+      tamanoBytes,
+
+      /**
+       * autoAplicar: true cuando tamanoBytes está disponible y es menor al umbral.
+       * Permite que bootstrap descargue y aplique en el mismo arranque.
+       * undefined/null tamanoBytes → false (no auto-apply si no tenemos el dato).
+       */
+      autoAplicar: tamanoBytes !== null && desactualizado && tamanoBytes < AUTO_APPLY_THRESHOLD_BYTES,
 
       // Información informativa (changelog)
       notas: {
-        resumen: respuesta.resumen,
-        mejoras: respuesta.mejoras,
+        resumen:      respuesta.resumen,
+        mejoras:      respuesta.mejoras,
         correcciones: respuesta.correcciones
       },
 
-      fecha: respuesta.fecha_publicacion          // fecha de publicación
+      fecha: respuesta.fecha_publicacion
     };
 
   } catch (error) {

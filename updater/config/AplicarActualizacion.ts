@@ -18,9 +18,6 @@ import path from 'path';
 import unzipper from 'unzipper';
 import { execSync } from 'child_process';
 import { LoggerActualizacion as logger } from '../config/LogggerActualizacion';
-import axios from 'axios';
-import config from '../../src/conf/app.config';
-import isOnline from 'is-online';
 
 
 
@@ -39,6 +36,13 @@ interface Pendiente {
 
   /** Último error registrado (si falló) */
   ultimoError?: string;
+
+  /**
+   * Si false: se omite npm install durante la aplicación.
+   * Ahorra 3-5 minutos en actualizaciones que no modifican dependencias.
+   * Default: true (comportamiento conservador).
+   */
+  requiereNpmInstall?: boolean;
 
   /**
    * Estado actual de la actualización:
@@ -80,7 +84,8 @@ const PENDING_FILE = path.join(ROOT_DIR, 'updater/pendiente.json');
  * Carpeta donde se almacenan los backups previos a una actualización.
  * Permite rollback si algo falla a mitad del proceso.
  */
-const BACKUP_DIR = path.join(ROOT_DIR, 'updater/backup');
+const BACKUP_DIR   = path.join(ROOT_DIR, 'updater/backup');
+const EVENTO_PATH  = path.join(ROOT_DIR, 'updater/evento-actualizacion.json');
 
 export async function AplicarActualizacion() {
 
@@ -199,31 +204,36 @@ export async function AplicarActualizacion() {
     /**
      * PASO 3 — DEPENDENCIAS
      * --------------------
-     * Se ejecuta npm install para asegurar coherencia del entorno.
-     * Tiene timeout para evitar bloqueos eternos.
+     * Se ejecuta npm install solo si requiereNpmInstall = true (o no está definido).
+     * Cuando false: se ahorra 3-5 minutos de instalación para actualizaciones
+     * que no modifican dependencias (solo código fuente).
      */
-    logger.info('Instalando dependencias.', { fase, modulo });
+    if (pendiente.requiereNpmInstall !== false) {
+      logger.info('Instalando dependencias.', { fase, modulo });
 
-    const packageJsonPath = path.join(ROOT_DIR, 'package.json');
-    if (fs.existsSync(packageJsonPath)) {
-      try {
-        execSync('npm install', {
-          stdio: 'pipe',
-          cwd: ROOT_DIR,
-          windowsHide: true,
-          timeout: 300000 // 5 minutos
-        });
+      const packageJsonPath = path.join(ROOT_DIR, 'package.json');
+      if (fs.existsSync(packageJsonPath)) {
+        try {
+          execSync('npm install', {
+            stdio: 'pipe',
+            cwd: ROOT_DIR,
+            windowsHide: true,
+            timeout: 300000 // 5 minutos
+          });
 
-        logger.info('Dependencias instaladas correctamente.', { fase, modulo });
-      } catch (npmError) {
-        logger.error('Error al instalar dependencias.', {
-          fase,
-          modulo,
-          error: npmError instanceof Error ? npmError.message : npmError
-        });
+          logger.info('Dependencias instaladas correctamente.', { fase, modulo });
+        } catch (npmError) {
+          logger.error('Error al instalar dependencias.', {
+            fase,
+            modulo,
+            error: npmError instanceof Error ? npmError.message : npmError
+          });
 
-        throw new Error('Error al intentar instalar dependencias');
+          throw new Error('Error al intentar instalar dependencias');
+        }
       }
+    } else {
+      logger.info('npm install omitido (requiereNpmInstall = false).', { fase, modulo });
     }
 
     /**
@@ -278,18 +288,8 @@ export async function AplicarActualizacion() {
      * - Se informa al servidor
      */
     logger.info(`Versión ${pendiente.version} aplicada exitosamente.`, {fase, modulo});
-    
-    const terminal = ObtenerTerminalLocal();
-    const conectado = await isOnline();
-    const REPORTE_PENDIENTE_PATH = path.join(ROOT_DIR, 'updater/reporte-version-pendiente.json');
 
-    if(conectado){ 
-      await axios.get(`${config.adminUrl}appscliente/informar/backend/${terminal}/${pendiente.version}`);
-      if (fs.existsSync(REPORTE_PENDIENTE_PATH)) fs.unlinkSync(REPORTE_PENDIENTE_PATH);
-    }else{
-      logger.warn(`Sin conectividad. Se informará la versión en el proximo arranque.`, {fase, modulo});
-      GuardarReportePendiente(pendiente.version, terminal!, REPORTE_PENDIENTE_PATH);
-    }
+    EscribirEvento('aplicacion_exitosa', pendiente.version, null, pendiente.reintentos);
 
     fs.unlinkSync(PENDING_FILE);
     if (fs.existsSync(pendiente.zip)) fs.unlinkSync(pendiente.zip);
@@ -312,6 +312,8 @@ export async function AplicarActualizacion() {
     pendiente.estado = 'fallo';
     pendiente.ultimoError = error.message;
     fs.writeFileSync(PENDING_FILE, JSON.stringify(pendiente, null, 2));
+
+    EscribirEvento('aplicacion_fallida', pendiente.version, error.message, pendiente.reintentos);
 
     /**
      * ROLLBACK
@@ -384,27 +386,21 @@ function copiarArchivos(sourcePath: string, targetPath: string) {
   }
 }
 
-function ObtenerTerminalLocal(): string | null {
-  const ROOT_DIR = process.cwd();
-  const TERMINAL_FILE = path.join(ROOT_DIR, 'terminal.json');
-
-    if (!fs.existsSync(TERMINAL_FILE)) throw new Error("No se ecuentra archivo terminal.json");
-
-    const data = JSON.parse(fs.readFileSync(TERMINAL_FILE, 'utf-8'));
-    return data.terminal ?? null;
-}
-
-function GuardarReportePendiente(version: string, terminal: string, path: string) {
-  fs.writeFileSync(
-    path,
-    JSON.stringify(
-      {
-        version,
-        terminal,
-        fecha: new Date().toISOString()
-      },
-      null,
-      2
-    )
-  );
+function EscribirEvento(
+  tipo: 'aplicacion_exitosa' | 'aplicacion_fallida' | 'rollback_exitoso' | 'rollback_fallido',
+  version: string,
+  error: string | null,
+  reintentos: number
+) {
+  try {
+    fs.writeFileSync(EVENTO_PATH, JSON.stringify({
+      tipo,
+      version,
+      error,
+      reintentos,
+      fecha: new Date().toISOString(),
+    }, null, 2));
+  } catch {
+    // No crítico: si no se puede escribir el evento, no se interrumpe el flujo.
+  }
 }

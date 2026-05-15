@@ -38,16 +38,42 @@ exports.up = async function(knex) {
   }
 
   // =========================
-  // 3. MODIFY columnas (raw → knex no maneja bien modify)
+  // 3. MODIFY columnas solo si existen
   // =========================
-  await knex.raw(`
-    ALTER TABLE ventas_pago
-    MODIFY idPago INT DEFAULT 0,
-    MODIFY efectivo DECIMAL(10,2) DEFAULT 0,
-    MODIFY digital DECIMAL(10,2) DEFAULT 0,
-    MODIFY recargo DECIMAL(10,2) DEFAULT 0,
-    MODIFY descuento DECIMAL(10,2) DEFAULT 0
-  `);
+
+  const columnasModificar = [
+    {
+      nombre: 'idPago',
+      sql: 'MODIFY idPago INT DEFAULT 0'
+    },
+    {
+      nombre: 'efectivo',
+      sql: 'MODIFY efectivo DECIMAL(10,2) DEFAULT 0'
+    },
+    {
+      nombre: 'digital',
+      sql: 'MODIFY digital DECIMAL(10,2) DEFAULT 0'
+    },
+    {
+      nombre: 'recargo',
+      sql: 'MODIFY recargo DECIMAL(10,2) DEFAULT 0'
+    },
+    {
+      nombre: 'descuento',
+      sql: 'MODIFY descuento DECIMAL(10,2) DEFAULT 0'
+    }
+  ];
+
+  for (const col of columnasModificar) {
+    const existe = await knex.schema.hasColumn('ventas_pago', col.nombre);
+
+    if (existe) {
+      await knex.raw(`
+        ALTER TABLE ventas_pago
+        ${col.sql}
+      `);
+    }
+  }
 
   // =========================
   // 4. Alter ventas
@@ -70,36 +96,41 @@ exports.up = async function(knex) {
   // =========================
   // 5. Migración de datos (idempotente real)
   // =========================
+  const hasEfectivo = await knex.schema.hasColumn('ventas_pago', 'efectivo');
+  const hasDigital = await knex.schema.hasColumn('ventas_pago', 'digital');
+  const hasIdPago = await knex.schema.hasColumn('ventas_pago', 'idPago');
 
-  // efectivo
-  await knex.raw(`
-    INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto)
-    SELECT vp.idVenta, vp.idPago, vp.efectivo
-    FROM ventas_pago vp
-    WHERE vp.efectivo > 0
-      AND NOT EXISTS (
-        SELECT 1
-        FROM ventas_pagos_detalle vpd
-        WHERE vpd.idVenta = vp.idVenta
-          AND vpd.idTPago = vp.idPago
-          AND vpd.monto = vp.efectivo
-      )
-  `);
+  if (hasEfectivo && hasIdPago) {
+    await knex.raw(`
+      INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto)
+      SELECT vp.idVenta, vp.idPago, vp.efectivo
+      FROM ventas_pago vp
+      WHERE vp.efectivo > 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ventas_pagos_detalle vpd
+          WHERE vpd.idVenta = vp.idVenta
+            AND vpd.idTPago = vp.idPago
+            AND vpd.monto = vp.efectivo
+        )
+    `);
+  }
 
-  // digital
-  await knex.raw(`
-    INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto)
-    SELECT vp.idVenta, vp.idPago, vp.digital
-    FROM ventas_pago vp
-    WHERE vp.digital > 0
-      AND NOT EXISTS (
-        SELECT 1
-        FROM ventas_pagos_detalle vpd
-        WHERE vpd.idVenta = vp.idVenta
-          AND vpd.idTPago = vp.idPago
-          AND vpd.monto = vp.digital
-      )
-  `);
+  if (hasDigital && hasIdPago) {
+    await knex.raw(`
+      INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto)
+      SELECT vp.idVenta, vp.idPago, vp.digital
+      FROM ventas_pago vp
+      WHERE vp.digital > 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ventas_pagos_detalle vpd
+          WHERE vpd.idVenta = vp.idVenta
+            AND vpd.idTPago = vp.idPago
+            AND vpd.monto = vp.digital
+        )
+    `);
+  }
 };
 
 exports.down = async function(knex) {

@@ -1,27 +1,36 @@
 /**
  * BOOTSTRAP PRINCIPAL DEL SISTEMA
  * --------------------------------
- * Este archivo es el punto de entrada real de la aplicación.
- * Su responsabilidad es:
- * 1) Levantar un servidor de estado (health / mantenimiento)
- * 2) Intentar aplicar una actualización ya descargada
- * 3) Verificar si hay nuevas actualizaciones
- * 4) Descargar actualizaciones si corresponde
- * 5) Iniciar la aplicación principal
+ * Punto de entrada real de la aplicación. Orquesta el flujo completo
+ * antes de levantar la API de negocio.
  *
- * TODO el flujo está logueado para diagnóstico remoto en clientes.
+ * Orden de ejecución:
+ * 0) Verificar si hay rollback pendiente (mayor prioridad)
+ * 1) Aplicar actualización ya descargada (si existe)
+ * 2) Verificar si hay una nueva versión disponible
+ * 3) Descargar actualización si corresponde
+ *    3b) Auto-apply si la actualización es pequeña (< 50 MB)
+ * 4) Iniciar la aplicación principal
+ *
+ * Regla de oro: el bootstrap NUNCA bloquea el arranque definitivo.
+ * Ante cualquier falla en el updater, se intenta iniciar la versión actual.
+ *
+ * Todo el flujo queda logueado para diagnóstico remoto en clientes.
  */
 
 import http from 'http';
 import { CheckearActualizacion } from './updater/config/CheckearActualizacion';
 import { DescargarActualizacion } from './updater/config/DescargarActualizacion';
 import { AplicarActualizacion } from './updater/config/AplicarActualizacion';
+import { EjecutarRollback } from './updater/config/EjecutarRollback';
 import { LoggerActualizacion as logger } from './updater/config/LogggerActualizacion';
 import isOnline from 'is-online';
-import axios from 'axios';
-import config from './src/conf/app.config';
 import fs from 'fs';
 import path from 'path';
+
+const ROOT_DIR           = process.cwd();
+const ROLLBACK_PENDIENTE = path.join(ROOT_DIR, 'updater', 'pendiente-rollback.json');
+const BACKUP_SRC         = path.join(ROOT_DIR, 'updater', 'backup', 'src');
 
 /**
  * Estados posibles del sistema.
@@ -29,6 +38,7 @@ import path from 'path';
  */
 type EstadoSistema =
   | 'iniciando'
+  | 'aplicando_rollback'
   | 'aplicando_actualizacion'
   | 'verificando_actualizacion'
   | 'descargando_actualizacion'
@@ -86,9 +96,36 @@ statusServer.listen(7501, () => {
 async function bootstrap() {
   try {
     /**
-     * Antes que nada verificamos si hay informes pendientes, para mandarlos y luego seguir con el proceso
-    */
-    await informarVersionPendiente();
+     * 0️⃣ Verificar si AdminServer ordenó un rollback
+     * ------------------------------------------------
+     * Tiene prioridad sobre todo: si hay una instrucción de rollback,
+     * revertimos antes de intentar aplicar actualizaciones o iniciar la app.
+     * El archivo pendiente-rollback.json lo escribe heartbeatService.ts
+     * cuando AdminServer responde con { rollback: true }.
+     */
+    estado.fase    = 'aplicando_rollback';
+    estado.mensaje = 'Verificando rollback pendiente...';
+
+    try {
+      const revertido = await EjecutarRollback();
+      if (revertido) {
+        logger.info('Rollback aplicado. Reiniciando para cargar versión anterior.', {
+          fase: estado.fase,
+          modulo: 'bootstrap'
+        });
+        setTimeout(() => { statusServer.close(); process.exit(0); }, 2000);
+        return;
+      }
+    } catch (rollbackErr) {
+      // Error recuperable: EjecutarRollback falló inesperadamente.
+      // Se continúa con el arranque normal — mejor levantar la versión
+      // actual que quedar sin servicio.
+      logger.error('Error inesperado en EjecutarRollback. Continuando arranque.', {
+        fase:   estado.fase,
+        modulo: 'bootstrap',
+        error:  rollbackErr instanceof Error ? rollbackErr.message : rollbackErr
+      });
+    }
 
     /**
      * 1️⃣ Intentar aplicar una actualización YA DESCARGADA
@@ -124,16 +161,13 @@ async function bootstrap() {
         return;
       }
     } catch (updateErr) {
-      /**
-       * ERROR RECUPERABLE
-       * -----------------
-       * Falló la aplicación de la actualización,
-       * pero el sistema puede continuar e intentar iniciar la app.
-       */
-      logger.error('Error crítico en el flujo de actualización.', {
-        fase: estado.fase,
-        modulo: 'AplicarActualizacion',
-        error: updateErr instanceof Error ? updateErr.message : updateErr
+      // Error recuperable: AplicarActualizacion lanzó una excepción no controlada
+      // (en condiciones normales maneja sus propios errores y retorna false).
+      // El sistema continúa e intenta arrancar con la versión actual.
+      logger.error('Excepción no controlada en AplicarActualizacion.', {
+        fase:   estado.fase,
+        modulo: 'bootstrap',
+        error:  updateErr instanceof Error ? updateErr.message : updateErr
       });
     }
 
@@ -170,6 +204,51 @@ async function bootstrap() {
           });
 
           await DescargarActualizacion(info);
+
+          /**
+           * 3b AUTO-APPLY
+           * --------------
+           * Si la actualización es pequeña (< 50 MB y tamanoBytes informado),
+           * la aplicamos en este mismo arranque en lugar de esperar el próximo.
+           * Resultado: 1 reinicio en lugar de 2.
+           */
+          if (info.autoAplicar) {
+            logger.info('Actualización elegible para auto-apply. Aplicando en este arranque.', {
+              fase: estado.fase,
+              modulo: 'bootstrap',
+              tamanoBytes: info.tamanoBytes
+            });
+
+            estado.fase = 'aplicando_actualizacion';
+            estado.mensaje = 'Aplicando actualización automática...';
+
+            try {
+              const aplicada = await AplicarActualizacion();
+
+              if (aplicada) {
+                logger.info('Auto-apply exitoso. Reiniciando para cargar nuevos binarios.', {
+                  fase: estado.fase,
+                  modulo: 'bootstrap'
+                });
+
+                setTimeout(() => {
+                  statusServer.close();
+                  process.exit(0);
+                }, 2000);
+
+                return;
+              }
+            } catch (autoApplyErr) {
+              // Error recuperable: se continúa con el arranque normal.
+              // La actualización quedó descargada y se aplicará en el próximo arranque.
+              logger.error('Error en auto-apply. Se aplicará en el próximo arranque.', {
+                fase: estado.fase,
+                modulo: 'bootstrap',
+                error: autoApplyErr instanceof Error ? autoApplyErr.message : autoApplyErr
+              });
+            }
+          }
+
         } else {
           /**
            * Caso feliz: sistema actualizado.
@@ -182,7 +261,7 @@ async function bootstrap() {
               versionActual: info.local
             });
           }
-        
+
         }
       }else{
         logger.warn(
@@ -192,16 +271,12 @@ async function bootstrap() {
       }
       
     } catch (checkErr) {
-      /**
-       * ERROR RECUPERABLE
-       * -----------------
-       * No se pudo verificar o descargar actualización.
-       * Se continúa intentando iniciar la aplicación.
-       */
-      logger.error('Error crítico en el flujo de actualización.', {
-        fase: estado.fase,
-        modulo: 'CheckearActualizacion',
-        error: checkErr instanceof Error ? checkErr.message : checkErr
+      // Error recuperable: falló la verificación o descarga de actualización.
+      // No es crítico — se continúa con el arranque normal.
+      logger.error('Error en verificación/descarga de actualización.', {
+        fase:   estado.fase,
+        modulo: 'bootstrap',
+        error:  checkErr instanceof Error ? checkErr.message : checkErr
       });
     }
 
@@ -277,41 +352,25 @@ async function iniciarApp() {
       error: err instanceof Error ? err.message : err
     });
 
+    // Si hay backup disponible y aún no hay rollback pendiente,
+    // programamos rollback automático para el próximo arranque.
+    if (fs.existsSync(BACKUP_SRC) && !fs.existsSync(ROLLBACK_PENDIENTE)) {
+      try {
+        fs.writeFileSync(ROLLBACK_PENDIENTE, JSON.stringify({
+          instruccion: 'rollback',
+          fecha:       new Date().toISOString(),
+          origen:      'auto_inicio_fallido',
+        }, null, 2));
+        logger.warn('App no pudo iniciar. Rollback automático programado para el próximo arranque.', {
+          fase:   estado.fase,
+          modulo: 'bootstrap'
+        });
+      } catch { /* no crítico */ }
+    }
+
     process.exit(1);
   }
 }
-
-/**
- * Informes Pendientes.
- * Se encarga de informar actualizaciones si durante el proceso de aplicacición no se pudo realizar
-*/
-async function informarVersionPendiente() {
-  const ROOT_DIR = process.cwd();
-  const REPORTE_PENDIENTE_PATH = path.join(ROOT_DIR, 'updater/reporte-version-pendiente.json');
-  
-  if (!fs.existsSync(REPORTE_PENDIENTE_PATH)) return;
-
-  const data = JSON.parse(fs.readFileSync(REPORTE_PENDIENTE_PATH, 'utf-8'));
-
-  const conectado = await isOnline();
-  if (!conectado) return;
-
-  try {
-    await axios.get(
-      `${config.adminUrl}appscliente/informar/backend/${data.terminal}/${data.version}`
-    );
-
-    fs.unlinkSync(REPORTE_PENDIENTE_PATH);
-
-    logger.info(
-      'Versión pendiente informada correctamente.',
-      { modulo: 'bootstrap' }
-    );
-  } catch {
-    // se deja el archivo → próximo arranque
-  }
-}
-
 
 // Punto de entrada real
 bootstrap();
