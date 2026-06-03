@@ -1,217 +1,174 @@
-# 🧩 Proceso de Actualización Automática
+# Proceso de Actualización y Rollback
 
-Este documento describe **de forma integral** cómo funciona el sistema de actualización automática de la aplicación.
+Describe cómo funciona el sistema de actualización automática, rollback y reporte de eventos a AdminServer.
 
-El objetivo principal del updater es:
+El objetivo principal es:
 
 * Mantener la aplicación actualizada de forma **segura y controlada**
-* Evitar downgrades accidentales
-* Ser **tolerante a fallos**
-* Permitir **diagnóstico rápido** en entornos de clientes
+* Soportar **rollback remoto** ordenado desde AdminServer
+* Reportar el resultado de cada operación a la flota
+* Ser tolerante a fallos: ante cualquier error, la app levanta con la versión actual
 
 ---
 
-## 🧠 Principios de diseño
-
-El sistema fue construido bajo los siguientes principios:
+## Principios de diseño
 
 * **Separación de responsabilidades**: cada módulo hace una sola cosa
 * **Idempotencia**: puede ejecutarse múltiples veces sin romper el estado
 * **Fail-safe**: ante errores, la app sigue funcionando con la versión actual
-* **Sin downgrades automáticos**
-* **Logs claros y estructurados** para soporte técnico
+* **Sin downgrades automáticos** (excepto rollback explícito)
+* **Logs claros y estructurados** para diagnóstico remoto
 
 ---
 
-## 🏗 Arquitectura general
+## Arquitectura general
 
-El proceso completo ocurre durante el arranque de la aplicación y está compuesto por 4 módulos principales:
+El proceso ocurre durante el arranque y está compuesto por estos módulos:
 
-1. `bootstrap.ts`
-2. `CheckearActualizacion.ts`
-3. `DescargarActualizacion.ts`
-4. `AplicarActualizacion.ts`
+```
+bootstrap.ts
+├── EjecutarRollback.ts      ← 0️⃣ prioridad máxima
+├── AplicarActualizacion.ts  ← 1️⃣ si hay pendiente.json
+├── CheckearActualizacion.ts ← 2️⃣ si hay conectividad
+├── DescargarActualizacion.ts← 3️⃣ si hay versión nueva
+└── src/index.ts             ← 4️⃣ arranque normal
+```
 
-Cada módulo se ejecuta en orden y **solo si corresponde**.
-
----
-
-## 🚀 1. Bootstrap (orquestador)
-
-**Responsabilidad:**
-
-* Coordinar todo el flujo de actualización
-* Exponer un servidor de estado (`/status`)
-* Garantizar que la aplicación arranque incluso si el updater falla
-
-**Flujo:**
-
-1. Inicia el servidor de estado
-2. Intenta aplicar una actualización pendiente
-3. Si no hay pendiente o falla:
-
-   * Chequea si hay una nueva versión
-   * Descarga la actualización si corresponde
-4. Inicia la aplicación principal
-
-**Regla clave:**
-
-> El bootstrap **nunca bloquea el arranque definitivo** de la app.
+Cada módulo se ejecuta solo si corresponde. Un fallo en cualquier paso no bloquea el arranque.
 
 ---
 
-## 🔍 2. CheckearActualizacion
+## 0. EjecutarRollback
 
-**Responsabilidad:**
+**Se activa cuando:** existe `updater/pendiente-rollback.json`
 
-* Consultar al servidor administrativo
-* Comparar versión local vs remota
-* Describir el estado actual de versiones
+**Origen del archivo:** `heartbeatService.ts` lo escribe cuando AdminServer responde `{ rollback: true }` al heartbeat. También se crea automáticamente si `iniciarApp()` falla y hay un backup disponible.
 
-**NO hace:**
+**Qué hace:**
+1. Verifica que `updater/backup/src` exista
+2. Restaura `src/` y `package.json` desde el backup
+3. Elimina `pendiente-rollback.json`
+4. Retorna `true` → bootstrap reinicia el proceso
 
-* No descarga
-* No aplica
-* No reinicia
+**Si falla:** elimina el pendiente (para no quedar en loop), continúa con arranque normal.
 
-### Comparación de versiones
+---
 
-Se utiliza comparación semántica `X.Y.Z`:
+## 1. AplicarActualizacion
+
+**Se activa cuando:** existe `updater/pendiente.json`
+
+**Flujo interno:**
+1. Leer y validar `pendiente.json`
+2. Verificar límite de reintentos (máx. 3)
+3. Crear backup en `updater/backup/` (`src/`, `package.json`, `package-lock.json`)
+4. Extraer ZIP sobre el directorio raíz
+5. `npm install` (si `requiereNpmInstall !== false`)
+6. Ejecutar migraciones con knex
+7. Escribir `updater/evento-actualizacion.json` con resultado
+8. Limpiar `pendiente.json` y el ZIP
+
+**Si falla:**
+* Rollback automático desde `updater/backup/`
+* Escribe evento `aplicacion_fallida` con mensaje de error
+* Incrementa `reintentos` en `pendiente.json`
+
+**Protección anti-loop:** si `reintentos >= 3`, marca como `bloqueado` y no reintenta.
+
+---
+
+## 2. CheckearActualizacion
+
+**Responsabilidad:** consultar AdminServer y comparar versión local vs remota.
+
+No descarga, no aplica, no reinicia.
 
 | Escenario      | Resultado               |
-| -------------- | ----------------------- |
+|----------------|-------------------------|
 | Remota > Local | `desactualizado = true` |
-| Remota = Local | No acción               |
-| Remota < Local | ⚠ Downgrade ignorado    |
+| Remota = Local | Sin acción              |
+| Remota < Local | Downgrade ignorado      |
 
-> ⚠ Nunca se permite bajar de versión automáticamente.
+Ante errores (timeout, AdminServer caído): asume que no hay actualización, continúa.
 
-Ante errores (timeout, backend caído):
-
-* Se asume que **no hay actualización**
-* El sistema continúa normalmente
+**Distribución canary/producción:** AdminServer controla qué versión recibe cada terminal. Las releases tienen estado `canary` o `produccion`. Las terminales listadas en `canary_terminals` reciben releases `canary` antes del rollout general. El resto solo recibe releases en estado `produccion`. El updater no gestiona esta lógica — simplemente recibe la versión que AdminServer decide entregar para esa terminal.
 
 ---
 
-## 📥 3. DescargarActualizacion
+## 3. DescargarActualizacion
 
-**Responsabilidad:**
+**Responsabilidad:** descargar el ZIP de la nueva versión y registrar `pendiente.json`.
 
-* Descargar el ZIP de la nueva versión
-* Registrar que existe una actualización pendiente
+* Descarga en modo stream (sin cargar en memoria)
+* Si el ZIP ya existe, no vuelve a bajar
+* Escribe `pendiente.json` al finalizar
 
-**Características clave:**
+**Flag `autoAplicar`:** si `tamanoBytes < 50 MB`, bootstrap aplica la actualización en el mismo arranque (1 reinicio en lugar de 2).
 
-* Descarga en modo **stream** (no consume memoria)
-* Descarga **idempotente** (si el ZIP existe, no se baja de nuevo)
-* Manejo de versiones pendientes antiguas
-
-### Archivo `pendiente.json`
-
-Este archivo indica que hay una actualización lista para aplicar.
-
-Contiene:
-
-* versión
-* ruta al ZIP
-* fecha de descarga
-* reintentos
-* último error
-
-> ⚠ Descargar **no aplica** la actualización
+**Flag `requiereNpmInstall`:** si `false`, se omite `npm install` (~3-5 min ahorrados).
 
 ---
 
-## ♻ 4. AplicarActualizacion
+## 4. Arranque normal
 
-**Responsabilidad:**
+Una vez superados los pasos anteriores, se lanza `src/index.ts`.
 
-* Aplicar una actualización descargada
-* Proteger el sistema ante fallos
-
-### Flujo interno
-
-1. Leer `pendiente.json`
-2. Verificar límites de reintentos
-3. Crear backup de archivos críticos
-4. Extraer ZIP
-5. Instalar dependencias (`npm install`)
-6. Ejecutar migraciones
-7. Confirmar éxito y limpiar estado
+Si el arranque falla (`import` lanza excepción):
+* Se loguea el error
+* Si existe `updater/backup/src`, se escribe `pendiente-rollback.json` automáticamente
+* El próximo arranque ejecutará el rollback antes de volver a intentar
 
 ---
 
-### 🛡 Manejo de errores
+## Eventos de actualización
 
-Si ocurre cualquier error:
+Cada operación de update o rollback escribe `updater/evento-actualizacion.json`:
 
-* Se incrementa el contador de reintentos
-* Se registra el error en `pendiente.json`
-* Se ejecuta **rollback automático** usando el backup
-* El sistema continúa con la versión anterior
+```json
+{
+  "tipo": "aplicacion_exitosa | aplicacion_fallida | rollback_exitoso | rollback_fallido",
+  "version": "1.4.0",
+  "error": null,
+  "reintentos": 1,
+  "fecha": "2026-05-13T..."
+}
+```
 
-Si los reintentos ≥ 3:
-
-* La actualización se marca como **bloqueada**
-* No se vuelve a intentar automáticamente
-
----
-
-## 📦 Backups
-
-Antes de aplicar una actualización se respaldan:
-
-* `src/`
-* `package.json`
-* `package-lock.json`
-
-Esto permite volver al último estado funcional ante cualquier falla.
+El `heartbeatService.ts` adjunta este archivo al próximo pulso hacia AdminServer, que lo persiste en `eventos_actualizacion`. El panel de flota muestra el último evento por terminal. El archivo se elimina una vez que AdminServer confirma la recepción.
 
 ---
 
-## 🩺 Logs y diagnóstico
+## Archivos de estado
 
-Todo el sistema utiliza **logging estructurado (Winston)** con:
-
-* `fase`
-* `modulo`
-* mensajes claros y accionables
-
-Esto permite:
-
-* Detectar en qué paso falló una actualización
-* Diagnosticar errores en máquinas de clientes
-* Reconstruir el historial del updater
+| Archivo                              | Propósito                                      |
+|--------------------------------------|------------------------------------------------|
+| `updater/pendiente.json`             | Actualización descargada esperando aplicación  |
+| `updater/pendiente-rollback.json`    | Instrucción de rollback pendiente              |
+| `updater/evento-actualizacion.json`  | Resultado del último update/rollback           |
+| `updater/backup/`                    | Copia de seguridad pre-update                  |
 
 ---
 
-## ✅ Garantías del sistema
+## Garantías del sistema
 
-✔ La app **siempre intenta arrancar**
-✔ Nunca se baja de versión automáticamente
-✔ Las actualizaciones son seguras y reversibles
-✔ El sistema soporta reinicios inesperados
-✔ Los errores quedan registrados
-
----
-
-## 🧠 Resumen mental rápido
-
-> **Checkear → Descargar → Marcar pendiente → Reiniciar → Aplicar → Reiniciar → Listo**
-
-Si algo falla en cualquier punto:
-
-> **Rollback + logs + versión anterior funcionando**
+* La app siempre intenta arrancar
+* Nunca se baja de versión automáticamente (solo por rollback explícito)
+* Las actualizaciones son reversibles
+* Los errores quedan registrados y son visibles desde AdminServer
+* AdminServer puede ordenar un rollback remotamente en cualquier momento
 
 ---
 
-## 📌 Nota final
+## Flujo mental rápido
 
-Este updater está diseñado para entornos reales:
+**Update normal:**
+> Checkear → Descargar → `pendiente.json` → Reiniciar → Aplicar → Reiniciar → Listo
 
-* clientes finales
-* conexiones inestables
-* errores humanos
-* reinicios inesperados
+**Update con auto-apply (< 50 MB):**
+> Checkear → Descargar → Aplicar → Reiniciar → Listo  *(1 reinicio menos)*
 
-No busca ser "rápido", sino **confiable**.
+**Rollback remoto:**
+> AdminServer ordena rollback → Heartbeat recibe instrucción → `pendiente-rollback.json` → Reiniciar → Restaurar backup → Reiniciar → Listo
+
+**Fallo de arranque post-update:**
+> `iniciarApp()` falla → `pendiente-rollback.json` automático → Reiniciar → Restaurar backup → Reiniciar → Listo

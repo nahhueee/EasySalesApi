@@ -176,6 +176,11 @@ export async function DescargarActualizacion(info: any) {
         descargado: new Date().toISOString(),
         reintentos: 0,                   // Intentos de aplicación
         ultimoError: '',
+        /**
+         * Si false: AplicarActualizacion omite npm install (~30s vs 3-5min).
+         * Default true para ser conservador con datos faltantes.
+         */
+        requiereNpmInstall: info.requiereNpmInstall ?? true,
       },
       null,
       2

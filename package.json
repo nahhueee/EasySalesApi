@@ -1,10 +1,10 @@
 {
   "name": "easysalesapi",
-  "version": "2.4.7",
+  "version": "2.5.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsc && nodemon src/index.ts --ignore src/logger/backup.json --ignore src/logger/general.json --ignore src/logger/update.json  --ignore src/session.json --ignore updater/pendiente.json --ignore updater/actualizaciones.log --ignore src/log/error.log --ignore updater/downloads/*",
+    "dev": "nodemon",
     "tsc": "tsc",
     "build": "tsc && node scripts/setup.js",
     "release": "node scripts/release.js",
@@ -31,12 +31,12 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "express": "^4.19.2",
     "afip.ts": "^3.2.2",
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "dgram": "^1.0.1",
     "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "form-data": "^4.0.2",
     "is-online": "^12.0.1",
     "knex": "^3.1.0",
@@ -52,6 +52,7 @@
     "socket.io": "^4.8.0",
     "unzipper": "^0.12.3",
     "winston": "^3.17.0",
+    "winston-transport": "^4.9.0",
     "xlsx": "^0.18.5"
   }
 }

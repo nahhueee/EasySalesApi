@@ -1,270 +1,194 @@
-import {ParametrosRepo} from '../data/parametrosRepository';
-import {BackupsRepo} from '../data/backupsRepository';
-import {AdminServ} from '../services/adminService';
-import backupLogger from '../logger/loggerBackups';
+/**
+ * SERVICIO DE BACKUPS
+ * ===================
+ * Genera backups de la base de datos y los sube a AdminServer.
+ *
+ * Política de backups:
+ * - AdminServer conserva los últimos 3 backups por cliente
+ * - El cron se configura desde parámetros de la DB (expresión cron + flag activar)
+ * - Los archivos se generan localmente en src/upload/ y se eliminan tras la subida
+ *
+ * El cron NO depende de verificar habilitación en el arranque.
+ * La verificación de terminal habilitada ocurre dentro de cada ejecución.
+ */
+
+import { ParametrosRepo } from '../data/parametrosRepository';
+import { BackupsRepo } from '../data/backupsRepository';
+import { AdminServ } from '../services/adminService';
+import { logger } from '../logger/logger';
+import { CodigoError } from '../logger/CodigosError';
 import config from '../conf/app.config';
-import { unlink } from 'fs/promises';
+import { unlink, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import { createWriteStream } from 'fs';
-import { TerminalServ } from './terminalService';
-const moment = require('moment');
-const cron = require('node-cron');
-const path = require('path');
-const fs = require('fs');
 
+const moment  = require('moment');
+const cron    = require('node-cron');
+const path    = require('path');
+const fs      = require('fs');
 
-const { exec } = require('child_process');
-const { promisify } = require('util');
+// Estado del último intento de backup — leído por heartbeatService
+export const BACKUP_ESTADO_PATH = path.join(process.cwd(), 'src', 'log', 'backup-estado.json');
 
-let scheduledTask; // Variable para guardar la tarea programada
-class BackupsService{
-
-    
-    async IniciarCron(){
-        try{ 
-            //Validamos permisos
-            await TerminalServ.VerificarTerminalHabilitada();
-
-            //Obtenemos los parametros necesarios
-            //#region PARAMETROS
-            const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
-            const expresion = await ParametrosRepo.ObtenerParametros('expresion');
-            //#endregion
-
-            if(dniCliente && dniCliente!="")
-                this.EjecutarProcesoCron(dniCliente, expresion);
-                  
-        } catch(error:any){
-            backupLogger.error("Error al intentar iniciar los procesos de respaldo. " + error.message);
-        }
+async function EscribirEstadoBackup(ok: boolean): Promise<void> {
+    try {
+        await writeFile(BACKUP_ESTADO_PATH, JSON.stringify({
+            fecha: moment().format('YYYY-MM-DD HH:mm:ss'),
+            ok,
+        }));
+    } catch {
+        // No crítico: si no se puede escribir el estado, el heartbeat enviará null
     }
+}
 
-    async GenerarBackupLocal(){
+let scheduledTask: any = null;
+
+class BackupsService {
+
+    async IniciarCron(): Promise<void> {
         try {
-            const carpeta = path.join('C:', 'backups');
+            const expresion = await ParametrosRepo.ObtenerParametros('expresion');
 
-            if (!fs.existsSync(carpeta)) {
-                fs.mkdirSync(carpeta, { recursive: true });
-            } 
+            if (!expresion || expresion === '') {
+                logger.info({ type: 'BACKUP_INFO', message: 'Sin expresión cron configurada. Backups no iniciados.', modulo: 'backupService' });
+                return;
+            }
 
-            const fecha = new Date().toISOString().slice(0, 10); 
-            const archivo = path.join(carpeta, `respaldo_${fecha}.sql`);
-            await GenerarBackup(archivo);
+            this.EjecutarProcesoCron(expresion);
 
-            return "OK";
-
-        } catch (error) {
-            throw error;
+        } catch (error: any) {
+            // No crítico: si no se puede leer la configuración, se loguea y se continúa.
+            // El cron puede reintentarse en el próximo arranque.
+            logger.error({
+                code:    CodigoError.CRON_INIT_ERROR,
+                message: error.message || 'Error al iniciar cron de backups',
+                modulo:  'backupService',
+                cause:   error.cause?.message,
+                stack:   error.stack,
+            });
         }
-       
     }
 
-    //Funcion para inicar el cron de respaldo
-    async EjecutarProcesoCron(DNI:string, expresion:string){
-        try{
+    async GenerarBackupLocal(): Promise<string> {
+        const carpeta = path.join(process.cwd(), 'src', 'upload', 'backups-locales');
 
-            if (expresion!="") {
+        if (!fs.existsSync(carpeta)) {
+            fs.mkdirSync(carpeta, { recursive: true });
+        }
 
-                // Si ya existe una tarea programada, la detenemos para iniciar una nueva y no crear crones en simultaneo
-                if (scheduledTask) {
-                    scheduledTask.stop();
-                    scheduledTask = null;
-                }
-                
-                //Solo si el parametro de activar esta habilitado, iniciamos el proceso de cron
+        const fecha   = new Date().toISOString().slice(0, 10);
+        const archivo = path.join(carpeta, `respaldo_${fecha}.sql`);
+
+        await GenerarBackup(archivo);
+        return 'OK';
+    }
+
+    private EjecutarProcesoCron(expresion: string): void {
+        // Detiene la tarea anterior si existía (evita crones en simultáneo)
+        if (scheduledTask) {
+            scheduledTask.stop();
+            scheduledTask = null;
+        }
+
+        scheduledTask = cron.schedule(expresion, async () => {
+            try {
+                // Verificamos configuración en cada ejecución (no en el arranque)
                 const activarBackup = await ParametrosRepo.ObtenerParametros('backups');
-                if (activarBackup !== "true") {
+                if (activarBackup !== 'true') return;
+
+                const dniCliente = await ParametrosRepo.ObtenerParametros('dni');
+                if (!dniCliente || dniCliente === '') {
+                    logger.warn({ type: 'BACKUP_WARN', message: 'DNI de cliente no configurado. Backup omitido.', modulo: 'backupService' });
                     return;
                 }
 
-                // Programamos la nueva tarea para crear backups
-                scheduledTask = cron.schedule(expresion, async () => {
-                    backupLogger.info('Se inicia un nuevo proceso de respaldo en cron.');
+                logger.info({ type: 'BACKUP_INFO', message: 'Iniciando proceso de respaldo.', modulo: 'backupService' });
 
-                    //Nombre del archivo
-                    const fileName = `${DNI}_${moment().format('DD-MM-YYYY')}.sql`;
+                const fileName   = `${dniCliente}_${moment().format('DD-MM-YYYY')}.sql`;
+                const backupPath = path.join(__dirname, '../upload/', fileName);
 
-                    //Path donde guardamos el backup    
-                    const backupPath = path.join(__dirname, "../upload/", fileName);
-                    await eliminarArchivo(backupPath); // Elimina el archivo
+                // Elimina versión anterior del mismo día si existe
+                await eliminarArchivo(backupPath);
 
-                    //Generamos el backup
-                    await GenerarBackup(backupPath)
-                    if(!existsSync(backupPath)){
-                        backupLogger.error('Parece que ocurrio un error al intentar generar un backup.');
-                        return;
-                    }
+                await GenerarBackup(backupPath);
 
-                    //El servidor se encarga de verificar si el usuario tiene mas de 3 backups subidos
-                    //Se borra el más antiguo, y se sube el nuevo
-                    const resultado = await AdminServ.SubirBackup(backupPath, DNI);
-                    if(resultado=="OK"){
-                        backupLogger.info('Se subió correctamente el archivo al servidor.');
+                if (!existsSync(backupPath)) {
+                    logger.error({ code: CodigoError.BACKUP_GENERACION_ERROR, message: 'El archivo de backup no se generó.', modulo: 'backupService' });
+                    return;
+                }
 
-                        //Agregamos el registro a la base local
-                        await BackupsRepo.Agregar(fileName);
-                        fs.unlinkSync(backupPath); // Elimina el archivo localmente
-                    }
-                    else
-                        backupLogger.error('Ocurrió un error al intentar subir el archivo al servidor. ' + resultado);
+                const resultado = await AdminServ.SubirBackup(backupPath, dniCliente);
 
-                    
-                    backupLogger.info('Finalizó correctamente el proceso de respaldo.');
+                if (resultado === 'OK') {
+                    await BackupsRepo.Agregar(fileName);
+                    await eliminarArchivo(backupPath);
+                    await EscribirEstadoBackup(true);
+                    logger.info({ type: 'BACKUP_INFO', message: `Backup subido correctamente: ${fileName}`, modulo: 'backupService' });
+                } else {
+                    await EscribirEstadoBackup(false);
+                    logger.error({ code: CodigoError.BACKUP_UPLOAD_ERROR, message: `Error al subir backup: ${resultado}`, modulo: 'backupService' });
+                }
+
+            } catch (error: any) {
+                await EscribirEstadoBackup(false);
+                logger.error({
+                    code:    CodigoError.BACKUP_GENERACION_ERROR,
+                    message: error.message || 'Error al generar backup',
+                    modulo:  'backupService',
+                    cause:   error.cause?.message,
+                    stack:   error.stack,
                 });
-
             }
-        }
-        catch (error: any) {
-            backupLogger.error("Error dentro del proceso cron: " + error.message);
-            console.error(error);
-        }
+        });
+
+        logger.info({ type: 'BACKUP_INFO', message: `Cron de backups iniciado (${expresion}).`, modulo: 'backupService' });
     }
 }
 
-//#region SUBIDA Y ELIMINACION DE BACKUPS A MEGA ---- DEPRECADO
-// async function ConectarConMega():Promise<Storage> {
-//     console.log(config.mega.email, config.mega.pass)
-//     return new Promise((resolve, reject) => {
-//         const megastorage = new Storage({
-//             email: config.mega.email,  
-//             password: config.mega.pass,       
-//         }, error => {
-//             if (error) {
-//                 backupLogger.error('Error al intentar conectar a MEGA. ' + error);
-//                 reject(new Error('Error al intentar conectar a MEGA: ' + error));
-//             } else {
-//                 backupLogger.info('Conectado a MEGA correctamente.');
-//                 resolve(megastorage);
-//             }
-//         });
-//     });
-// }
-
-
-
-// // Función para obtener el tamaño del archivo
-// function getFileSize(filePath) {
-//     const stats = fs.statSync(filePath);
-//     return stats.size;
-// }
-
-// // Función para subir el archivo de respaldo a MEGA
-// async function SubirAMega(megastorage:Storage, fileName:string) {
-//     try {
-
-//         const filePath = path.join(__dirname, "../upload/", fileName);  // Ruta del archivo .sql
-//         const fileSize = getFileSize(filePath);// Obtener el tamaño del archivo
-        
-//         // Buscar la carpeta destino
-//         const targetFolder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
-
-//         if (!targetFolder) {
-//             backupLogger.error(`Carpeta ${config.mega.folderName} no encontrada en MEGA.`);
-//             return;
-//         }
-
-//         // Subir el archivo a la carpeta 
-//         const fileStream = fs.createReadStream(filePath);  // Ruta del archivo
-//         const uploadStream = targetFolder.upload({ name: fileName, size: fileSize });  // Nombre en MEGA
-
-
-//         const resultado = await new Promise((resolve, reject) => {
-            
-//             // Conectar los streams para subir el archivo
-//             fileStream.pipe(uploadStream);
-
-//             uploadStream.on('complete', (file) => {
-//                 backupLogger.info(`Archivo subido correctamente a MEGA: ${fileName}`);
-//                 resolve(true);  
-//             });
-
-//             uploadStream.on('error', (error) => {
-//                 backupLogger.info(`Error al subir el archivo a MEGA: ${error}`);
-//                 reject(false);  // Rechazar la promesa si hay un error
-//             });
-//         });
-
-//         return resultado;
-
-//     } catch (error) {
-//         backupLogger.error('Error al intentar subir el archivo a MEGA. ' + error);
-//         return false;
-//     }
-// }
-
-// async function EliminarDeMega(megastorage:Storage, fileName:string) {
-//     try {
-
-//         //Obtenemos la carpeta de backups
-//         const folder = megastorage.root.children!.find(child => child.name === config.mega.folderName && child.directory);
-//         if (folder) {
-//             // Buscar el archivo dentro de la carpeta
-//             const file = folder.children!.find(child => child.name === fileName);
-
-//             if (file) {
-//                 // Eliminar el archivo encontrado
-//                 file.delete(true, (error) => {
-//                     if (error)
-//                         backupLogger.error(`Error al eliminar el archivo ${fileName}: ` + error);
-//                     else 
-//                     backupLogger.info(`Archivo ${fileName} eliminado correctamente de Mega.`);
-//                 });
-//             } else {
-//                 backupLogger.error(`Archivo ${fileName} no encontrado en Mega para borrar.`);
-//             }
-//         }else
-//             backupLogger.error(`No se encontró la carpeta al intentar borrar un archivo de Mega.`);
-       
-//     } catch (error) {
-//         backupLogger.error('Error al intentar eliminar el archivo a MEGA. ' + error);
-//     }
-// }
-//#endregion
-
-
-async function eliminarArchivo(filePath: string) {
-    if (existsSync(filePath)) { // Verifica si el archivo existe
-        try {
-            await unlink(filePath); // Elimina el archivo
-        } catch (error) {
-            backupLogger.error(`Error al intentar eliminar el archivo: ${error}`);
-        }
-    } 
+async function eliminarArchivo(filePath: string): Promise<void> {
+    if (existsSync(filePath)) {
+        await unlink(filePath);
+    }
 }
 
-async function GenerarBackup(backupPath: string) {
-    return new Promise<boolean>((resolve, reject) => {
-        const args = [`-u`, config.db.user];
-
-        if (config.produccion) {
-            args.push(`-p${config.db.password}`);
-        }
-
+async function GenerarBackup(backupPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const args = ['-u', config.db.user];
+        args.push(`-p${config.db.password}`);
         args.push(config.db.database);
 
         const dumpProcess = spawn('mysqldump', args);
-        const output = createWriteStream(backupPath);
+        const output      = createWriteStream(backupPath);
 
         dumpProcess.stdout.pipe(output);
 
-        dumpProcess.stderr.on('data', (data) => {
-            backupLogger.error(`Error en mysqldump: ${data}`);
+        // Acumulamos stderr para incluirlo en el error si el proceso falla.
+        // mysqldump también escribe warnings no críticos en stderr (ej. deprecation),
+        // por eso no rechazamos en este evento sino en 'close'.
+        const stderrChunks: string[] = [];
+        dumpProcess.stderr.on('data', (data: Buffer) => {
+            stderrChunks.push(data.toString().trim());
         });
 
-        dumpProcess.on('close', (code) => {
+        dumpProcess.on('close', (code: number) => {
+            const stderrOutput = stderrChunks.join(' | ');
+
             if (code === 0) {
-                backupLogger.info(`Backup generado correctamente`);
-                resolve(true);
+                // Warnings presentes pero proceso exitoso — loguear sin bloquear
+                if (stderrOutput) {
+                    logger.warn({ type: 'BACKUP_WARN', message: `mysqldump warnings: ${stderrOutput}`, modulo: 'backupService' });
+                }
+                resolve();
             } else {
-                backupLogger.error(`mysqldump finalizó con código: ${code}`);
-                reject(false);
+                // El mensaje de causa real está en stderr, no en el código de salida
+                const causa = stderrOutput || `código de salida ${code}`;
+                reject(new Error(`mysqldump falló: ${causa}`));
             }
         });
 
-        dumpProcess.on('error', (err) => {
-            backupLogger.error(`Error al lanzar mysqldump: ${err}`);
-            reject(false);
+        dumpProcess.on('error', (err: Error) => {
+            reject(new Error(`No se pudo ejecutar mysqldump: ${err.message}`));
         });
     });
 }

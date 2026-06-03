@@ -216,16 +216,16 @@ class FacturacionService{
 }
 
 async function ObtenerInstanciaAfip(cuilTitular): Promise<Afip> {
-    // Reutilizar instancia ARCA
+    // Reutilizar instancia
     if (afipInstances[cuilTitular]) {
         return afipInstances[cuilTitular];
     }
 
     //#region Definir carpeta de certificados según entorno
     const certFolder = config.produccion
-        ? path.resolve(__dirname, `../certs/`)
+        ? path.resolve(__dirname, `../certs`)
         : path.resolve(__dirname, `../certs/test`);
-console.log(certFolder)
+
     if (!fs.existsSync(certFolder)) {
         throw new AppError(
             CodigoError.CERTIFICADOS,
@@ -235,27 +235,40 @@ console.log(certFolder)
     }
     //#endregion
 
-    //#region Certificados y Token TA
+   //#region Certificados y Token TA
     const certPath = path.join(certFolder, 'cert');
     const keyPath  = path.join(certFolder, 'key');
 
-    if (!fs.existsSync(certPath)) throw new AppError(CodigoError.CERTIFICADOS, 'No se encontró archivo cert',400);
-    if (!fs.existsSync(keyPath)) throw new AppError(CodigoError.CERTIFICADOS, 'No se encontró archivo key',400);
+    if (!fs.existsSync(certPath)) {
+        throw new AppError(CodigoError.CERTIFICADOS, `No se encontró archivo cert en ${certFolder}`, 400);
+    }
+
+    if (!fs.existsSync(keyPath)) {
+        throw new AppError(CodigoError.CERTIFICADOS, `No se encontró archivo key en ${certFolder}`, 400);
+    }
 
     const cert = fs.readFileSync(certPath, 'utf8').trim();
     const key  = fs.readFileSync(keyPath, 'utf8').trim();
 
-    const ticketPath = path.resolve(__dirname, `../tokens/TA-${cuilTitular}.json`);
-    fs.mkdirSync(path.dirname(ticketPath), { recursive: true });
-    //#endregion
+    const isProd = config.produccion;
+    const cuilCertificado = isProd ? cuilTitular : config.cuilTest;
+
+    // La lib afip.js usa ticketPath como directorio base, no como archivo
+    // Estructura resultante: tokens/test/ o tokens/{cuit}/
+    const ticketPath = isProd
+        ? path.resolve(__dirname, `../tokens/${cuilTitular}`)
+        : path.resolve(__dirname, `../tokens/test`);
+
+    fs.mkdirSync(ticketPath, { recursive: true });
 
     const afip = new Afip({
         key,
         cert,
-        cuit: cuilTitular,
-        production: config.produccion,
+        cuit: cuilCertificado,
+        production: isProd,
         ticketPath
     });
+    //#endregion
 
     afipInstances[cuilTitular] = afip;
     return afip;

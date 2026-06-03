@@ -1,6 +1,7 @@
 import dgram from 'dgram';
 import os from 'os';
-import logger from '../logger/loggerGeneral';
+import { logger } from '../logger/logger';
+import { CodigoError } from '../logger/CodigosError';
 import config from '../conf/app.config';
 import isOnline from 'is-online';
 import { TerminalServ } from './terminalService';
@@ -27,7 +28,13 @@ class ServidorService {
           }
                 
       } catch(error:any){
-          logger.error("Error al intentar iniciar el modo servidor. " + error.message);
+          logger.error({
+              code:    CodigoError.INTERNAL_ERROR,
+              message: error.message || 'Error al iniciar modo servidor',
+              modulo:  'servidorService',
+              cause:   error.cause?.message,
+              stack:   error.stack,
+          });
       }
   }
 
@@ -45,9 +52,15 @@ class ServidorService {
       }
     });
 
-    udpServer.on('error', (err) => {
-      logger.error("Error al intentar iniciar UPD: " + err);
-      this.StopUDPDiscovery(true); 
+    udpServer.on('error', (err: any) => {
+      logger.error({
+          code:    CodigoError.INTERNAL_ERROR,
+          message: err.message || 'Error en socket UDP de discovery',
+          modulo:  'servidorService',
+          cause:   err.cause?.message,
+          stack:   err.stack,
+      });
+      this.StopUDPDiscovery(true);
     });
 
     try {
