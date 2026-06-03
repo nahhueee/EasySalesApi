@@ -291,6 +291,9 @@ function buildClienteYPago(venta: any, cfg: PaperConfig): object[] {
 function buildFacturaHeader(comprobante: any, factura: any, config: PaperConfig): object[] {
   const filas: object[] = [];
 
+  const tipoMap: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
+  const desComprobante = tipoMap[factura.tipoComprobante] ?? 'X';
+
   // ── Tipo de comprobante (A / B / C) ──────────────────────────────────────
   filas.push({
     columns: [
@@ -304,7 +307,7 @@ function buildFacturaHeader(comprobante: any, factura: any, config: PaperConfig)
               {
                 stack: [
                   {
-                    text: factura.desTipoComprobante,
+                    text: desComprobante,
                     alignment: 'center',
                     bold: true,
                     fontSize: config.fontSizes.titulo + 4
@@ -550,7 +553,7 @@ function buildDocInterno(comp: any, resumen: any, venta:Venta): object {
   };
 }
 
-function buildDocFactura(comprobante: any, resumen: any, venta:Venta, factura: any,): object {
+function buildDocFactura(comprobante: any, resumen: any, venta:Venta, factura: any): object {
   const cfg = getPaperConfig(comprobante.papel);
 
   // A4 tiene su propio layout profesional
@@ -584,9 +587,10 @@ function buildDocFactura(comprobante: any, resumen: any, venta:Venta, factura: a
  *   5. Pie: QR + CAE + IVA
  */
 function buildDocFacturaA4(comp: any, resumen: any, venta: Venta, f: any): object {
-
+  console.log(f.tipoComprobante)
   const tipoMap: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
   const desComprobante = tipoMap[f.tipoComprobante] ?? 'X';
+  console.log(desComprobante)
 
   // ── 1. Header tres columnas ───────────────────────────────────────────────
   const headerTable = {

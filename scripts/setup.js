@@ -18,6 +18,7 @@ async function setup() {
     // Carpetas necesarias en runtime
     const directories = [
       "src/certs",
+      "src/certs/test",
       "src/db/seeds",
       "src/db/tasks",
       "src/fonts",

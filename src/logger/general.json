@@ -223,5 +223,105 @@
     "message": "Cannot read properties of undefined (reading 'nativeElement')",
     "level": "error",
     "timestamp": "08-05-26 13:18"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "21-05-26 09:56"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 12:19"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 13:11"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "27-05-26 13:14"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "27-05-26 13:16"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "27-05-26 13:19"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "27-05-26 13:19"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 14:15"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 14:15"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 14:19"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 14:26"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Terminal inexistente o inhabilitado",
+    "level": "error",
+    "timestamp": "27-05-26 14:32"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 08:47"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:13"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:26"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:28"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:36"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:37"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:38"
+  },
+  {
+    "message": "Error al intentar iniciar el modo servidor. Error al comunicarse con AdminServer",
+    "level": "error",
+    "timestamp": "28-05-26 12:39"
   }
 ]

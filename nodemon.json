@@ -1,0 +1,13 @@
+{
+    "watch": ["src"],
+    "ignore": [
+        "src/logger/*",
+        "src/log/*",
+        "src/session.json",
+        "src/tokens",
+        "src/upload/*",
+        "updater/downloads/*"
+    ],
+    "ext": "ts,json",
+    "exec": "tsc && ts-node src/index.ts"
+}

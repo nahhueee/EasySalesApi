@@ -20,7 +20,7 @@ class EstadisticasRepository{
                               " AND c.fechaBaja IS NULL";
             const [consultaTotalesVentas] = await connection.query(consulta1, [fechaDesde, fechaHasta]);
 
-            const consulta2 = " SELECT COUNT(*) AS cantidad_facturas, SUM(neto + iva) AS total_facturas " +
+            const consulta2 = " SELECT COUNT(*) AS cant_facturas, SUM(neto + iva) AS total_facturas " +
                               " FROM ventas_factura vf " +
                               " INNER JOIN ventas v ON v.id = vf.idVenta " +
                               " INNER JOIN cajas c on c.id = v.idCaja " +
@@ -133,7 +133,7 @@ class EstadisticasRepository{
                             " FROM ( " +
                             " SELECT v.idCaja, SUM(dv.cantidad * dv.precio) AS total_venta FROM ventas v " +
                             " INNER JOIN ventas_detalle dv ON dv.idVenta = v.id " +
-                            " WHERE v.fecha BETWEEN ? AND ? " +
+                            " WHERE (v.fecha BETWEEN ? AND ?) AND v.fechaBaja IS NULL " +
                             " GROUP BY v.id, v.idCaja " +
                             " ) AS t " +
                             " INNER JOIN cajas c ON c.id = t.idCaja " +
@@ -154,7 +154,7 @@ class EstadisticasRepository{
         }
     }
 
-   //Obtiene los datos de venta de la caja
+    //Obtiene los datos de venta de la caja
     async ObtenerDatoVentasCaja(idCaja:string){
         const connection = await db.getConnection();
         
@@ -163,6 +163,7 @@ class EstadisticasRepository{
                              " FROM ventas_detalle vd " +
                              " INNER JOIN ventas v on vd.idVenta = v.id " +
                              " WHERE v.idCaja = ? " +
+                             " AND v.fechaBaja IS NULL " +
                              " GROUP BY v.idCaja; ";
 
             const rows = await connection.query(consulta, [parseInt(idCaja)]);
@@ -233,6 +234,7 @@ class EstadisticasRepository{
                              " INNER JOIN cajas c ON c.id = v.idCaja " +
                              " WHERE vd.idProducto <> 1 AND p.soloPrecio = 0 " +
                              " AND v.fecha BETWEEN ? AND ? " +
+                             " AND v.fechaBaja IS NULL " +
                              " AND c.fechaBaja IS NULL " +
                              " GROUP BY vd.idProducto" +
                              " ORDER BY EjeY DESC " +
@@ -308,6 +310,7 @@ class EstadisticasRepository{
                 INNER JOIN ventas_pago vp ON v.id = vp.idVenta
                 INNER JOIN cajas c ON c.id = v.idCaja
                 WHERE v.fecha BETWEEN ? AND ? 
+                AND v.fechaBaja IS NULL
                 AND vp.realizado = 1
                 AND c.fechaBaja IS NULL
                 GROUP BY EjeX
@@ -316,6 +319,7 @@ class EstadisticasRepository{
             `;
 
             const [rows] = await connection.query(consulta, [fechaDesde, fechaHasta]);
+
             return await TransformarDatos([rows][0]);
 
         } catch (error:any) {
@@ -387,7 +391,7 @@ async function ObtenerAcumuladosQuery(filtros:any,esTotal:boolean):Promise<strin
             " INNER JOIN productos p ON p.id = vd.idProducto " +
             " INNER JOIN ventas v ON v.id = vd.idVenta " +
             " INNER JOIN cajas c ON c.id = v.idCaja " +
-            " WHERE c.fechaBaja IS NULL " + 
+            " WHERE c.fechaBaja IS NULL AND v.fechaBaja IS NULL " + 
             filtro +
             " GROUP BY vd.idProducto " +
             " ORDER BY total DESC " +

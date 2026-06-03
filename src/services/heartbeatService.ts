@@ -32,11 +32,17 @@ const ROOT_DIR = process.cwd();
 // Mismo directorio que error.log — datos operativos de la app, no del updater
 const ERRORES_PENDIENTES_PATH    = path.join(ROOT_DIR, 'src', 'log', 'errores-pendientes.json');
 // Instrucción de rollback pendiente — la lee bootstrap.ts en el próximo arranque
-const ROLLBACK_PENDIENTE_PATH    = path.join(ROOT_DIR, 'updater', 'pendiente-rollback.json');
-// Evento de la última actualización/rollback — se envía al AdminServer via heartbeat
-const EVENTO_ACTUALIZACION_PATH  = path.join(ROOT_DIR, 'updater', 'evento-actualizacion.json');
+const ROLLBACK_PENDIENTE_PATH           = path.join(ROOT_DIR, 'updater', 'pendiente-rollback.json');
+// Evento de la última actualización/rollback del backend — se envía al AdminServer via heartbeat
+const EVENTO_ACTUALIZACION_PATH         = path.join(ROOT_DIR, 'updater', 'evento-actualizacion.json');
+// Evento de la última actualización del frontend — escrito por el endpoint POST /update/evento-front
+const EVENTO_ACTUALIZACION_FRONT_PATH   = path.join(ROOT_DIR, 'updater', 'evento-actualizacion-front.json');
+// Señal de que el front instaló una versión y está pendiente de confirmar que arrancó OK
+const PENDIENTE_CONFIRMAR_FRONT_PATH    = path.join(ROOT_DIR, 'updater', 'pendiente-confirmar-front.json');
+// Instrucción de rollback del frontend — la lee startup.service.ts en el próximo arranque
+const ROLLBACK_FRONT_PENDIENTE_PATH     = path.join(ROOT_DIR, 'updater', 'pendiente-rollback-front.json');
 // Estado del último intento de backup — escrito por backupService tras cada ejecución
-const BACKUP_ESTADO_PATH         = path.join(ROOT_DIR, 'src', 'log', 'backup-estado.json');
+const BACKUP_ESTADO_PATH                = path.join(ROOT_DIR, 'src', 'log', 'backup-estado.json');
 
 class HeartbeatService {
 
@@ -60,33 +66,40 @@ class HeartbeatService {
                 Promise.resolve(ContarErroresPendientes()),
             ]);
 
-            // Lee el evento de actualización pendiente de enviar (si existe).
-            const eventoActualizacion = LeerEventoPendiente();
+            // Lee los eventos de actualización pendientes de enviar (si existen).
+            const eventoActualizacion      = LeerEventoPendiente();
+            const eventoActualizacionFront = LeerEventoPendienteFront();
+            const confirmacionFrontPendiente = fs.existsSync(PENDIENTE_CONFIRMAR_FRONT_PATH);
 
             const estadoBackup = LeerEstadoBackup();
 
             const respuesta = await axios.post(`${config.adminUrl}heartbeat`, {
                 terminal,
-                idApp:               config.idApp,
-                versionBack:         pkg.version,
-                versionFront:        null,
+                idApp:                     config.idApp,
+                versionBack:               pkg.version,
+                versionFront:              null,
                 dbStatus,
                 tiempoActivo,
                 erroresRecientes,
-                ultimoBackupFecha:   estadoBackup?.fecha ?? null,
-                ultimoBackupOk:      estadoBackup !== null ? (estadoBackup.ok ? 1 : 0) : null,
-                terminalesLanActivas: 1,
+                ultimoBackupFecha:         estadoBackup?.fecha ?? null,
+                ultimoBackupOk:            estadoBackup !== null ? (estadoBackup.ok ? 1 : 0) : null,
+                terminalesLanActivas:      1,
                 eventoActualizacion,
+                eventoActualizacionFront,
+                confirmacionFrontPendiente,
             }, {
                 timeout: 8000
             });
 
-            // AdminServer confirmó recepción → eliminamos el evento local.
+            // AdminServer confirmó recepción → eliminamos los eventos locales.
             if (eventoActualizacion && fs.existsSync(EVENTO_ACTUALIZACION_PATH)) {
                 fs.unlinkSync(EVENTO_ACTUALIZACION_PATH);
             }
+            if (eventoActualizacionFront && fs.existsSync(EVENTO_ACTUALIZACION_FRONT_PATH)) {
+                fs.unlinkSync(EVENTO_ACTUALIZACION_FRONT_PATH);
+            }
 
-            // Si AdminServer instruyó un rollback y aún no hay uno pendiente, lo registramos.
+            // Si AdminServer instruyó un rollback de backend y aún no hay uno pendiente, lo registramos.
             if (respuesta.data?.rollback === true && !fs.existsSync(ROLLBACK_PENDIENTE_PATH)) {
                 fs.writeFileSync(ROLLBACK_PENDIENTE_PATH, JSON.stringify({
                     instruccion: 'rollback',
@@ -95,7 +108,23 @@ class HeartbeatService {
 
                 logger.info({
                     type:    'HEARTBEAT_INFO',
-                    message: 'Rollback ordenado por AdminServer. Se aplicará en el próximo reinicio.',
+                    message: 'Rollback de backend ordenado por AdminServer. Se aplicará en el próximo reinicio.',
+                    modulo:  'heartbeatService'
+                });
+            }
+
+            // Si AdminServer instruyó un rollback de frontend, guardamos versión y URL de descarga.
+            const rollbackFront = respuesta.data?.rollbackFront;
+            if (rollbackFront?.version && rollbackFront?.zipUrl && !fs.existsSync(ROLLBACK_FRONT_PENDIENTE_PATH)) {
+                fs.writeFileSync(ROLLBACK_FRONT_PENDIENTE_PATH, JSON.stringify({
+                    version: rollbackFront.version,
+                    zipUrl:  rollbackFront.zipUrl,
+                    fecha:   new Date().toISOString(),
+                }, null, 2));
+
+                logger.info({
+                    type:    'HEARTBEAT_INFO',
+                    message: `Rollback de frontend a v${rollbackFront.version} ordenado por AdminServer.`,
                     modulo:  'heartbeatService'
                 });
             }
@@ -105,9 +134,13 @@ class HeartbeatService {
             // IGNORAR_REMOTO: si no hay conectividad con AdminServer, el batch tampoco puede enviarse.
             logger.error({
                 code:    CodigoError.HEARTBEAT_FALLIDO,
-                message: error.message,
-                modulo:  'heartbeatService'
+                message: error.message || 'Sin detalle de error',
+                modulo:  'heartbeatService',
+                cause:   error.cause?.message,  
+                stack:   error.stack,
             });
+
+            
         }
     }
 }
@@ -138,6 +171,15 @@ function LeerEventoPendiente(): object | null {
     try {
         if (!fs.existsSync(EVENTO_ACTUALIZACION_PATH)) return null;
         return JSON.parse(fs.readFileSync(EVENTO_ACTUALIZACION_PATH, 'utf-8'));
+    } catch {
+        return null;
+    }
+}
+
+function LeerEventoPendienteFront(): object | null {
+    try {
+        if (!fs.existsSync(EVENTO_ACTUALIZACION_FRONT_PATH)) return null;
+        return JSON.parse(fs.readFileSync(EVENTO_ACTUALIZACION_FRONT_PATH, 'utf-8'));
     } catch {
         return null;
     }

@@ -1,139 +1,118 @@
-import {Router, Request, Response} from 'express';
-import logger from '../logger/loggerGeneral';
+import { Router, Request, Response, NextFunction } from 'express';
 import * as path from 'path';
-import moment from 'moment';
-import readline from 'readline';
-
-const fsPromises = require('fs').promises;
-const fileServer = require('fs');
 import * as fs from 'fs';
+import * as readline from 'readline';
+import { logger } from '../logger/logger';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
 
-const router : Router  = Router();
+const router: Router = Router();
 
-//Interfaz para exportar errores
-type Severity = 'INFO' | 'WARN' | 'ERROR';
-interface ErrorLogDTO {
+interface EntradaLog {
   timestamp: string;
-  code: string;
+  level: string;
+  code?: string;
   message: string;
-  severity: Severity;
+  severity?: string;
+  type?: string;
+  route?: string;
+  method?: string;
+  status?: number;
+  context?: Record<string, any>;
+  cause?: string;
+  stack?: string;
+  modulo?: string;
 }
 
-router.get('/general', async (req:Request, res:Response) => {
-    try{ 
-        const generalPath = path.resolve(__dirname, '../logger/general.json');
+// Lee todas las líneas del error.log y las parsea
+async function leerEntradas(): Promise<EntradaLog[]> {
+  const rutaLog = path.resolve(__dirname, '../log/error.log');
 
-        const data = await fsPromises.readFile(generalPath, 'utf8');
-        res.json(JSON.parse(data));
+  // Si el archivo no existe todavía, devolvemos lista vacía
+  if (!fs.existsSync(rutaLog)) return [];
 
-    } catch(error:any){
-        logger.error("Error al obtener listado de logs generales. " + error);
-        res.status(500).send(false);
-    }
-});
+  const fileStream = fs.createReadStream(rutaLog);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+  const entradas: EntradaLog[] = [];
 
-router.get('/', async (req:Request, res:Response) => {
-  const ruta = path.resolve(__dirname, '../logger/error.log');
-  const fileStream = fs.createReadStream(ruta);
-
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity
-  });
-
-  const errors: ErrorLogDTO[] = [];
-
-  for await (const line of rl) {
+  for await (const linea of rl) {
     try {
-      const log = JSON.parse(line);
-
-      errors.push({
+      const log = JSON.parse(linea);
+      entradas.push({
         timestamp: log.timestamp,
-        code: log.code,
-        message: log.message,
-        severity: log.severity
+        level:     log.level,
+        code:      log.code,
+        message:   log.message,
+        severity:  log.severity,
+        type:      log.type,
+        route:     log.route,
+        method:    log.method,
+        status:    log.status,
+        context:   log.context,
+        // cause puede venir como string directo o dentro de context
+        cause:     log.cause ?? log.context?.cause,
+        stack:     log.stack,
+        modulo:    log.modulo,
       });
-    } catch {}
+    } catch {
+      // línea no parseable — se ignora silenciosamente
+    }
   }
 
-  res.json(errors.slice(-20).reverse());
+  return entradas;
+}
+
+// GET /logs — devuelve entradas con soporte de filtros y paginación
+// Query params: limit, offset, severity (CRITICA|ALTA|MEDIA|BAJA), code
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const limit  = Math.min(parseInt(String(req.query.limit  ?? 50), 10), 200);
+    const offset = parseInt(String(req.query.offset ?? 0), 10);
+    const severityFiltro = req.query.severity ? String(req.query.severity).toUpperCase().split(',') : [];
+    const codeFiltro     = req.query.code     ? String(req.query.code).toUpperCase() : '';
+
+    let entradas = await leerEntradas();
+
+    // Más recientes primero
+    entradas.reverse();
+
+    if (severityFiltro.length > 0) {
+      entradas = entradas.filter(e => {
+        if (severityFiltro.includes('SIN_CODIGO')) {
+          if (!e.code) return true;
+        }
+        return e.severity && severityFiltro.includes(e.severity.toUpperCase());
+      });
+    }
+
+    if (codeFiltro) {
+      entradas = entradas.filter(e => e.code?.toUpperCase() === codeFiltro);
+    }
+
+    res.json({
+      total: entradas.length,
+      datos: entradas.slice(offset, offset + limit),
+    });
+
+  } catch (error) {
+    next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al leer el log de errores', 500, { modulo: 'logsRoute', metodo: 'GET /' }));
+  }
 });
 
-router.get('/backup', async (req:Request, res:Response) => {
-    try{ 
-        const backupPath = path.resolve(__dirname, '../logger/backup.json');
+// DELETE /logs — limpia el error.log
+router.delete('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rutaLog = path.resolve(__dirname, '../log/error.log');
 
-        const data = await fsPromises.readFile(backupPath, 'utf8');
-        res.json(JSON.parse(data));
+    // Truncamos el archivo preservando la ruta — el logger de Winston
+    // sigue escribiendo en el mismo file descriptor
+    fs.writeFileSync(rutaLog, '');
 
-    } catch(error:any){
-        logger.error("Error al obtener listado de logs backups. " + error);
-        res.status(500).send(false);
-    }
-});
+    res.json('OK');
 
-router.get('/update', async (req:Request, res:Response) => {
-    try{ 
-        const updatePath = path.resolve(__dirname, '../logger/update.json');
-
-        const data = await fsPromises.readFile(updatePath, 'utf8');
-        res.json(JSON.parse(data));
-
-    } catch(error:any){
-        logger.error("Error al obtener listado de logs updates. " + error);
-        res.status(500).send(false);
-    }
-});
-
-router.get('/facturacion', async (req:Request, res:Response) => {
-    try{ 
-        const updatePath = path.resolve(__dirname, '../logger/facturacion.json');
-
-        const data = await fsPromises.readFile(updatePath, 'utf8');
-        res.json(JSON.parse(data));
-
-    } catch(error:any){
-        logger.error("Error al obtener listado de logs facturacion. " + error);
-        res.status(500).send(false);
-    }
-});
-
-
-router.post('/general', async (req:Request, res:Response) => {
-    try{ 
-        const generalPath = path.resolve(__dirname, '../logger/general.json');
-        req.body.timestamp = moment().format('DD-MM-YY HH:mm');
-
-        const logs = JSON.parse(fileServer.readFileSync(generalPath, 'utf8'));
-        logs.push(req.body);
-        fileServer.writeFileSync(generalPath, JSON.stringify(logs, null, 2)); 
-
-        res.status(200).json("OK");
-
-    } catch(error:any){
-        logger.error("Error al intentar guardar un log de tipo general. " + error);
-        res.status(500).send(false);
-    }
-});
-
-router.delete('/', async (req:Request, res:Response) => {
-    try{ 
-        const generalPath = path.resolve(__dirname, '../logger/general.json');
-        const backupPath = path.resolve(__dirname, '../logger/backup.json');
-        const updatePath = path.resolve(__dirname, '../logger/update.json');
-        const facturacionPath = path.resolve(__dirname, '../logger/facturacion.json');
-
-        fileServer.writeFileSync(generalPath, '[]'); // Borramos archivo general
-        fileServer.writeFileSync(backupPath, '[]'); // Borramos archivo buckups
-        fileServer.writeFileSync(updatePath, '[]'); // Borramos archivo update
-        fileServer.writeFileSync(facturacionPath, '[]'); // Borramos archivo facturacion
-
-        res.status(200).json("OK");
-
-    } catch(error:any){
-        logger.error("Error al intentar borrar el listado de logs. " + error);
-        res.status(500).send(false);
-    }
+  } catch (error) {
+    next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al limpiar el log de errores', 500, { modulo: 'logsRoute', metodo: 'DELETE /' }));
+  }
 });
 
 

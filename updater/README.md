@@ -91,6 +91,8 @@ No descarga, no aplica, no reinicia.
 
 Ante errores (timeout, AdminServer caído): asume que no hay actualización, continúa.
 
+**Distribución canary/producción:** AdminServer controla qué versión recibe cada terminal. Las releases tienen estado `canary` o `produccion`. Las terminales listadas en `canary_terminals` reciben releases `canary` antes del rollout general. El resto solo recibe releases en estado `produccion`. El updater no gestiona esta lógica — simplemente recibe la versión que AdminServer decide entregar para esa terminal.
+
 ---
 
 ## 3. DescargarActualizacion

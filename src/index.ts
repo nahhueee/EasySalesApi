@@ -74,6 +74,7 @@ server.listen(app.get('port'), host, () => {
 
 //#region Rutas
 import actualizacionRuta from './routes/actualizacionRoute';
+import backupRoute from './routes/backupRoute';
 import usuariosRuta from './routes/usuariosRoute';
 import clientesRuta from './routes/clientesRoute';
 import rubrosRuta from './routes/rubrosRoute';
@@ -104,6 +105,7 @@ app.use('/easysales/server', servidorRuta);
 app.use('/easysales/cuentas', cuentasRuta);
 app.use('/easysales/etiquetas', etiquetasRuta);
 app.use('/easysales/registros', registrosRuta);
+app.use('/easysales/backup', backupRoute);
 
 //AdminServer Route
 import adminServerRuta from './routes/adminRoute';
@@ -118,28 +120,22 @@ import filesRoute from './routes/filesRoute';
 app.use('/easysales/files', filesRoute);
 //#endregion
 
-//#region backups 
-import backupRoute from './routes/backupRoute';
-app.use('/easysales/backup', backupRoute);
-
-import {BackupsServ} from './services/backupService';
-if(!config.web)
-    BackupsServ.IniciarCron();
-//#endregion
-
-import {ServidorServ} from './services/servidorService';
+import { ServidorServ } from './services/servidorService';
 import { errorMiddleware } from './middlewares/errorMiddleware';
+import { BackupsServ } from './services/backupService';
 import { HeartbeatServ } from './services/heartbeatService';
 import { ErrorBatchServ } from './services/errorBatchService';
 
 if(!config.web){
-    ServidorServ.IniciarModoServidor();
 }
 
 // Heartbeat y batch de errores: corren en toda instancia con terminal.json presente
 if(!config.web){
     HeartbeatServ.IniciarCron();
     ErrorBatchServ.IniciarCron();
+    BackupsServ.IniciarCron();
+
+    ServidorServ.IniciarModoServidor();
 }
 
 
@@ -158,6 +154,22 @@ app.get('/easysales/version', (req, res) =>{
         version: pkg.version
     });
 });
+// Expone el terminal_id al frontend para el gate de canary y telemetría.
+// Devuelve { terminal: string } si terminal.json existe y está bien formado, o 404 si no hay terminal.
+app.get('/easysales/terminal', (req, res) => {
+    const TERMINAL_FILE = path.join(__dirname, '..', 'terminal.json');
+    if (!fs.existsSync(TERMINAL_FILE)) {
+        return res.status(404).json({ terminal: null });
+    }
+    try {
+        const data = JSON.parse(fs.readFileSync(TERMINAL_FILE, 'utf-8'));
+        if (!data.terminal) return res.status(404).json({ terminal: null });
+        return res.json({ terminal: data.terminal });
+    } catch {
+        return res.status(404).json({ terminal: null });
+    }
+});
+
 app.get('/easysales/pendiente', (req, res) =>{
     const PENDING_FILE = path.join(__dirname, '..', 'updater', 'pendiente.json');
     const existe = fs.existsSync(PENDING_FILE);

@@ -38,5 +38,15 @@
     "message": "OBS 10243: El campo Condicion IVA receptor no es valido para la clase de comprobante informado. Consular metodo FEParamGetCondicionIvaReceptor",
     "level": "error",
     "timestamp": "29-04-26 23:40"
+  },
+  {
+    "message": "ERR 601: CUIT representada no incluida en Token",
+    "level": "error",
+    "timestamp": "02-06-26 00:24"
+  },
+  {
+    "message": "ERR 10004: Campo PtoVta debe estar comprendido entre 1 y 99998",
+    "level": "error",
+    "timestamp": "02-06-26 08:30"
   }
 ]

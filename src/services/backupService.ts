@@ -34,7 +34,7 @@ export const BACKUP_ESTADO_PATH = path.join(process.cwd(), 'src', 'log', 'backup
 async function EscribirEstadoBackup(ok: boolean): Promise<void> {
     try {
         await writeFile(BACKUP_ESTADO_PATH, JSON.stringify({
-            fecha: new Date().toISOString(),
+            fecha: moment().format('YYYY-MM-DD HH:mm:ss'),
             ok,
         }));
     } catch {
@@ -60,7 +60,13 @@ class BackupsService {
         } catch (error: any) {
             // No crítico: si no se puede leer la configuración, se loguea y se continúa.
             // El cron puede reintentarse en el próximo arranque.
-            logger.error({ code: CodigoError.CRON_INIT_ERROR, message: error.message, modulo: 'backupService' });
+            logger.error({
+                code:    CodigoError.CRON_INIT_ERROR,
+                message: error.message || 'Error al iniciar cron de backups',
+                modulo:  'backupService',
+                cause:   error.cause?.message,
+                stack:   error.stack,
+            });
         }
     }
 
@@ -126,7 +132,13 @@ class BackupsService {
 
             } catch (error: any) {
                 await EscribirEstadoBackup(false);
-                logger.error({ code: CodigoError.BACKUP_GENERACION_ERROR, message: error.message, modulo: 'backupService' });
+                logger.error({
+                    code:    CodigoError.BACKUP_GENERACION_ERROR,
+                    message: error.message || 'Error al generar backup',
+                    modulo:  'backupService',
+                    cause:   error.cause?.message,
+                    stack:   error.stack,
+                });
             }
         });
 
@@ -143,11 +155,7 @@ async function eliminarArchivo(filePath: string): Promise<void> {
 async function GenerarBackup(backupPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
         const args = ['-u', config.db.user];
-
-        if (config.produccion) {
-            args.push(`-p${config.db.password}`);
-        }
-
+        args.push(`-p${config.db.password}`);
         args.push(config.db.database);
 
         const dumpProcess = spawn('mysqldump', args);
@@ -155,17 +163,27 @@ async function GenerarBackup(backupPath: string): Promise<void> {
 
         dumpProcess.stdout.pipe(output);
 
+        // Acumulamos stderr para incluirlo en el error si el proceso falla.
+        // mysqldump también escribe warnings no críticos en stderr (ej. deprecation),
+        // por eso no rechazamos en este evento sino en 'close'.
+        const stderrChunks: string[] = [];
         dumpProcess.stderr.on('data', (data: Buffer) => {
-            // mysqldump escribe mensajes no críticos en stderr también (ej. warnings)
-            // Solo logueamos, no rechazamos por stderr
-            logger.warn({ type: 'BACKUP_WARN', message: `mysqldump stderr: ${data.toString().trim()}`, modulo: 'backupService' });
+            stderrChunks.push(data.toString().trim());
         });
 
         dumpProcess.on('close', (code: number) => {
+            const stderrOutput = stderrChunks.join(' | ');
+
             if (code === 0) {
+                // Warnings presentes pero proceso exitoso — loguear sin bloquear
+                if (stderrOutput) {
+                    logger.warn({ type: 'BACKUP_WARN', message: `mysqldump warnings: ${stderrOutput}`, modulo: 'backupService' });
+                }
                 resolve();
             } else {
-                reject(new Error(`mysqldump finalizó con código de error: ${code}`));
+                // El mensaje de causa real está en stderr, no en el código de salida
+                const causa = stderrOutput || `código de salida ${code}`;
+                reject(new Error(`mysqldump falló: ${causa}`));
             }
         });
 

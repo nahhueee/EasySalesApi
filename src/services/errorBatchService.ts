@@ -30,6 +30,7 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { logger } from '../logger/logger';
 import { CodigoError } from '../logger/CodigosError';
+import moment from 'moment';
 
 const cron = require('node-cron');
 
@@ -95,14 +96,14 @@ class ErrorBatchService {
                 }
                 existente.cantidad++;
                 existente.mensaje    = mensaje;
-                existente.fechaUltimo = ahora.toISOString();
+                existente.fechaUltimo = moment(ahora).format('YYYY-MM-DD HH:mm:ss');
             } else {
                 errores.push({
                     codigo,
                     mensaje,
                     cantidad:     1,
-                    fechaPrimero: ahora.toISOString(),
-                    fechaUltimo:  ahora.toISOString(),
+                    fechaPrimero: moment(ahora).format('YYYY-MM-DD HH:mm:ss'),
+                    fechaUltimo:  moment(ahora).format('YYYY-MM-DD HH:mm:ss'),
                 });
             }
 
@@ -158,11 +159,13 @@ class ErrorBatchService {
             this.puedeEnviarDesde = new Date(Date.now() + minutos * 60 * 1000);
 
             logger.error({
-                code:              CodigoError.ERROR_BATCH_ENVIO_FALLIDO,
-                message:           error.message,
-                modulo:            'errorBatchService',
+                code:               CodigoError.ERROR_BATCH_ENVIO_FALLIDO,
+                message:            error.message || 'Fallo al enviar batch de errores',
+                modulo:             'errorBatchService',
+                cause:              error.cause?.message,
+                stack:              error.stack,
                 fallosConsecutivos: this.fallosConsecutivos,
-                proximoIntento:    this.puedeEnviarDesde.toISOString(),
+                proximoIntento:     this.puedeEnviarDesde.toISOString(),
             });
         }
     }

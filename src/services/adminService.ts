@@ -9,22 +9,34 @@ import { CodigoError } from '../logger/CodigosError';
 class AdminService{
     async ObtenerVersionWeb() {
         try {
-            const ambiente = config.produccion ? 'prod': 'test';
-            const terminal = ObtenerTerminalLocal(); 
 
-            const data = (await axios.get(`${config.adminUrl}actualizaciones/ultima-version-backend/${config.idApp}/${ambiente}/${terminal}`)).data;
-            
-            //Obtenemos del config el estado del servidor
-            if(config.produccion)
-                data.serverStatus = 'production';
-            else
-                data.serverStatus = 'test';
+            const terminal = ObtenerTerminalLocal();
+            const response = await axios.get(
+                `${config.adminUrl}actualizaciones/ultima-version-backend/${config.idApp}/${terminal}`
+            );
+
+            const data = response.data ?? ObtenerVersionVacia();
+
+            data.serverStatus = config.produccion
+                ? 'production'
+                : 'test';
 
             return data;
-        } catch (error) {
+
+        } catch (error:any) {
+
+            // Si no hay versión publicada
+            if (error.response?.status === 404) {
+                return {
+                    ...ObtenerVersionVacia(),
+                    serverStatus: config.produccion ? 'production' : 'test'
+                };
+            }
+
             throw mapAxiosError(error,'AdminService','ObtenerVersionWeb');
         }
     }
+    
 
     async ValidarIdentidad(dni:string){
         const cliente = await this.VerificarExistenciaCliente(dni);
@@ -74,7 +86,6 @@ class AdminService{
 
     async GenerarAppCliente(dni:string){
         try {
-
             const response = await axios.post(`${config.adminUrl}appscliente/generar`, {dni, idApp:config.idApp});
 
             if(!response.data){
@@ -133,8 +144,23 @@ class AdminService{
         }
     }
 }
+
 function EsTerminalValida(terminal: any): boolean {
     return typeof terminal === 'string' && terminal.trim().length > 0;
+}
+
+function ObtenerVersionVacia() {
+    return {
+        version: '0.0.0',
+        link: null,
+        resumen: null,
+        mejoras: null,
+        correcciones: null,
+        fecha_publicacion: null,
+        estado: 'NO_VERSION',
+        requiereNpmInstall: false,
+        tamanoBytes: null
+    };
 }
 
 function ExisteTerminalValida(): boolean {
