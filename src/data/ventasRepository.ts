@@ -71,7 +71,7 @@ class VentasRepository{
                         cae: row['cae'], 
                         caeVto: row['caeVto'], 
                         ticket: row['ticket'], 
-                        tipoFactura: row['tipoFactura'], 
+                        tipoComprobante: row['tipoFactura'], 
                         neto: parseFloat(row['neto']), 
                         iva: parseFloat(row['iva']), 
                         dni: row['dni'],
@@ -79,7 +79,6 @@ class VentasRepository{
                         ptoVenta: row['ptoVenta'],
                         condReceptor: row['condReceptor'],
                     });
-
 
                     let ajuste = 0;
                     if (venta.pago.descuento > 0) {

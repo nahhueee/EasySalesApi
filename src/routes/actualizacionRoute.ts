@@ -1,5 +1,7 @@
-import {Router, Request, Response} from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import logger from '../logger/loggerGeneral';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
 import { ParametrosRepo } from '../data/parametrosRepository';
 import path from 'path';
 import fs from 'fs';
@@ -9,6 +11,10 @@ const UPDATER_DIR                      = path.join(ROOT_DIR, 'updater');
 const EVENTO_ACTUALIZACION_FRONT_PATH  = path.join(UPDATER_DIR, 'evento-actualizacion-front.json');
 const PENDIENTE_CONFIRMAR_FRONT_PATH   = path.join(UPDATER_DIR, 'pendiente-confirmar-front.json');
 const ROLLBACK_FRONT_PENDIENTE_PATH    = path.join(UPDATER_DIR, 'pendiente-rollback-front.json');
+// Estado persistente de la versión de frontend instalada — lo reporta el frontend en cada boot
+const VERSION_FRONT_PATH               = path.join(UPDATER_DIR, 'version-front.json');
+// Señal de pausa ordenada por AdminServer vía heartbeat — bloquea el chequeo de update
+const PAUSADO_PATH                     = path.join(UPDATER_DIR, 'pausado.json');
 
 const router : Router  = Router();
 
@@ -126,6 +132,52 @@ router.post('/limpiar-rollback-front', (_req: Request, res: Response) => {
     } catch (e: any) {
         logger.error('Error limpiando rollback de frontend: ' + e.message);
         return res.status(500).json({ ok: false });
+    }
+});
+
+/**
+ * POST /registrar-version-front
+ * El frontend lo llama en cada arranque exitoso con su versión Tauri actual.
+ * El backend persiste la versión en updater/version-front.json para que el
+ * heartbeat la incluya en el campo versionFront hacia AdminServer.
+ *
+ * No es un evento transitorio (a diferencia de evento-actualizacion-front.json):
+ * este archivo refleja la versión instalada en este momento y no se borra.
+ */
+router.post('/registrar-version-front', (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { version } = req.body;
+        if (typeof version !== 'string' || version.trim() === '') {
+            throw new AppError(CodigoError.VALIDACION, 'Campo version requerido y debe ser string no vacío', 400);
+        }
+
+        if (!fs.existsSync(UPDATER_DIR)) {
+            fs.mkdirSync(UPDATER_DIR, { recursive: true });
+        }
+
+        fs.writeFileSync(VERSION_FRONT_PATH, JSON.stringify({
+            version:  version.trim(),
+            fecha:    new Date().toISOString(),
+        }, null, 2));
+
+        return res.json({ ok: true });
+
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * GET /hay-pausado
+ * Indica si AdminServer ordenó pausar el chequeo de actualizaciones para esta terminal.
+ * El heartbeat escribe pausado.json cuando AdminServer devuelve { pausado: true }.
+ * El frontend lo consulta en el arranque antes de ejecutar checkVersion.
+ */
+router.get('/hay-pausado', (_req: Request, res: Response, next: NextFunction) => {
+    try {
+        return res.json({ pausado: fs.existsSync(PAUSADO_PATH) });
+    } catch (error) {
+        next(error);
     }
 });
 

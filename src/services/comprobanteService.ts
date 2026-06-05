@@ -4,140 +4,216 @@ import { ParametrosRepo } from "../data/parametrosRepository";
 import { FacturacionServ } from "./facturacionService";
 import { Venta } from "../models/Venta";
 
-//#region UTILES
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTES Y LOOKUP TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
 const fonts = {
   Roboto: {
-    normal: path.join(__dirname, '../fonts/Roboto-Regular.ttf'),
-    bold: path.join(__dirname, '../fonts/Roboto-Medium.ttf'),
-    italics: path.join(__dirname, '../fonts/Roboto-Italic.ttf'),
-    bolditalics: path.join(__dirname, '../fonts/Roboto-MediumItalic.ttf')
-  }
+    normal:      path.join(__dirname, '../fonts/Roboto-Regular.ttf'),
+    bold:        path.join(__dirname, '../fonts/Roboto-Medium.ttf'),
+    italics:     path.join(__dirname, '../fonts/Roboto-Italic.ttf'),
+    bolditalics: path.join(__dirname, '../fonts/Roboto-MediumItalic.ttf'),
+  },
 };
-const tiposDocumento = [
+
+/**
+ * Tipos de documento aceptados por AFIP para el receptor.
+ * El id corresponde al código oficial del organismo — no modificar sin verificar.
+ */
+const TIPOS_DOCUMENTO = [
   { id: 80, descripcion: 'CUIT' },
   { id: 86, descripcion: 'CUIL' },
-  { id: 96, descripcion: 'DNI' }
-];
-const condicionesIVAReceptor = [
-  { id: 5, descripcion: 'Consumidor Final' },
-  { id: 1, descripcion: 'IVA Responsable Inscripto' },
-  { id: 6, descripcion: 'Responsable Monotributo' },
-  { id: 13, descripcion: 'Monotributista Social' },
-  { id: 15, descripcion: 'IVA No Alcanzado' }
+  { id: 96, descripcion: 'DNI'  },
 ];
 
-interface PaperConfig {
-  pageSize:     any;
-  fontSizes:    { titulo: number; normal: number; tabla: number; total: number };
-  marginTop:    number;
-  tableMargin:  number[];
-  maxChars:     number;
-  decimales:    number;
-  cantDecimals: number;
-  qrWidth:      number;
-}
-//#endregion
+/**
+ * Condiciones IVA del receptor según resolución AFIP.
+ * Usado para mostrar la condición en texto en el comprobante.
+ */
+const CONDICIONES_IVA_RECEPTOR = [
+  { id: 5,  descripcion: 'Consumidor Final'           },
+  { id: 1,  descripcion: 'IVA Responsable Inscripto'  },
+  { id: 6,  descripcion: 'Responsable Monotributo'    },
+  { id: 13, descripcion: 'Monotributista Social'      },
+  { id: 15, descripcion: 'IVA No Alcanzado'           },
+];
+
+/** Código AFIP → letra visible en el comprobante (A, B, C). */
+const TIPO_COMPROBANTE_LETRA: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
 
 const printer = new PdfPrinter(fonts);
 
-/**
- * ComprobanteService
- * -----------------
- * Genera comprobantes internos y facturas AFIP en PDF usando pdfmake.
- * Soporta tres formatos de papel: 58mm, 80mm y A4.
- *
- * Flujo principal:
- *   GenerarComprobantePDF(venta, parametros, tipo)
- *     ├─ 'interno'  → buildInterno()
- *     └─ 'factura'  → mapearFactura() 
- *        └─ buildFacturaTermica()
- *        └─ buildFacturaA4()
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERFACES
+// ─────────────────────────────────────────────────────────────────────────────
 
-//#region CONFIGURACIÓN POR PAPEL
+/** Propiedades visuales y de layout para cada tamaño de papel soportado. */
+interface ConfiguracionPapel {
+  pageSize:     string | { width: number; height: number };
+  fontSizes:    { titulo: number; normal: number; tabla: number; total: number };
+  marginTop:    number;
+  tableMargin:  number[];
+  /** Máximo de caracteres por línea en la columna Producto. */
+  maxChars:     number;
+  /** Decimales para montos (1 en térmicas para ahorrar espacio, 2 en A4). */
+  decimales:    number;
+  /** Decimales para cantidades (0 en 58mm, 2 en A4). */
+  cantDecimals: number;
+  qrWidth:      number;
+}
+
 /**
- * Define las propiedades visuales y de layout para cada tamaño de papel.
- * Agregar nuevos formatos aquí sin tocar el resto del código.
+ * Datos del comprobante normalizados para los builders.
+ * Se construye en mapearComprobante() a partir de la venta y los parámetros del sistema.
  */
-const PAPER_CONFIGS: Record<string, PaperConfig> = {
+interface ComprobanteData {
+  papel:            string;
+  margenIzq:        number;
+  margenDer:        number;
+  nombreLocal:      string;
+  descripcionLocal: string;
+  direccionLocal:   string;
+  fechaVenta:       string;
+  horaVenta:        string | undefined;
+  /** Filas de la tabla de productos, ya formateadas para pdfmake. */
+  filasTabla:       unknown[][];
+}
+
+/**
+ * Datos de factura AFIP listos para renderizar.
+ * Se construye en mapearFactura() cruzando la venta con los parámetros de facturación.
+ */
+interface FacturaAFIP {
+  puntoVenta:         number | undefined;
+  ticket:             number | undefined;
+  neto:               number | undefined;
+  iva:                number | undefined;
+  cae:                string | undefined;
+  caeVto:             string;
+  tipoComprobante:    number | undefined;
+  desTipoComprobante: string;
+  condicion:          string;
+  razon:              string;
+  direccion:          string;
+  CUIL:               string;
+  condicionReceptor:  string | undefined;
+  DNI:                number | undefined;
+  tipoDNI:            string | undefined;
+  qr:                 string;
+}
+
+/** Resumen financiero de la venta, calculado por calcularResumenVenta(). */
+interface ResumenVenta {
+  subtotal:     number;
+  total:        number;
+  montoAjuste:  number;
+  tipo:         'descuento' | 'recargo' | null;
+  porcentaje:   number | null;
+  entregado:    number;
+  restante:     number;
+  tieneDeuda:   boolean;
+  totalMostrar: number;
+}
+
+/**
+ * Parámetros del comprobante recibidos desde el caller (route → servicio).
+ * Las propiedades con nombres legacy (desLocal, dirLocal, nomLocal) vienen de la DB
+ * y se normalizan en mapearComprobante() — no renombrar aquí por costo de migración.
+ */
+interface ParametrosComprobante {
+  papel:     string;
+  margenIzq: number;
+  margenDer: number;
+  nomLocal:  string;
+  desLocal:  string;
+  dirLocal:  string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURACIÓN POR PAPEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Layout visual para cada tamaño de papel soportado.
+ * Para agregar un nuevo formato, basta con registrarlo aquí — los builders lo consumen
+ * por nombre sin cambios adicionales.
+ */
+const CONFIGURACIONES_PAPEL: Record<string, ConfiguracionPapel> = {
   '58mm': {
-    pageSize:    { width: 140, height: 800 },
-    fontSizes:   { titulo: 11, normal: 7, tabla: 6.5, total: 9 },
-    marginTop:   1,
-    tableMargin: [0, 3, 0, 2],
-    maxChars:    25,   // caracteres máx. por línea en col. "Producto"
-    decimales:   1,    // un decimal en precios
-    cantDecimals: 0,   // cantidades sin decimal (ej: "2" no "2.00")
-    qrWidth: 100       // tamaño del qr
+    pageSize:     { width: 140, height: 800 },
+    fontSizes:    { titulo: 11, normal: 7, tabla: 6.5, total: 9 },
+    marginTop:    1,
+    tableMargin:  [0, 3, 0, 2],
+    maxChars:     25,   // espacio muy limitado: sin truncado los nombres largos rompen el layout de tabla
+    decimales:    1,    // 1 decimal ahorra espacio horizontal en ticket angosto
+    cantDecimals: 0,    // entero ("2" en vez de "2.00") porque la columna C es muy estrecha
+    qrWidth:      100,
   },
 
   '80mm': {
-    pageSize:    { width: 200, height: 800 },
-    fontSizes:   { titulo: 14, normal: 10, tabla: 8.5, total: 12 },
-    marginTop:   2,
-    tableMargin: [0, 4, 0, 2],
-    maxChars:    35,
-    decimales:   1,
+    pageSize:     { width: 200, height: 800 },
+    fontSizes:    { titulo: 14, normal: 10, tabla: 8.5, total: 12 },
+    marginTop:    2,
+    tableMargin:  [0, 4, 0, 2],
+    maxChars:     35,
+    decimales:    1,
     cantDecimals: 1,
-    qrWidth: 120
+    qrWidth:      120,
   },
 
   'A4': {
-    pageSize:    'A4',
-    fontSizes:   { titulo: 16, normal: 12, tabla: 11, total: 15 },
-    marginTop:   10,
-    tableMargin: [0, 10, 0, 10],
-    maxChars:    999, // sin límite: el texto puede ocupar varias líneas
-    decimales:   2,
+    pageSize:     'A4',
+    fontSizes:    { titulo: 16, normal: 12, tabla: 11, total: 15 },
+    marginTop:    10,
+    tableMargin:  [0, 10, 0, 10],
+    maxChars:     999,  // sin límite: pdfmake hace el salto de línea automáticamente
+    decimales:    2,
     cantDecimals: 2,
-    qrWidth: 150
+    qrWidth:      150,
   },
 };
-//#endregion
 
-//#region HELPERS DE FORMATO
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS DE FORMATO
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Formatea un número como moneda argentina.
- * En tickets chicos (58mm / 80mm) usa 1 decimal para ahorrar espacio.
+ * Formatea un número como moneda argentina (es-AR).
+ * La cantidad de decimales varía por papel para ahorrar espacio en tickets.
  */
-function formatMoney(value: number, cfg: PaperConfig): string {
-  return value.toLocaleString('es-AR', {
-    minimumFractionDigits: cfg.decimales,
-    maximumFractionDigits: cfg.decimales,
+function formatearMoneda(valor: number, configuracionPapel: ConfiguracionPapel): string {
+  return valor.toLocaleString('es-AR', {
+    minimumFractionDigits: configuracionPapel.decimales,
+    maximumFractionDigits: configuracionPapel.decimales,
   });
 }
 
 /**
- * Formatea una cantidad.
- * En impresoras térmicas muestra sin decimales (ej: "3"), en A4 con decimales.
+ * Formatea una cantidad respetando la precisión por papel.
+ * En 58mm muestra entero ("3"), en A4 con decimales ("3.00").
  */
-function formatCantidad(value: number, cfg: PaperConfig): string {
-  const num = Number(value);
-  return num.toLocaleString('es-AR', {
-    minimumFractionDigits: cfg.cantDecimals,
-    maximumFractionDigits: cfg.cantDecimals,
+function formatearCantidad(valor: number, configuracionPapel: ConfiguracionPapel): string {
+  return Number(valor).toLocaleString('es-AR', {
+    minimumFractionDigits: configuracionPapel.cantDecimals,
+    maximumFractionDigits: configuracionPapel.cantDecimals,
   });
 }
 
 /**
- * Corta un texto para que no supere `maxChars` caracteres.
- * Respeta palabras completas siempre que sea posible.
- * Si una sola palabra ya supera el límite, corta con "…".
+ * Corta texto al límite de caracteres del papel respetando palabras completas.
  *
- * NOTA: Este era el bug original — la función recibía el objeto cfg completo
- * pero se llamaba con `cfg.chars` (undefined). Ahora recibe PaperConfig.
+ * En 58mm el límite es 25 chars. Sin truncado, los nombres de producto largos
+ * rompen el layout horizontal de la tabla porque pdfmake no hace overflow en
+ * celdas con ancho 'auto'.
  */
-function truncarTexto(texto: string, cfg: PaperConfig): string {
+function truncarTexto(texto: string, configuracionPapel: ConfiguracionPapel): string {
   if (!texto) return '';
-
-  const max = cfg.maxChars;
+  const max = configuracionPapel.maxChars;
   if (texto.length <= max) return texto;
 
-  // Intentar cortar en límite de palabra
-  const palabras = texto.split(' ');
-  let resultado   = '';
-
-  for (const palabra of palabras) {
+  let resultado = '';
+  for (const palabra of texto.split(' ')) {
     const tentativa = resultado ? `${resultado} ${palabra}` : palabra;
     if (tentativa.length <= max) {
       resultado = tentativa;
@@ -146,54 +222,60 @@ function truncarTexto(texto: string, cfg: PaperConfig): string {
     }
   }
 
-  // Fallback: una sola palabra ya excede el límite
-  if (!resultado) {
-    return texto.substring(0, max - 1) + '…';
-  }
+  // Una sola palabra ya supera el límite — cortar con elipsis como fallback
+  if (!resultado) return texto.substring(0, max - 1) + '…';
 
   return resultado + '…';
 }
 
-/** Celda genérica — convierte cualquier valor a string y aplica opciones extras */
-function cell(text: any, opts: object = {}): object {
-  return { text: String(text ?? ''), ...opts };
+/** Convierte un valor a nodo celda de pdfmake, combinando con opciones adicionales. */
+function celda(texto: string | number, opciones: Record<string, unknown> = {}): object {
+  return { text: String(texto ?? ''), ...opciones };
 }
 
 /**
- * Fila de texto alineada a la derecha, usada para subtotal / total / deuda.
- * El parámetro `type` aplica estilos predefinidos (total, descuento, recargo, deuda).
+ * Nodo pdfmake alineado a la derecha, usado en la sección de totales.
+ * `tipo` aplica estilos semánticos: verde para descuento, rojo para recargo,
+ * negrita grande para total.
  */
-function rowRight(text: string, cfg: PaperConfig, type?: 'total' | 'descuento' | 'recargo' | 'deuda'): object {
-  const estilos = {
-    total:    { bold: true, fontSize: cfg.fontSizes.total },
-    descuento:{ color: 'green' },
-    recargo:  { color: 'red' },
-    deuda:    { bold: true },
+function filaAlineadaDerecha(
+  texto: string,
+  configuracionPapel: ConfiguracionPapel,
+  tipo?: 'total' | 'descuento' | 'recargo' | 'deuda',
+): object {
+  const estilos: Record<string, Record<string, unknown>> = {
+    total:     { bold: true, fontSize: configuracionPapel.fontSizes.total },
+    descuento: { color: 'green' },
+    recargo:   { color: 'red' },
+    deuda:     { bold: true },
   };
 
   return {
-    text,
+    text:      texto,
     alignment: 'right',
     margin:    [0, 1, 0, 1],
-    fontSize:  cfg.fontSizes.normal,
-    ...(type ? estilos[type] : {}),
+    fontSize:  configuracionPapel.fontSizes.normal,
+    ...(tipo ? estilos[tipo] : {}),
   };
 }
 
-/** Par "Label: valor" en una línea, reutilizable en todo el A4 */
-function labelValor(label: string, valor: any, bold = false): object {
+/** Nodo pdfmake "Label: valor" en línea. Reutilizado en encabezados y datos de receptor A4. */
+function labelValor(label: string, valor: string | number | null | undefined, negrita = false): object {
   return {
     text: [
       { text: `${label}: `, bold: true },
-      { text: String(valor ?? '—'), bold },
+      { text: String(valor ?? '—'), bold: negrita },
     ],
     fontSize: 10,
     margin: [8, 0, 0, 4],
   };
 }
 
-/** Layout de líneas gris claro, reutilizado en todas las tablas del A4 */
-function lineLayout() {
+/**
+ * Layout de líneas gris claro para tablas A4.
+ * Extraído como función porque pdfmake no acepta el objeto layout reutilizado por referencia.
+ */
+function layoutLineas(): object {
   return {
     hLineWidth: () => 0.5,
     vLineWidth: () => 0.5,
@@ -202,49 +284,59 @@ function lineLayout() {
   };
 }
 
-/** Texto resumen del pago para la sección receptor */
-function buildPagoTexto(venta: any): string {
+/**
+ * Texto resumen de métodos de pago para la sección del receptor.
+ * Soporta pago combinado: "Efectivo: $500  |  Débito: $300".
+ */
+function formatearTextoPago(venta: Venta): string {
   if (!venta.detallePago?.length) return '—';
   return venta.detallePago
-    .map((d: any) => `${d.tipoPago.nombre}: $${d.monto.toLocaleString('es-AR')}`)
+    .map(d => `${d.tipoPago.nombre}: $${d.monto.toLocaleString('es-AR')}`)
     .join('  |  ');
 }
-//#endregion
-
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTRUCTORES DE SECCIONES DEL DOCUMENTO
+// BUILDERS DE SECCIÓN
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Encabezado del comprobante interno (nombre local, descripción, dirección, fecha).
- * En A4 usa layout de dos columnas; en tickets térmicos, apilado centrado.
+ * Encabezado del comprobante: nombre del local, descripción, dirección y fecha.
+ *
+ * A4 usa dos columnas (nombre izquierda | fecha derecha).
+ * Térmicas usan bloques centrados apilados para aprovechar el ancho limitado verticalmente.
  */
-function buildHeader(comp: any, cfg: PaperConfig, esFactura: boolean = false): object {
-  if (comp.papel === 'A4') {
+function buildEncabezado(
+  comprobante: ComprobanteData,
+  configuracionPapel: ConfiguracionPapel,
+  esFactura = false,
+): object {
+  if (comprobante.papel === 'A4') {
     return {
       columns: [
-        { text: comp.nombreLocal?.toUpperCase(), bold: true, fontSize: cfg.fontSizes.titulo },
-        { text: `${comp.fechaVenta} ${comp.horaVenta}`, alignment: 'right', fontSize: cfg.fontSizes.normal },
+        { text: comprobante.nombreLocal?.toUpperCase(), bold: true, fontSize: configuracionPapel.fontSizes.titulo },
+        { text: `${comprobante.fechaVenta} ${comprobante.horaVenta}`, alignment: 'right', fontSize: configuracionPapel.fontSizes.normal },
       ],
-      margin: [0, 0, 0, cfg.marginTop],
+      margin: [0, 0, 0, configuracionPapel.marginTop],
     };
   }
 
-  // Solo incluir las filas que tienen contenido
   const filas = [
-    { text: comp.nombreLocal?.toUpperCase(), alignment: 'center', fontSize: cfg.fontSizes.titulo, bold: true },
-    comp.desLocal?.trim() ? { text: comp.desLocal, alignment: 'center', fontSize: cfg.fontSizes.normal } : null,
-    
-    // Solo mostrar dirección si NO es factura
-    (!esFactura && comp.dirLocal?.trim())
-      ? { text: comp.dirLocal, alignment: 'center', fontSize: cfg.fontSizes.normal } : null,
+    { text: comprobante.nombreLocal?.toUpperCase(), alignment: 'center', fontSize: configuracionPapel.fontSizes.titulo, bold: true },
+
+    comprobante.descripcionLocal?.trim()
+      ? { text: comprobante.descripcionLocal, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal }
+      : null,
+
+    // En facturas AFIP la dirección ya aparece en el bloque del emisor — no duplicar
+    (!esFactura && comprobante.direccionLocal?.trim())
+      ? { text: comprobante.direccionLocal, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal }
+      : null,
 
     {
-      text:      `${comp.fechaVenta} ${comp.horaVenta}`,
+      text:      `${comprobante.fechaVenta} ${comprobante.horaVenta}`,
       alignment: 'center',
-      fontSize:  cfg.fontSizes.normal,
-      margin:    [0, cfg.marginTop, 0, cfg.marginTop],
+      fontSize:  configuracionPapel.fontSizes.normal,
+      margin:    [0, configuracionPapel.marginTop, 0, configuracionPapel.marginTop],
     },
   ];
 
@@ -252,31 +344,29 @@ function buildHeader(comp: any, cfg: PaperConfig, esFactura: boolean = false): o
 }
 
 /**
- * Muestra el nombre del cliente y los métodos de pago utilizados.
- * Soporta pago simple y combinado (múltiples entradas en detallePago).
- * Si no hay cliente o no hay detalle de pago, omite esa línea.
+ * Nombre del cliente y métodos de pago utilizados.
+ * Omite la línea de cliente si no existe o viene vacío (ej: venta sin cliente asignado).
  */
-function buildClienteYPago(venta: any, cfg: PaperConfig): object[] {
+function buildClienteYPago(venta: Venta, configuracionPapel: ConfiguracionPapel): object[] {
   const filas: object[] = [];
 
-  // Nombre del cliente (si existe)
   if (venta.cliente?.nombre?.trim()) {
     filas.push({
-      text:      `Cliente: ${venta.cliente.nombre}`,
-      fontSize:  cfg.fontSizes.normal,
-      margin:    [0, 2, 0, 0],
+      text:     `Cliente: ${venta.cliente.nombre}`,
+      fontSize: configuracionPapel.fontSizes.normal,
+      margin:   [0, 2, 0, 0],
     });
   }
 
-  // Métodos de pago — puede ser uno o varios (pago combinado)
+  // Pago combinado: puede haber más de un método en una misma venta
   if (venta.detallePago?.length) {
     const pagos = venta.detallePago
-      .map((d: any) => `${d.tipoPago.nombre}: $${formatMoney(d.monto, cfg)}`)
+      .map(d => `${d.tipoPago.nombre}: $${formatearMoneda(d.monto, configuracionPapel)}`)
       .join('  |  ');
 
     filas.push({
       text:     `Pago: ${pagos}`,
-      fontSize: cfg.fontSizes.normal,
+      fontSize: configuracionPapel.fontSizes.normal,
       margin:   [0, 0, 0, 2],
     });
   }
@@ -285,126 +375,98 @@ function buildClienteYPago(venta: any, cfg: PaperConfig): object[] {
 }
 
 /**
- * Encabezado de factura AFIP: tipo (A/B/C), datos del emisor y receptor.
+ * Encabezado de factura AFIP para impresión térmica (58mm / 80mm).
+ * El A4 tiene su propio layout en buildDocFacturaA4 con tres columnas.
+ *
+ * Estructura térmica: letra comprobante → datos emisor → número → datos receptor.
  */
-
-function buildFacturaHeader(comprobante: any, factura: any, config: PaperConfig): object[] {
+function buildEncabezadoFactura(
+  comprobante: ComprobanteData,
+  factura: FacturaAFIP,
+  configuracionPapel: ConfiguracionPapel,
+): object[] {
   const filas: object[] = [];
+  const letraComprobante = TIPO_COMPROBANTE_LETRA[factura.tipoComprobante ?? 0] ?? 'X';
 
-  const tipoMap: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
-  const desComprobante = tipoMap[factura.tipoComprobante] ?? 'X';
-
-  // ── Tipo de comprobante (A / B / C) ──────────────────────────────────────
+  // Letra del comprobante en recuadro centrado — AFIP lo requiere visible y destacado
   filas.push({
     columns: [
-      { width: '*', text: '' }, // espacio izquierdo
-
+      { width: '*', text: '' },
       {
         width: 'auto',
         table: {
-          body: [
-            [
-              {
-                stack: [
-                  {
-                    text: desComprobante,
-                    alignment: 'center',
-                    bold: true,
-                    fontSize: config.fontSizes.titulo + 4
-                  },
-                  {
-                    text: `Cod:${factura.tipoComprobante}`,
-                    alignment: 'center',
-                    fontSize: config.fontSizes.normal - 2
-                  }
-                ],
-                margin: [5, 0, 5, 0]
-              }
-            ]
-          ]
+          body: [[{
+            stack: [
+              { text: letraComprobante, alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.titulo + 4 },
+              { text: `Cod:${factura.tipoComprobante}`, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 2 },
+            ],
+            margin: [5, 0, 5, 0],
+          }]],
         },
-        layout: {
-          hLineWidth: () => 0.5,
-          vLineWidth: () => 0.5
-        }
+        layout: { hLineWidth: () => 0.5, vLineWidth: () => 0.5 },
       },
-
-      { width: '*', text: '' } // espacio derecho
+      { width: '*', text: '' },
     ],
-    margin: [0, 0, 0, 5]
+    margin: [0, 0, 0, 5],
   });
 
-  // ── Datos del local ───────────────────────────────────────────────────────
-  filas.push(buildHeader(comprobante, config, true))
+  // Nombre del local y fecha (reutiliza buildEncabezado con flag esFactura para omitir dirección)
+  filas.push(buildEncabezado(comprobante, configuracionPapel, true));
 
-  // ── Datos del emisor ──────────────────────────────────────────────────────
+  // Separador + condición IVA + CUIL del emisor
   filas.push(
-    {
-      canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5 }],
-      margin: [0, 3, 0, 3]
-    },
-    { text: factura.condicion, alignment: 'center', bold: true, fontSize: config.fontSizes.normal, margin: [0, 3, 0, 0]},
+    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5 }], margin: [0, 3, 0, 3] },
+    { text: factura.condicion, alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal, margin: [0, 3, 0, 0] },
+    { text: `${factura.CUIL}`, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal },
   );
-  filas.push({
-    text:      `${factura.CUIL}`,
-    alignment: 'center',
-    fontSize:  config.fontSizes.normal
-  });
 
-  // Razón social y dirección: solo si tienen contenido
   if (factura.razon?.trim()) {
-    filas.push({ text: factura.razon, alignment: 'center', fontSize: config.fontSizes.normal - 1 });
+    filas.push({ text: factura.razon, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 1 });
   }
   if (factura.direccion?.trim()) {
-    filas.push({ text: factura.direccion, alignment: 'center', fontSize: config.fontSizes.normal - 1, margin: [0, 0, 0, 2] });
+    filas.push({ text: factura.direccion, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 1, margin: [0, 0, 0, 2] });
   }
 
-  // ── Número de comprobante ─────────────────────────────────────────────────
-  filas.push({
-    text: `Ticket Nro: ${String(factura.puntoVta).padStart(4, '0')}-${String(factura.ticket).padStart(8, '0')}`, alignment: 'center',
-    bold: true,
-    fontSize: config.fontSizes.normal,
-    margin: [0, 0, 0, 2],
-  },
-  {
-    canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5 }],
-    margin: [0, 3, 0, 3]
-  },
-);
+  // AFIP exige formato XXXX-XXXXXXXX (4 dígitos punto de venta + 8 dígitos ticket)
+  filas.push(
+    {
+      text:      `Ticket Nro: ${String(factura.puntoVenta).padStart(4, '0')}-${String(factura.ticket).padStart(8, '0')}`,
+      alignment: 'center',
+      bold:      true,
+      fontSize:  configuracionPapel.fontSizes.normal,
+      margin:    [0, 0, 0, 2],
+    },
+    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5 }], margin: [0, 3, 0, 3] },
+  );
 
-  // ── Datos del receptor — en 58mm va en una sola línea compacta ────────────
-  const dni    = factura.DNI    ? `${factura.tipoDNI}: ${factura.DNI}` : '';
-  const receptor = [dni, factura.condReceptor].filter(Boolean).join('  |  ');
+  // Datos del receptor (solo si existen — consumidor final puede no tener dni/condición)
+  const dniTexto = factura.DNI ? `${factura.tipoDNI}: ${factura.DNI}` : '';
+  const receptor = [dniTexto, factura.condicionReceptor].filter(Boolean).join('  |  ');
 
   if (receptor) {
-    filas.push({ text: 'Receptor', alignment: 'center', bold:true, fontSize: config.fontSizes.normal - 1});
-    filas.push({
-      text:      receptor,
-      alignment: 'center',
-      fontSize:  config.fontSizes.normal - 1,
-      margin:    [0, 0, 0, 2],
-    });
+    filas.push(
+      { text: 'Receptor', alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal - 1 },
+      { text: receptor,   alignment: 'center',              fontSize: configuracionPapel.fontSizes.normal - 1, margin: [0, 0, 0, 2] },
+    );
   }
 
   return filas;
 }
 
 /**
- * Tabla de productos.
- * Las columnas son: C (cantidad) | Producto | Precio unit. | Total
+ * Tabla de productos: C (cantidad) | Producto | P.Unit | Total.
+ * Las filas de detalle se reciben pre-construidas desde mapearComprobante()
+ * para mantener separada la responsabilidad de formateo de datos y estructura de tabla.
  */
-function buildTabla(comp: any, cfg: PaperConfig): object {
-  // Encabezado
-  const body: any[][] = [[
-    cell('C',        { style: 'th' }),
-    cell('Producto', { style: 'th' }),
-    cell('P.Unit',   { style: 'th', alignment: 'right' }),
-    cell('Total',    { style: 'th', alignment: 'right' }),
-  ]];
+function buildTabla(comprobante: ComprobanteData, configuracionPapel: ConfiguracionPapel): object {
+  const encabezado = [
+    celda('C',        { style: 'th' }),
+    celda('Producto', { style: 'th' }),
+    celda('P.Unit',   { style: 'th', alignment: 'right' }),
+    celda('Total',    { style: 'th', alignment: 'right' }),
+  ];
 
-  for (const item of comp.filasTabla) {
-    body.push(item); // las filas ya se construyen en buildFilasDetalle()
-  }
+  const body: unknown[][] = [encabezado, ...comprobante.filasTabla];
 
   return {
     table: {
@@ -412,98 +474,96 @@ function buildTabla(comp: any, cfg: PaperConfig): object {
       body,
     },
     layout: {
+      // Solo mostrar línea divisoria debajo del header y al final — no entre filas de productos
       fillColor:     (row: number) => (row === 0 ? '#eeeeee' : null),
-      hLineWidth:    (i: number, node: any) =>
-        (i === 1 || i === node.table.body.length) ? 0.5 : 0,
+      hLineWidth:    (i: number, node: any) => (i === 1 || i === node.table.body.length) ? 0.5 : 0,
       vLineWidth:    () => 0,
       paddingTop:    () => 1,
       paddingBottom: () => 1,
     },
-    margin:     cfg.tableMargin,
-    fontSize:   cfg.fontSizes.tabla,
+    margin:     configuracionPapel.tableMargin,
+    fontSize:   configuracionPapel.fontSizes.tabla,
     lineHeight: 1,
   };
 }
 
 /**
- * Construye las filas de detalle (sin el encabezado) para la tabla de productos.
- * Separado de buildTabla para mantener cada función con una única responsabilidad.
+ * Construye las filas de detalle de productos para inyectar en buildTabla().
+ * Separado de buildTabla para que cada función tenga una sola responsabilidad.
  */
-function buildFilasDetalle(venta: any, cfg: PaperConfig): any[][] {
-  return venta.detalles.map((item: any) => [
-    cell(formatCantidad(item.cantidad, cfg), { alignment: 'center' }),
-    cell(truncarTexto(item.nomProd, cfg)),
-    cell(formatMoney(item.precio, cfg), { alignment: 'right' }),
-    cell(formatMoney(item.total, cfg),  { alignment: 'right' }),
+function buildFilasDetalle(venta: Venta, configuracionPapel: ConfiguracionPapel): unknown[][] {
+  return venta.detalles.map(item => [
+    celda(formatearCantidad(item.cantidad ?? 0, configuracionPapel), { alignment: 'center' }),
+    celda(truncarTexto(item.nomProd ?? '',      configuracionPapel)),
+    celda(formatearMoneda(item.precio   ?? 0,  configuracionPapel), { alignment: 'right' }),
+    celda(formatearMoneda(item.total    ?? 0,  configuracionPapel), { alignment: 'right' }),
   ]);
 }
 
 /**
- * Bloque de totales: subtotal → ajuste (desc/recargo) → TOTAL → deuda.
- * Solo muestra las filas que aplican según el resumen.
+ * Bloque de totales: subtotal → ajuste (descuento/recargo) → TOTAL → deuda.
+ * Solo renderiza las filas que aplican; si no hay modificador, omite subtotal y ajuste.
  */
-function buildTotales(resumen: any, cfg: PaperConfig): object[] {
+function buildTotales(resumen: ResumenVenta | null, configuracionPapel: ConfiguracionPapel): object[] {
   if (!resumen) return [];
 
-  const rows: object[] = [];
+  const filas: object[] = [];
 
-  // Mostrar subtotal solo si hay algún modificador que lo haga relevante
   const tieneModificador = resumen.montoAjuste > 0;
   if (tieneModificador) {
-    rows.push(rowRight(`Subtotal: $${formatMoney(resumen.subtotal, cfg)}`, cfg));
+    filas.push(filaAlineadaDerecha(`Subtotal: $${formatearMoneda(resumen.subtotal, configuracionPapel)}`, configuracionPapel));
 
-    const esDesc     = resumen.tipo === 'descuento';
-    const signo      = esDesc ? '-' : '+';
-    const label      = esDesc ? 'Descuento' : 'Recargo';
-    const porcentaje = resumen.porcentaje ? ` (${resumen.porcentaje.toFixed(2)}%)` : '';
+    const esDescuento = resumen.tipo === 'descuento';
+    const signo       = esDescuento ? '-' : '+';
+    const label       = esDescuento ? 'Descuento' : 'Recargo';
+    const porcentaje  = resumen.porcentaje ? ` (${resumen.porcentaje.toFixed(2)}%)` : '';
 
-    rows.push(rowRight(
-      `${label}${porcentaje}: ${signo}$${formatMoney(resumen.montoAjuste, cfg)}`,
-      cfg,
-      resumen.tipo,
+    filas.push(filaAlineadaDerecha(
+      `${label}${porcentaje}: ${signo}$${formatearMoneda(resumen.montoAjuste, configuracionPapel)}`,
+      configuracionPapel,
+      resumen.tipo ?? undefined,
     ));
   }
 
-  rows.push(rowRight(`TOTAL: $${formatMoney(resumen.total, cfg)}`, cfg, 'total'));
+  filas.push(filaAlineadaDerecha(`TOTAL: $${formatearMoneda(resumen.total, configuracionPapel)}`, configuracionPapel, 'total'));
 
+  // Deuda: solo si el cliente entregó menos del total (pago parcial / cuenta corriente)
   if (resumen.tieneDeuda) {
-    rows.push(
-      rowRight(`Entregado: $${formatMoney(resumen.entregado, cfg)}`, cfg),
-      rowRight(`Debe:      $${formatMoney(resumen.restante,  cfg)}`, cfg, 'deuda'),
+    filas.push(
+      filaAlineadaDerecha(`Entregado: $${formatearMoneda(resumen.entregado, configuracionPapel)}`, configuracionPapel),
+      filaAlineadaDerecha(`Debe:      $${formatearMoneda(resumen.restante,  configuracionPapel)}`, configuracionPapel, 'deuda'),
     );
   }
 
-  return rows;
+  return filas;
 }
 
 /**
- * Desglose de IVA — solo para facturas tipo A y B (no monotributo).
+ * Desglose de IVA — solo para facturas tipo A y B.
+ * Tipo C (monotributo) no discrimina IVA según normativa AFIP.
  */
-function buildIVA(f: any, cfg: PaperConfig): object[] {
-  if (f.tipoComprobante === 11) return []; // Tipo C: monotributo, sin IVA
+function buildIVA(factura: FacturaAFIP, configuracionPapel: ConfiguracionPapel): object[] {
+  if (factura.tipoComprobante === 11) return [];
 
-  const esA4 = cfg.pageSize === 'A4';
-
+  const esA4 = configuracionPapel.pageSize === 'A4';
 
   return [
-    { text: 'IVA 21% Incluido', alignment: esA4 ? 'right' : 'center', margin: [0, 5, 0, 3], fontSize: cfg.fontSizes.normal },
-    rowRight(`NETO: $${formatMoney(f.neto, cfg)}`, cfg),
-    rowRight(`IVA:  $${formatMoney(f.iva, cfg)}`, cfg),
+    { text: 'IVA 21% Incluido', alignment: esA4 ? 'right' : 'center', margin: [0, 5, 0, 3], fontSize: configuracionPapel.fontSizes.normal },
+    filaAlineadaDerecha(`NETO: $${formatearMoneda(factura.neto ?? 0, configuracionPapel)}`, configuracionPapel),
+    filaAlineadaDerecha(`IVA:  $${formatearMoneda(factura.iva  ?? 0, configuracionPapel)}`, configuracionPapel),
   ];
 }
 
-/**
- * Bloque del CAE (código de autorización electrónica) de AFIP.
- */
-function buildCAE(f: any, cfg: PaperConfig): object {
+/** Bloque del CAE (código de autorización electrónica) emitido por AFIP. */
+function buildCAE(factura: FacturaAFIP, configuracionPapel: ConfiguracionPapel): object {
   return {
     table: {
       widths: ['*'],
       body: [[{
         stack: [
-          { text: 'CAE',    alignment: 'center', bold: true,  fontSize: cfg.fontSizes.normal },
-          { text: f.cae,    alignment: 'center',              fontSize: cfg.fontSizes.normal },
-          { text: f.caeVto, alignment: 'center',              fontSize: cfg.fontSizes.normal },
+          { text: 'CAE',          alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal },
+          { text: factura.cae,    alignment: 'center',             fontSize: configuracionPapel.fontSizes.normal },
+          { text: factura.caeVto, alignment: 'center',             fontSize: configuracionPapel.fontSizes.normal },
         ],
       }]],
     },
@@ -512,246 +572,247 @@ function buildCAE(f: any, cfg: PaperConfig): object {
   };
 }
 
-/** QR de verificación AFIP */
-function buildQR(f: any, cfg: PaperConfig): object {
+/** QR de verificación AFIP. El contenido del QR se genera en FacturacionServ.ObtenerQRFactura(). */
+function buildQR(factura: FacturaAFIP, configuracionPapel: ConfiguracionPapel): object {
   return {
-    image:     f.qr,
-    width:     cfg.qrWidth,
+    image:     factura.qr,
+    width:     configuracionPapel.qrWidth,
     alignment: 'center',
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTRUCTORES DE DOCUMENTO COMPLETO
+// BUILDERS DE DOCUMENTO COMPLETO
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildDocInterno(comp: any, resumen: any, venta:Venta): object {
-  const cfg = getPaperConfig(comp.papel);
+function buildDocInterno(comprobante: ComprobanteData, resumen: ResumenVenta | null, venta: Venta): object {
+  const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
 
   return {
-    pageSize: cfg.pageSize,
-    pageMargins: comp.papel === 'A4'
-    ? [
-        comp.margenIzq || 15,
-        15,
-        comp.margenDer || 15,
-        15
-      ]
-    : [
-        comp.margenIzq,
-        4,
-        comp.margenDer,
-        4
-      ],
+    pageSize: configuracionPapel.pageSize,
+    pageMargins: comprobante.papel === 'A4'
+      ? [comprobante.margenIzq || 15, 15, comprobante.margenDer || 15, 15]
+      : [comprobante.margenIzq, 4, comprobante.margenDer, 4],
 
     content: [
-      buildHeader(comp, cfg),
-      ...buildClienteYPago(venta, cfg),  
-      buildTabla(comp, cfg),
-      ...buildTotales(resumen, cfg),
+      buildEncabezado(comprobante, configuracionPapel),
+      ...buildClienteYPago(venta, configuracionPapel),
+      buildTabla(comprobante, configuracionPapel),
+      ...buildTotales(resumen, configuracionPapel),
     ],
   };
 }
 
-function buildDocFactura(comprobante: any, resumen: any, venta:Venta, factura: any): object {
-  const cfg = getPaperConfig(comprobante.papel);
+/**
+ * Dispatcher de factura: delega a A4 o a la versión térmica según el papel configurado.
+ * El layout A4 es sustancialmente diferente (3 columnas, tabla receptor, pie con QR+CAE).
+ */
+function buildDocFactura(
+  comprobante: ComprobanteData,
+  resumen: ResumenVenta | null,
+  venta: Venta,
+  factura: FacturaAFIP,
+): object {
+  const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
 
-  // A4 tiene su propio layout profesional
   if (comprobante.papel === 'A4') {
     return buildDocFacturaA4(comprobante, resumen, venta, factura);
   }
 
-  // 58mm / 80mm — layout compacto para tickets térmicos
+  // Layout compacto para tickets térmicos
   return {
-    pageSize:    cfg.pageSize,
+    pageSize:    configuracionPapel.pageSize,
     pageMargins: [comprobante.margenIzq, 4, comprobante.margenDer, 4],
- 
     content: [
-      ...buildFacturaHeader(comprobante, factura, cfg),  
-      buildTabla(comprobante, cfg),
-      ...buildTotales(resumen, cfg),
-      ...buildIVA(factura, cfg),
-      buildCAE(factura, cfg),                    
-      buildQR(factura, cfg),
+      ...buildEncabezadoFactura(comprobante, factura, configuracionPapel),
+      buildTabla(comprobante, configuracionPapel),
+      ...buildTotales(resumen, configuracionPapel),
+      ...buildIVA(factura, configuracionPapel),
+      buildCAE(factura, configuracionPapel),
+      buildQR(factura, configuracionPapel),
     ],
   };
 }
 
 /**
  * Layout profesional para factura A4.
- * Estructura:
- *   1. Header 3 columnas: datos emisor | tipo comprobante | datos del documento
- *   2. Datos del receptor
+ *
+ * Estructura del documento:
+ *   1. Header tres columnas: datos emisor | letra comprobante | datos del documento
+ *   2. Tabla datos del receptor
  *   3. Tabla de productos
- *   4. Totales
- *   5. Pie: QR + CAE + IVA
+ *   4. Tabla de totales (izq: espacio para leyenda fiscal; der: números)
+ *   5. Pie: QR + datos CAE
  */
-function buildDocFacturaA4(comp: any, resumen: any, venta: Venta, f: any): object {
-  console.log(f.tipoComprobante)
-  const tipoMap: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
-  const desComprobante = tipoMap[f.tipoComprobante] ?? 'X';
-  console.log(desComprobante)
+function buildDocFacturaA4(
+  comprobante: ComprobanteData,
+  resumen: ResumenVenta | null,
+  venta: Venta,
+  factura: FacturaAFIP,
+): object {
+  const configuracionPapel = obtenerConfiguracionPapel('A4');
+  const letraComprobante   = TIPO_COMPROBANTE_LETRA[factura.tipoComprobante ?? 0] ?? 'X';
 
   // ── 1. Header tres columnas ───────────────────────────────────────────────
   const headerTable = {
     table: {
       widths: ['45%', '10%', '45%'],
       body: [[
-        // Columna izquierda — datos del emisor
+        // Columna izquierda — identificación del emisor
         {
           stack: [
-            { text: comp.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
-            labelValor('Dirección',           f.direccion),
-            labelValor('Cond. IVA',           f.condicion),
-            labelValor('CUIT',                f.CUIL),
-            labelValor('Razón Social',    f.razon),
-          ]
-        },
-        // Columna central — letra del comprobante
-        {
-          stack: [
-            { text: desComprobante, fontSize: 25, bold: true, decoration: 'underline', alignment: 'center', margin: [0, 10, 0, 3] },
-            { text: `Cod. ${f.tipoComprobante}`, fontSize: 7, alignment: 'center' },
+            { text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
+            labelValor('Dirección',    factura.direccion),
+            labelValor('Cond. IVA',   factura.condicion),
+            labelValor('CUIT',        factura.CUIL),
+            labelValor('Razón Social', factura.razon),
           ],
-          alignment: 'center'
         },
-        // Columna derecha — datos del documento
+        // Columna central — letra del comprobante en grande (requisito visual AFIP)
+        {
+          stack: [
+            { text: letraComprobante, fontSize: 25, bold: true, decoration: 'underline', alignment: 'center', margin: [0, 10, 0, 3] },
+            { text: `Cod. ${factura.tipoComprobante}`, fontSize: 7, alignment: 'center' },
+          ],
+          alignment: 'center',
+        },
+        // Columna derecha — identificación del documento
         {
           stack: [
             { text: 'FACTURA', fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
-            labelValor('Nro Comp',        `${f.puntoVta?.toString().padStart(4, '0')} - ${f.ticket?.toString().padStart(8, '0')}`, true),
-            labelValor('Fecha Emisión',   `${comp.fechaVenta} - ${comp.horaVenta}`),
-          ]
+            labelValor('Nro Comp',      `${factura.puntoVenta?.toString().padStart(4, '0')} - ${factura.ticket?.toString().padStart(8, '0')}`, true),
+            labelValor('Fecha Emisión', `${comprobante.fechaVenta} - ${comprobante.horaVenta}`),
+          ],
         },
       ]],
     },
-    layout: lineLayout(),
+    layout: layoutLineas(),
   };
 
   // ── 2. Datos del receptor ─────────────────────────────────────────────────
-  const receptorTable = {
+  const tablaReceptor = {
     table: {
       widths: ['*'],
       body: [[{
         stack: [
-          labelValor('Cliente',              venta.cliente?.nombre ?? 'Consumidor Final'),
-          labelValor('Condición',            f.condReceptor),
-          labelValor(`${f.tipoDNI}`,         f.DNI),
-          labelValor('Método de pago',       buildPagoTexto(venta)),
+          labelValor('Cliente',        venta.cliente?.nombre ?? 'Consumidor Final'),
+          labelValor('Condición',      factura.condicionReceptor),
+          labelValor(`${factura.tipoDNI}`, factura.DNI),
+          labelValor('Método de pago', formatearTextoPago(venta)),
         ],
         margin: [8, 4, 8, 4],
       }]],
     },
     layout: {
       fillColor: () => '#eeeeee',
-      ...lineLayout(),
+      ...layoutLineas(),
     },
     margin: [0, 10, 0, 10],
   };
 
   // ── 3. Tabla de productos ─────────────────────────────────────────────────
-  const tablaProductos = buildTabla(comp, getPaperConfig('A4'));
+  const tablaProductos = buildTabla(comprobante, configuracionPapel);
 
   // ── 4. Totales ────────────────────────────────────────────────────────────
-  const cfgA4 = getPaperConfig('A4');
-  const totalesTable = {
+  const tablaTotales = {
     table: {
       widths: ['50%', '50%'],
       body: [[
-        // Izquierda — leyenda fiscal si aplica
+        // Columna izquierda — reservada para leyenda fiscal (actualmente vacía; ver comentario)
         {
-          // stack: [
-          //   f.tipoComprobante === 6 ? {
-          //     text: 'El crédito fiscal discriminado en el presente comprobante, sólo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618',
-          //     italics: true,
-          //     fontSize: 9,
-          //     margin: [5, 5, 5, 5],
-          //   } : { text: '' },
-          // ]
+          // Leyenda fiscal para tipo B — pendiente de activar cuando se confirme el texto legal:
+          // f.tipoComprobante === 6
+          //   ? { text: 'El crédito fiscal discriminado ...', italics: true, fontSize: 9 }
+          //   : { text: '' }
         },
-        // Derecha — números
+        // Columna derecha — números
         {
           stack: [
-            ...buildTotales(resumen, cfgA4),
-            ...buildIVA(f, cfgA4),
-          ]
+            ...buildTotales(resumen, configuracionPapel),
+            ...buildIVA(factura, configuracionPapel),
+          ],
         },
       ]],
     },
-    layout: lineLayout(),
+    layout: layoutLineas(),
     margin: [0, 10, 0, 0],
   };
 
-  // ── 5. Pie — QR + CAE + IVA ───────────────────────────────────────────────
+  // ── 5. Pie — QR + datos CAE ───────────────────────────────────────────────
   const pie = {
     columns: [
-      // QR
-      { image: f.qr, width: 100, alignment: 'left', margin: [0, 0, 30, 0] },
-
-      // CAE
+      { image: factura.qr, width: 100, alignment: 'left', margin: [0, 0, 30, 0] },
       {
         stack: [
           { text: 'Comprobante Autorizado', fontSize: 10, italic: true, bold: true, margin: [8, 3, 0, 10] },
-          labelValor('CAE',             f.cae),
-          labelValor('Vencimiento CAE', f.caeVto),
-          labelValor('Moneda', 'PES'),
+          labelValor('CAE',             factura.cae),
+          labelValor('Vencimiento CAE', factura.caeVto),
+          labelValor('Moneda',          'PES'),
         ],
         width: 'auto',
       },
-
-      // IVA — solo para A y B
-      // f.tipoComprobante !== 11
-      //   ? {
-      //       stack: [
-      //         { text: f.tipoComprobante === 6 ? 'IVA 21% Incluido' : 'IVA 21% Discriminado', fontSize: 10, margin: [0, 0, 0, 5] },
-      //         labelValor('Neto', `$${formatMoney(Number(f.neto), cfgA4)}`),
-      //         labelValor('IVA',  `$${formatMoney(Number(f.iva),  cfgA4)}`),
-      //         labelValor('Moneda', 'PES'),
-      //       ],
-      //       alignment: 'right',
-      //       width: '*',
-      //     }
-      //   : { text: '', width: '*' },
-      ],
+      // Columna IVA discriminado — pendiente de activar para tipo A:
+      // factura.tipoComprobante !== 11
+      //   ? { stack: [...], alignment: 'right', width: '*' }
+      //   : { text: '', width: '*' }
+    ],
     margin: [0, 15, 0, 0],
   };
 
   return {
-    pageSize:    'A4',
+    pageSize:        'A4',
     pageOrientation: 'portrait',
-    pageMargins: [10, 10, 10, 10],
-    content:     [headerTable, receptorTable, tablaProductos, totalesTable, pie],
-    styles:      a4Styles(getPaperConfig('A4')),
+    pageMargins:     [10, 10, 10, 10],
+    content:         [headerTable, tablaReceptor, tablaProductos, tablaTotales, pie],
+    styles:          estilosA4(configuracionPapel),
   };
 }
-function a4Styles(cfg: PaperConfig): object {
+
+/** Estilos pdfmake para el documento A4. Separado del builder para mantenerlo legible. */
+function estilosA4(configuracionPapel: ConfiguracionPapel): object {
   return {
-    simple:           { fontSize: cfg.fontSizes.normal,  margin: [8, 0, 0, 4] },
-    titulo:           { fontSize: cfg.fontSizes.titulo,  bold: true, margin: [0, 15, 0, 8] },
-    tipoComprobante:  { fontSize: cfg.fontSizes.titulo + 10, bold: true, decoration: 'underline', margin: [0, 10, 0, 3] },
-    tableStyle:       { fontSize: cfg.fontSizes.tabla,   margin: [0, 0, 0, 5] },
-    totalProducto:    { fontSize: cfg.fontSizes.normal,  margin: [3, 1, 3, 1] },
-    subtotal:         { fontSize: cfg.fontSizes.normal,  margin: [3, 12, 3, 1] },
-    descuento:        { fontSize: cfg.fontSizes.normal,  margin: [3, 1, 3, 1] },
-    total:            { fontSize: cfg.fontSizes.total,   bold: true, margin: [3, 10, 3, 5] },
-    recargaDescuento: { fontSize: cfg.fontSizes.normal,  margin: [3, 1, 3, 1] },
+    simple:           { fontSize: configuracionPapel.fontSizes.normal,  margin: [8, 0, 0, 4] },
+    titulo:           { fontSize: configuracionPapel.fontSizes.titulo,  bold: true, margin: [0, 15, 0, 8] },
+    tipoComprobante:  { fontSize: configuracionPapel.fontSizes.titulo + 10, bold: true, decoration: 'underline', margin: [0, 10, 0, 3] },
+    tableStyle:       { fontSize: configuracionPapel.fontSizes.tabla,   margin: [0, 0, 0, 5] },
+    totalProducto:    { fontSize: configuracionPapel.fontSizes.normal,  margin: [3, 1, 3, 1] },
+    subtotal:         { fontSize: configuracionPapel.fontSizes.normal,  margin: [3, 12, 3, 1] },
+    descuento:        { fontSize: configuracionPapel.fontSizes.normal,  margin: [3, 1, 3, 1] },
+    total:            { fontSize: configuracionPapel.fontSizes.total,   bold: true, margin: [3, 10, 3, 5] },
+    recargaDescuento: { fontSize: configuracionPapel.fontSizes.normal,  margin: [3, 1, 3, 1] },
     totales:          { margin: [0, 10, 0, 0] },
-    leyenda:          { fontSize: cfg.fontSizes.normal - 2, italics: true, margin: [5, 5, 5, 5] },
+    leyenda:          { fontSize: configuracionPapel.fontSizes.normal - 2, italics: true, margin: [5, 5, 5, 5] },
   };
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SERVICIO PRINCIPAL
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * ComprobanteService
+ * ------------------
+ * Genera comprobantes internos y facturas AFIP en PDF usando pdfmake.
+ * Soporta tres formatos de papel: 58mm, 80mm y A4.
+ *
+ * Flujo principal:
+ *   generarComprobantePDF(venta, parametros, tipo)
+ *     ├─ 'interno'  → buildDocInterno()
+ *     └─ 'factura'  → mapearFactura() → buildDocFactura()
+ *                        └─ (A4)    → buildDocFacturaA4()
+ */
 export class ComprobanteService {
 
-  // ── Punto de entrada público ──────────────────────────────────────────────
-
-  async GenerarComprobantePDF(venta: Venta, parametros: any, tipo: string): Promise<Buffer> {
+  /**
+   * Punto de entrada público. Genera el Buffer del PDF listo para enviar al cliente.
+   *
+   * @param venta      - Venta completa con detalles, pago y factura (si aplica)
+   * @param parametros - Configuración del local: papel, márgenes, nombre, etc.
+   * @param tipo       - 'interno' para ticket sin datos AFIP, 'factura' para comprobante fiscal
+   */
+  async generarComprobantePDF(venta: Venta, parametros: ParametrosComprobante, tipo: string): Promise<Buffer> {
     const comprobante = this.mapearComprobante(venta, parametros);
-    const resumen = calcularResumenVenta(venta);
-
-
+    const resumen     = calcularResumenVenta(venta);
 
     const docDefinition = tipo === 'interno'
       ? buildDocInterno(comprobante, resumen, venta)
@@ -760,58 +821,57 @@ export class ComprobanteService {
     return generarBufferPDF(docDefinition);
   }
 
-  // ── Mapeo de datos ────────────────────────────────────────────────────────
-
   /**
-   * Normaliza la venta + parámetros en un objeto `comp` listo para los builders.
+   * Normaliza la venta + parámetros en un ComprobanteData listo para los builders.
+   * También pre-construye las filas de la tabla mientras el cfg está disponible.
    */
-  private mapearComprobante(venta: any, params: any): any {
-    const cfg   = getPaperConfig(params.papel);
-    const fecha = new Date(venta.fecha);
+  private mapearComprobante(venta: Venta, parametros: ParametrosComprobante): ComprobanteData {
+    const configuracionPapel = obtenerConfiguracionPapel(parametros.papel);
+    const fecha              = new Date(venta.fecha!);
 
     return {
-      papel:       params.papel,
-      margenIzq:   params.margenIzq,
-      margenDer:   params.margenDer,
-      nombreLocal: params.nomLocal,
-      desLocal:    params.desLocal,
-      dirLocal:    params.dirLocal,
-      fechaVenta:  fecha.toLocaleDateString('es-ES'),
-      horaVenta:   venta.hora,
-
-      // Se construyen las filas aquí para tener el cfg disponible
-      filasTabla: buildFilasDetalle(venta, cfg),
+      papel:            parametros.papel,
+      margenIzq:        parametros.margenIzq,
+      margenDer:        parametros.margenDer,
+      nombreLocal:      parametros.nomLocal,
+      descripcionLocal: parametros.desLocal,
+      direccionLocal:   parametros.dirLocal,
+      fechaVenta:       fecha.toLocaleDateString('es-ES'),
+      horaVenta:        venta.hora,
+      filasTabla:       buildFilasDetalle(venta, configuracionPapel),
     };
   }
 
-  /** Reúne los datos de factura AFIP desde la venta y los parámetros del sistema. */
-  private async mapearFactura(venta: any): Promise<any> {
-    const factura    = venta.factura;
-    const parametros = await ParametrosRepo.ObtenerParametrosFacturacion();
+  /**
+   * Construye el objeto FacturaAFIP cruzando la venta con los parámetros de facturación.
+   * Consulta el QR a AFIP — puede fallar si el servicio externo no responde.
+   */
+  private async mapearFactura(venta: Venta): Promise<FacturaAFIP> {
+    const facturaVenta = venta.factura!;
+    const parametros   = await ParametrosRepo.ObtenerParametrosFacturacion();
 
-    const tipoMap: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
-    const tipoDocDesc = tiposDocumento.find(t => t.id === factura.tipoDni)?.descripcion;
-    const tipoCondicionDesc = condicionesIVAReceptor.find(t => t.id === factura.condReceptor)?.descripcion;
-    
+    const tipoDNI            = TIPOS_DOCUMENTO.find(t => t.id === facturaVenta.tipoDni)?.descripcion;
+    const condicionReceptor  = CONDICIONES_IVA_RECEPTOR.find(t => t.id === facturaVenta.condReceptor)?.descripcion;
+
     return {
-      puntoVta:          factura?.ptoVenta,
-      ticket:            factura?.ticket,
-      neto:              factura?.neto,
-      iva:               factura?.iva,
-      cae:               factura?.cae,
-      caeVto:            new Date(factura?.caeVto).toLocaleDateString('es-AR'),
-      tipoComprobante:   factura?.tipoFactura,
-      desTipoComprobante: tipoMap[factura?.tipoFactura] ?? '',
-      condicion:         parametros.condicion === 'responsable_inscripto'
-                           ? 'RESPONSABLE INSCRIPTO'
-                           : 'MONOTRIBUTISTA',
-      razon:             parametros.razon,
-      direccion:         parametros.direccion,
-      CUIL:              parametros.cuil,
-      condReceptor:      tipoCondicionDesc,
-      DNI:               factura?.dni,
-      tipoDNI:           tipoDocDesc,
-      qr:                await FacturacionServ.ObtenerQRFactura(venta.id),
+      puntoVenta:          facturaVenta.ptoVenta,
+      ticket:              facturaVenta.ticket,
+      neto:                facturaVenta.neto,
+      iva:                 facturaVenta.iva,
+      cae:                 facturaVenta.cae,
+      caeVto:              new Date(facturaVenta.caeVto!).toLocaleDateString('es-AR'),
+      tipoComprobante:     facturaVenta.tipoComprobante,
+      desTipoComprobante:  TIPO_COMPROBANTE_LETRA[facturaVenta.tipoComprobante ?? 0] ?? '',
+      condicion:           parametros.condicion === 'responsable_inscripto'
+                             ? 'RESPONSABLE INSCRIPTO'
+                             : 'MONOTRIBUTISTA',
+      razon:               parametros.razon,
+      direccion:           parametros.direccion,
+      CUIL:                parametros.cuil,
+      condicionReceptor,
+      DNI:                 facturaVenta.dni,
+      tipoDNI,
+      qr:                  await FacturacionServ.ObtenerQRFactura(venta.id),
     };
   }
 }
@@ -820,9 +880,9 @@ export class ComprobanteService {
 // UTILIDADES INTERNAS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Devuelve la config del papel solicitado, con fallback a 80mm. */
-function getPaperConfig(papel: string): PaperConfig {
-  return PAPER_CONFIGS[papel] ?? PAPER_CONFIGS['80mm'];
+/** Retorna la configuración del papel solicitado, con fallback a 80mm si no existe. */
+function obtenerConfiguracionPapel(papel: string): ConfiguracionPapel {
+  return CONFIGURACIONES_PAPEL[papel] ?? CONFIGURACIONES_PAPEL['80mm'];
 }
 
 /** Genera un Buffer del PDF a partir de un docDefinition de pdfmake. */
@@ -843,33 +903,37 @@ function generarBufferPDF(docDefinition: object): Promise<Buffer> {
   });
 }
 
-function calcularResumenVenta(venta: any) {
+/**
+ * Calcula el resumen financiero de la venta para la sección de totales.
+ * Determina si hay descuento, recargo, y si el cliente quedó con deuda.
+ */
+function calcularResumenVenta(venta: Venta): ResumenVenta | null {
   const pago = venta?.pago;
   if (!pago) return null;
 
-  const subtotal = pago.monto ?? 0;
+  const subtotal  = pago.monto    ?? 0;
   const descuento = pago.descuento ?? 0;
-  const recargo = pago.recargo ?? 0;
+  const recargo   = pago.recargo   ?? 0;
 
   const tipo = descuento > 0 ? 'descuento' : recargo > 0 ? 'recargo' : null;
 
-  let montoAjuste = 0;
+  let montoAjuste            = 0;
   let porcentaje: number | null = null;
 
   if (tipo) {
     const valor = tipo === 'descuento' ? descuento : recargo;
 
     if (pago.tipoModificador === 'porcentaje') {
-      porcentaje = valor;
+      porcentaje  = valor;
       montoAjuste = subtotal * (valor / 100);
     } else {
       montoAjuste = valor;
     }
   }
 
-  const total = venta.total ?? subtotal;
-  const entregado = pago.entrega ?? 0;
-  const restante = pago.restante ?? 0;
+  const total     = venta.total ?? subtotal;
+  const entregado = pago.entrega  ?? 0;
+  const restante  = pago.restante ?? 0;
   const tieneDeuda = restante > 0;
 
   return {
@@ -881,8 +945,7 @@ function calcularResumenVenta(venta: any) {
     entregado,
     restante,
     tieneDeuda,
-    totalMostrar: tieneDeuda ? restante : total
+    // Si hay deuda se muestra el saldo pendiente como totalMostrar — útil para cuentas corrientes
+    totalMostrar: tieneDeuda ? restante : total,
   };
 }
-
-// export default new ComprobanteService();

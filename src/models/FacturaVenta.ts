@@ -3,7 +3,7 @@ export class FacturaVenta{
     cae?: string;
     caeVto?: Date;
     ticket? : number;
-    tipoFactura? : number;
+    tipoComprobante? : number;
     neto? : number;
     iva? : number;
     dni? : number;
@@ -18,7 +18,7 @@ export class FacturaVenta{
         this.cae = data.cae;
         this.caeVto = data.caeVto;
         this.ticket = data.ticket;
-        this.tipoFactura = data.tipoFactura;
+        this.tipoComprobante = data.tipoComprobante;
         this.neto = data.neto;
         this.iva = data.iva;
         this.dni = data.dni;

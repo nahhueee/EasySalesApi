@@ -41,6 +41,10 @@ const EVENTO_ACTUALIZACION_FRONT_PATH   = path.join(ROOT_DIR, 'updater', 'evento
 const PENDIENTE_CONFIRMAR_FRONT_PATH    = path.join(ROOT_DIR, 'updater', 'pendiente-confirmar-front.json');
 // Instrucción de rollback del frontend — la lee startup.service.ts en el próximo arranque
 const ROLLBACK_FRONT_PENDIENTE_PATH     = path.join(ROOT_DIR, 'updater', 'pendiente-rollback-front.json');
+// Versión de frontend persistida por el frontend en cada boot exitoso (POST /update/registrar-version-front)
+const VERSION_FRONT_PATH                = path.join(ROOT_DIR, 'updater', 'version-front.json');
+// Señal de pausa: si existe, el frontend no debe chequear actualizaciones en el próximo arranque
+const PAUSADO_PATH                      = path.join(ROOT_DIR, 'updater', 'pausado.json');
 // Estado del último intento de backup — escrito por backupService tras cada ejecución
 const BACKUP_ESTADO_PATH                = path.join(ROOT_DIR, 'src', 'log', 'backup-estado.json');
 
@@ -77,7 +81,7 @@ class HeartbeatService {
                 terminal,
                 idApp:                     config.idApp,
                 versionBack:               pkg.version,
-                versionFront:              null,
+                versionFront:              LeerVersionFront(),
                 dbStatus,
                 tiempoActivo,
                 erroresRecientes,
@@ -97,6 +101,19 @@ class HeartbeatService {
             }
             if (eventoActualizacionFront && fs.existsSync(EVENTO_ACTUALIZACION_FRONT_PATH)) {
                 fs.unlinkSync(EVENTO_ACTUALIZACION_FRONT_PATH);
+            }
+
+            // Persistir estado de pausa según AdminServer.
+            // Si pausado = true → el frontend no ejecutará checkVersion en el próximo arranque.
+            // Si pausado = false (o ausente) → limpiar el archivo para habilitar actualizaciones.
+            const pausado: boolean = respuesta.data?.pausado === true;
+            if (pausado) {
+                fs.writeFileSync(PAUSADO_PATH, JSON.stringify({
+                    pausado: true,
+                    fecha:   new Date().toISOString(),
+                }, null, 2));
+            } else if (fs.existsSync(PAUSADO_PATH)) {
+                fs.unlinkSync(PAUSADO_PATH);
             }
 
             // Si AdminServer instruyó un rollback de backend y aún no hay uno pendiente, lo registramos.
@@ -164,6 +181,16 @@ async function VerificarDb(): Promise<string> {
         return 'ok';
     } catch {
         return 'error';
+    }
+}
+
+function LeerVersionFront(): string | null {
+    try {
+        if (!fs.existsSync(VERSION_FRONT_PATH)) return null;
+        const data = JSON.parse(fs.readFileSync(VERSION_FRONT_PATH, 'utf-8'));
+        return typeof data.version === 'string' ? data.version : null;
+    } catch {
+        return null;
     }
 }
 

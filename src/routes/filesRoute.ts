@@ -20,7 +20,7 @@ router.post('/imprimir-pdf', async (req: Request, res: Response) => {
     const venta = req.body.venta;
     const tipoComprobante = req.body.tipoComprobante;
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
-    const pdfBuffer = await ComprobanteServ.GenerarComprobantePDF(venta, parametrosImpresion, tipoComprobante) 
+    const pdfBuffer = await ComprobanteServ.generarComprobantePDF(venta, parametrosImpresion, tipoComprobante)
 
     //Crear archivo temporal
     const tempName = `impresion_${uuid()}.pdf`;
@@ -52,7 +52,7 @@ router.post('/ver-comprobante/:tipoComprobante', async (req: Request, res: Respo
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
     const tipo = req.params.tipoComprobante;
 
-    const pdfBuffer = await ComprobanteServ.GenerarComprobantePDF(req.body, parametrosImpresion, tipo);
+    const pdfBuffer = await ComprobanteServ.generarComprobantePDF(req.body, parametrosImpresion, tipo);
 
     // Devolver el PDF
     res.setHeader('Content-Type', 'application/pdf');
