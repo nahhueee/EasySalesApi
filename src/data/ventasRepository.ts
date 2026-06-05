@@ -187,13 +187,25 @@ class VentasRepository{
     //#region ABM
     async Agregar(venta:Venta): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
             //Obtenemos el proximo nro de venta a insertar
             venta.id = await ObtenerUltimaVenta(connection);
 
             //Iniciamos una transaccion
             await connection.beginTransaction();
+
+            // Si la venta proviene de un presupuesto, validar que esté vigente
+            // antes de crear la venta (FOR UPDATE evita doble conversión concurrente)
+            if (venta.idPresupuesto) {
+                const [pRows] = await connection.query(
+                    'SELECT estado FROM presupuestos WHERE id = ? FOR UPDATE',
+                    [venta.idPresupuesto]
+                );
+                if (!pRows[0] || pRows[0].estado !== 'vigente') {
+                    throw new Error('El presupuesto ya fue convertido, anulado o no existe.');
+                }
+            }
 
             //Insertamos la venta
             await InsertVenta(connection,venta);
@@ -227,7 +239,16 @@ class VentasRepository{
 
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas + ? WHERE id = ?", [venta.total, venta.idCaja]);
-            
+
+            // Si la venta proviene de un presupuesto, marcarlo como convertido
+            if (venta.idPresupuesto) {
+                await connection.query(
+                    `UPDATE presupuestos SET estado = 'convertido', idVentaGenerada = ?
+                     WHERE id = ?`,
+                    [venta.id, venta.idPresupuesto]
+                );
+            }
+
             //Mandamos la transaccion
             await connection.commit();
             return venta.id.toString();

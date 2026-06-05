@@ -12,6 +12,7 @@ export class Venta {
     total:number = 0;
     fechaBaja?: Date;
     obsBaja?: string;
+    idPresupuesto?: number;    // Si la venta proviene de un presupuesto
 
     cliente: Cliente = new Cliente();
     pago: pagoVenta = new pagoVenta();
