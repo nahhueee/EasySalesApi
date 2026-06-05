@@ -1,0 +1,45 @@
+name: Publicar actualización
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure GitHub CLI
+        run: gh --version
+
+      - name: Set version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Descargar assets release
+        run: |
+          gh release download ${{ github.ref_name }} --pattern "update.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug archivos descargados
+        run: ls -la
+
+      - name: Validate ruta archivos
+        run: |
+          if [ ! -f "update.zip" ]; then
+            echo "❌ No se encontró update.zip"
+            exit 1
+          fi
+      - name: Subir archivos al servidor
+        run: |
+          curl -X POST ${{ secrets.UPLOAD_URL }} \
+            -H "Authorization: Bearer ${{ secrets.CI_TOKEN }}" \
+            -F "file=@update.zip" \
+            -F "version=$VERSION" \
+            -F "app=easysales" \
+            -F "idApp=1" \
+            -F "tipo=backend"
