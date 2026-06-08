@@ -66,8 +66,7 @@ export async function CheckearActualizacion() {
      * - Define si está habilitada para este cliente
      */
 
-    const ambiente = config.produccion ? 'prod': 'test';
-    const url = `${config.adminUrl}actualizaciones/ultima-version-backend/${config.idApp}/${ambiente}/${terminal}`;
+    const url = `${config.adminUrl}actualizaciones/ultima-version-backend/${config.idApp}/${terminal}`;
     logger.info('Consultando al servidor.',{
         fase,
         modulo,

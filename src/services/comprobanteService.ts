@@ -3,6 +3,8 @@ import PdfPrinter from 'pdfmake';
 import { ParametrosRepo } from "../data/parametrosRepository";
 import { FacturacionServ } from "./facturacionService";
 import { Venta } from "../models/Venta";
+import { Presupuesto } from "../models/Presupuesto";
+import { DetallePresupuesto } from "../models/DetallePresupuesto";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTES Y LOOKUP TABLES
@@ -128,6 +130,17 @@ interface ParametrosComprobante {
   nomLocal:  string;
   desLocal:  string;
   dirLocal:  string;
+}
+
+/**
+ * Datos de presupuesto normalizados para buildDocPresupuesto().
+ * Un presupuesto no tiene pago/factura — es un documento simple sin valor fiscal.
+ */
+interface PresupuestoComprobante {
+  numero:       number;
+  validezHasta: string;
+  cliente:      string | undefined;
+  total:        number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -501,6 +514,21 @@ function buildFilasDetalle(venta: Venta, configuracionPapel: ConfiguracionPapel)
 }
 
 /**
+ * Análoga a buildFilasDetalle() pero para detalles de presupuesto.
+ * Misma forma de fila (cantidad/producto/precio/total) — se duplica en vez de forzar
+ * que buildFilasDetalle() acepte Venta | Presupuesto, evitando acoplar el tipo Venta
+ * a un documento que no tiene pago/factura.
+ */
+function buildFilasDetallePresupuesto(detalles: DetallePresupuesto[], configuracionPapel: ConfiguracionPapel): unknown[][] {
+  return detalles.map(item => [
+    celda(formatearCantidad(item.cantidad ?? 0, configuracionPapel), { alignment: 'center' }),
+    celda(truncarTexto(item.nomProd ?? '',      configuracionPapel)),
+    celda(formatearMoneda(item.precio   ?? 0,  configuracionPapel), { alignment: 'right' }),
+    celda(formatearMoneda(item.total    ?? 0,  configuracionPapel), { alignment: 'right' }),
+  ]);
+}
+
+/**
  * Bloque de totales: subtotal → ajuste (descuento/recargo) → TOTAL → deuda.
  * Solo renderiza las filas que aplican; si no hay modificador, omite subtotal y ajuste.
  */
@@ -600,6 +628,54 @@ function buildDocInterno(comprobante: ComprobanteData, resumen: ResumenVenta | n
       buildTabla(comprobante, configuracionPapel),
       ...buildTotales(resumen, configuracionPapel),
     ],
+  };
+}
+
+/**
+ * Documento de presupuesto: encabezado del local + datos del presupuesto
+ * (número, cliente, validez) + tabla de productos + total + leyenda de "no fiscal".
+ *
+ * No reutiliza buildDocInterno() porque ese flujo depende de Venta (cliente vía
+ * venta.cliente, totales vía calcularResumenVenta basado en pago) — un presupuesto
+ * no tiene pago ni descuento/recargo/deuda, solo un total fijo.
+ */
+function buildDocPresupuesto(comprobante: ComprobanteData, presupuesto: PresupuestoComprobante): object {
+  const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
+  const alineacion = comprobante.papel === 'A4' ? 'left' : 'center';
+
+  return {
+    pageSize: configuracionPapel.pageSize,
+    pageMargins: comprobante.papel === 'A4'
+      ? [comprobante.margenIzq || 15, 15, comprobante.margenDer || 15, 15]
+      : [comprobante.margenIzq, 4, comprobante.margenDer, 4],
+
+    content: [
+      buildEncabezado(comprobante, configuracionPapel),
+      {
+        text:      `Presupuesto N° ${presupuesto.numero}`,
+        alignment: alineacion,
+        bold:      true,
+        fontSize:  configuracionPapel.fontSizes.normal,
+        margin:    [0, 2, 0, 0],
+      },
+      presupuesto.cliente
+        ? { text: `Cliente: ${presupuesto.cliente}`, fontSize: configuracionPapel.fontSizes.normal, margin: [0, 2, 0, 0] }
+        : null,
+      {
+        text:     `Válido hasta: ${presupuesto.validezHasta}`,
+        fontSize: configuracionPapel.fontSizes.normal,
+        margin:   [0, 0, 0, 2],
+      },
+      buildTabla(comprobante, configuracionPapel),
+      filaAlineadaDerecha(`TOTAL: $${formatearMoneda(presupuesto.total, configuracionPapel)}`, configuracionPapel, 'total'),
+      {
+        text:      'Este documento es un presupuesto sin valor fiscal. Los precios pueden variar según disponibilidad.',
+        italics:   true,
+        alignment: alineacion,
+        fontSize:  Math.max(configuracionPapel.fontSizes.normal - 2, 6),
+        margin:    [0, 6, 0, 0],
+      },
+    ].filter(Boolean),
   };
 }
 
@@ -819,6 +895,55 @@ export class ComprobanteService {
       : buildDocFactura(comprobante, resumen, venta, await this.mapearFactura(venta));
 
     return generarBufferPDF(docDefinition);
+  }
+
+  /**
+   * Punto de entrada para PDF de presupuestos — documento simple sin datos fiscales.
+   *
+   * @param presupuesto - Presupuesto con cliente cargado
+   * @param detalles    - Líneas de producto del presupuesto
+   * @param parametros  - Configuración del local: papel, márgenes, nombre, etc.
+   */
+  async generarPresupuestoPDF(presupuesto: Presupuesto, detalles: DetallePresupuesto[], parametros: ParametrosComprobante): Promise<Buffer> {
+    const { comprobante, datos } = this.mapearPresupuestoComprobante(presupuesto, detalles, parametros);
+    const docDefinition = buildDocPresupuesto(comprobante, datos);
+
+    return generarBufferPDF(docDefinition);
+  }
+
+  /**
+   * Normaliza el presupuesto + detalle + parámetros en la pareja (ComprobanteData, PresupuestoComprobante)
+   * que consume buildDocPresupuesto(). Misma idea que mapearComprobante() pero sin pago/factura.
+   */
+  private mapearPresupuestoComprobante(
+    presupuesto: Presupuesto,
+    detalles: DetallePresupuesto[],
+    parametros: ParametrosComprobante,
+  ): { comprobante: ComprobanteData; datos: PresupuestoComprobante } {
+    const configuracionPapel = obtenerConfiguracionPapel(parametros.papel);
+    const fecha    = new Date(presupuesto.fecha!);
+    const validez  = new Date(presupuesto.validezHasta!);
+
+    const comprobante: ComprobanteData = {
+      papel:            parametros.papel,
+      margenIzq:        parametros.margenIzq,
+      margenDer:        parametros.margenDer,
+      nombreLocal:      parametros.nomLocal,
+      descripcionLocal: parametros.desLocal,
+      direccionLocal:   parametros.dirLocal,
+      fechaVenta:       fecha.toLocaleDateString('es-ES'),
+      horaVenta:        '',
+      filasTabla:       buildFilasDetallePresupuesto(detalles, configuracionPapel),
+    };
+
+    const datos: PresupuestoComprobante = {
+      numero:       presupuesto.id!,
+      validezHasta: validez.toLocaleDateString('es-ES'),
+      cliente:      presupuesto.cliente?.nombre,
+      total:        presupuesto.total ?? 0,
+    };
+
+    return { comprobante, datos };
   }
 
   /**

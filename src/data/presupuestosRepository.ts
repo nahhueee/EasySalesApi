@@ -82,9 +82,21 @@ class PresupuestosRepository {
                 filtro += ' AND p.idCliente = ?';
                 params.push(filtros.idCliente);
             }
+            if (filtros.cliente) {
+                filtro += ' AND c.nombre LIKE ?';
+                params.push(`%${filtros.cliente}%`);
+            }
             if (filtros.estado) {
                 filtro += ' AND p.estado = ?';
                 params.push(filtros.estado);
+            }
+            if (filtros.fechaDesde) {
+                filtro += ' AND p.fecha >= ?';
+                params.push(moment(filtros.fechaDesde).format('YYYY-MM-DD'));
+            }
+            if (filtros.fechaHasta) {
+                filtro += ' AND p.fecha <= ?';
+                params.push(moment(filtros.fechaHasta).format('YYYY-MM-DD'));
             }
 
             const limit  = filtros.tamanioPagina ?? 20;
@@ -102,6 +114,7 @@ class PresupuestosRepository {
             const queryTotal = `
                 SELECT COUNT(*) AS total
                 FROM presupuestos p
+                LEFT JOIN clientes c ON c.id = p.idCliente
                 WHERE 1 = 1 ${filtro}
             `;
 
@@ -128,6 +141,45 @@ class PresupuestosRepository {
             }
 
             return { total: totalResult[0].total, registros: presupuestos };
+
+        } catch (error) {
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    async ObtenerPorId(id: number): Promise<Presupuesto | null> {
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = `
+                SELECT p.*, COALESCE(c.nombre, 'ELIMINADO') AS cliente
+                FROM presupuestos p
+                LEFT JOIN clientes c ON c.id = p.idCliente
+                WHERE p.id = ?
+            `;
+
+            const [rows] = await connection.query(consulta, [id]);
+
+            if (!Array.isArray(rows) || !rows[0]) {
+                return null;
+            }
+
+            const row = rows[0] as any;
+            const p = new Presupuesto();
+            p.id              = row['id'];
+            p.idCliente       = row['idCliente'];
+            p.idUsuario       = row['idUsuario'];
+            p.idCaja          = row['idCaja'];
+            p.fecha           = row['fecha'];
+            p.validezHasta    = row['validezHasta'];
+            p.total           = parseFloat(row['total']);
+            p.estado          = row['estado'];
+            p.idVentaGenerada = row['idVentaGenerada'];
+            p.cliente         = new Cliente({ id: row['idCliente'], nombre: row['cliente'] });
+
+            return p;
 
         } catch (error) {
             throw error;
