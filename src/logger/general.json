@@ -328,5 +328,20 @@
     "message": "Error al imprimir el documento. Command failed: C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\node_modules\\pdf-to-printer\\dist\\SumatraPDF-3.4.6-32.exe -print-to EPSON TM 2 -silent -print-settings portrait,noscale C:\\Users\\nahu8\\OneDrive\\Documentos\\1- CreationCode\\Sales\\EasySalesApi\\src\\temp\\impresion_90e8de7c-e985-4c83-b225-87d5710bb932.pdf\n",
     "level": "error",
     "timestamp": "04-06-26 17:58"
+  },
+  {
+    "message": "Error al obtener las listas de precios. Table 'dbeasysales.listas_precio' doesn't exist",
+    "level": "error",
+    "timestamp": "14-06-26 23:50"
+  },
+  {
+    "message": "Error al obtener las listas de precios. Table 'dbeasysales.listas_precio' doesn't exist",
+    "level": "error",
+    "timestamp": "14-06-26 23:50"
+  },
+  {
+    "message": "Error al obtener las listas de precios. Table 'dbeasysales.listas_precio' doesn't exist",
+    "level": "error",
+    "timestamp": "14-06-26 23:53"
   }
 ]

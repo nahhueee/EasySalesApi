@@ -4,6 +4,40 @@ import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
 
 //#region OBTENER
+router.get('/precios/:idProducto', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosRepo.ObtenerPrecios(Number(req.params.idProducto)));
+
+    } catch(error:any){
+        let msg = "Error al obtener los precios del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.get('/historial/:idProducto', async (req:Request, res:Response) => {
+    try{
+        const idProducto = Number(req.params.idProducto);
+        const idLista    = req.query.idLista ? Number(req.query.idLista) : undefined;
+        res.json(await ProductosRepo.ObtenerHistorial(idProducto, idLista));
+
+    } catch(error:any){
+        let msg = "Error al obtener el historial de precios del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.get('/ultimo-codigo', async (req:Request, res:Response) => {
+    try {
+        res.json(await ProductosRepo.ObtenerUltimoCodigo());
+    } catch(error:any){
+        let msg = "Error al obtener el último código personalizado.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.post('/obtener', async (req:Request, res:Response) => {
     try{ 
         res.json(await ProductosRepo.Obtener(req.body));
