@@ -67,7 +67,7 @@ class ProductosRepository{
         const connection = await db.getConnection();
 
         try {
-            let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad FROM productos WHERE id <> 1 AND soloPrecio = 0 ';
+            let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad, imagen FROM productos WHERE id <> 1 AND soloPrecio = 0 ';
 
             if (filtro.metodo == 'codigo')
                 consulta += " AND codigo = '" + filtro.valor + "'";
@@ -91,6 +91,7 @@ class ProductosRepository{
                         costo: row['costo'],
                         precio: row['precio'],
                         unidad: row['unidad'],
+                        imagen: row['imagen'],
                     });
 
                     productos.push(producto);
