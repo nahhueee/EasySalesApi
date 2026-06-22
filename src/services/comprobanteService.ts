@@ -27,6 +27,7 @@ const TIPOS_DOCUMENTO = [
   { id: 80, descripcion: 'CUIT' },
   { id: 86, descripcion: 'CUIL' },
   { id: 96, descripcion: 'DNI'  },
+  { id: 87, descripcion: 'CDI'  },
 ];
 
 /**
@@ -38,6 +39,7 @@ const CONDICIONES_IVA_RECEPTOR = [
   { id: 1,  descripcion: 'IVA Responsable Inscripto'  },
   { id: 6,  descripcion: 'Responsable Monotributo'    },
   { id: 13, descripcion: 'Monotributista Social'      },
+  { id: 4,  descripcion: 'IVA Sujeto Exento'          },
   { id: 15, descripcion: 'IVA No Alcanzado'           },
 ];
 

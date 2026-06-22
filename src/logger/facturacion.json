@@ -48,5 +48,10 @@
     "message": "ERR 10004: Campo PtoVta debe estar comprendido entre 1 y 99998",
     "level": "error",
     "timestamp": "02-06-26 08:30"
+  },
+  {
+    "message": "OBS 10015: Para facturas B (CbteDesde igual a CbteHasta) menor a $10000000, si DocTipo = 99 DocNro debe ser igual a 0.",
+    "level": "error",
+    "timestamp": "22-06-26 10:45"
   }
 ]

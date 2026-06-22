@@ -10,12 +10,24 @@ import moment from "moment";
 import { SesionServ } from "./sesionService";
 import { AppError } from "../logger/AppError";
 import { CodigoError } from "../logger/CodigosError";
+import { ValidarConsistenciaFiscal } from "../utils/datosFiscales";
 
 const afipInstances: Record<string, any> = {};
 const QRCode = require('qrcode');
 
 class FacturacionService{
     async Facturar(objFactura:ObjFacturar){
+        //Chequeo defensivo: la condición IVA del receptor manda sobre el documento exigido.
+        //El frontend ya valida esto, pero no confiamos en eso antes de llamar a ARCA.
+        const errorFiscal = ValidarConsistenciaFiscal({
+            condicionIva: objFactura.condReceptor,
+            tipoDocumento: objFactura.docTipo,
+            nroDocumento: objFactura.docNro
+        });
+        if (errorFiscal) {
+            throw new AppError(CodigoError.VALIDACION, errorFiscal, 400);
+        }
+
         const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
         const afip = await ObtenerInstanciaAfip(datosFacturacion.cuil);
 

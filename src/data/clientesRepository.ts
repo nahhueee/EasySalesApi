@@ -1,6 +1,7 @@
 import db from '../db';
 import { Cliente } from '../models/Cliente';
 import { SesionServ } from '../services/sesionService';
+import { ValidarConsistenciaFiscal } from '../utils/datosFiscales';
 
 class ClientesRepository{
 
@@ -44,9 +45,9 @@ class ClientesRepository{
 
     async ClientesSelector(){
         const connection = await db.getConnection();
-        
+
         try {
-            const [rows] = await connection.query('SELECT id, nombre FROM clientes');
+            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva FROM clientes');
             return [rows][0];
 
         } catch (error:any) {
@@ -60,15 +61,30 @@ class ClientesRepository{
     //#region ABM
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
-            let existe = await ValidarExistencia(connection, data, false);
-            if(existe)//Verificamos si ya existe un cliente con el mismo nombre 
+            let errorFiscal = ValidarConsistenciaFiscal(data);
+            if(errorFiscal) return errorFiscal;
+
+            let existeNombre = await ValidarExistenciaNombre(connection, data, false);
+            if(existeNombre)//Verificamos si ya existe un cliente con el mismo nombre
                 return "Ya existe un cliente con el mismo nombre.";
-            
-            const consulta = "INSERT INTO clientes(nombre) VALUES (?)";
-            const parametros = [data.nombre.toUpperCase()];
-            
+
+            if(data.nroDocumento){//Solo validamos unicidad si vino un documento (consumidor final puede no tenerlo)
+                let existeDocumento = await ValidarExistenciaDocumento(connection, data, false);
+                if(existeDocumento)
+                    return "Ya existe un cliente con el mismo documento.";
+            }
+
+            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial) VALUES (?, ?, ?, ?, ?)";
+            const parametros = [
+                data.nombre.toUpperCase(),
+                data.tipoDocumento ?? null,
+                data.nroDocumento ?? null,
+                data.condicionIva ?? null,
+                data.razonSocial ? data.razonSocial.toUpperCase() : null
+            ];
+
             await connection.query(consulta, parametros);
 
             //Registramos el Movimiento
@@ -85,17 +101,33 @@ class ClientesRepository{
 
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
-            let existe = await ValidarExistencia(connection, data, true);
-            if(existe)//Verificamos si ya existe un cliente con el mismo nombre 
+            let errorFiscal = ValidarConsistenciaFiscal(data);
+            if(errorFiscal) return errorFiscal;
+
+            let existeNombre = await ValidarExistenciaNombre(connection, data, true);
+            if(existeNombre)//Verificamos si ya existe un cliente con el mismo nombre
                 return "Ya existe un cliente con el mismo nombre.";
-            
-                const consulta = `UPDATE clientes 
-                SET nombre = ?
+
+            if(data.nroDocumento){//Solo validamos unicidad si vino un documento (consumidor final puede no tenerlo)
+                let existeDocumento = await ValidarExistenciaDocumento(connection, data, true);
+                if(existeDocumento)
+                    return "Ya existe un cliente con el mismo documento.";
+            }
+
+                const consulta = `UPDATE clientes
+                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?
                 WHERE id = ? `;
 
-            const parametros = [data.nombre.toUpperCase(), data.id];
+            const parametros = [
+                data.nombre.toUpperCase(),
+                data.tipoDocumento ?? null,
+                data.nroDocumento ?? null,
+                data.condicionIva ?? null,
+                data.razonSocial ? data.razonSocial.toUpperCase() : null,
+                data.id
+            ];
             await connection.query(consulta, parametros);
 
              //Registramos el Movimiento
@@ -175,7 +207,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
     }
 }
 
-async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
+async function ValidarExistenciaNombre(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
         let consulta = " SELECT id FROM clientes WHERE nombre = ? ";
         if(modificando) consulta += " AND id <> ? ";
@@ -187,7 +219,23 @@ async function ValidarExistencia(connection, data:any, modificando:boolean):Prom
 
         return false;
     } catch (error) {
-        throw error; 
+        throw error;
+    }
+}
+
+async function ValidarExistenciaDocumento(connection, data:any, modificando:boolean):Promise<boolean>{
+    try {
+        let consulta = " SELECT id FROM clientes WHERE nroDocumento = ? ";
+        if(modificando) consulta += " AND id <> ? ";
+
+        const parametros = [data.nroDocumento, data.id];
+
+        const rows = await connection.query(consulta,parametros);
+        if(rows[0].length > 0) return true;
+
+        return false;
+    } catch (error) {
+        throw error;
     }
 }
 
