@@ -9,6 +9,7 @@ import { ObjQR } from '../models/ObjQR';
 import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
 import { SesionServ } from '../services/sesionService';
+import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { DetallePago } from '../models/DetallePago';
 import { TipoPago } from '../models/TipoPago';
 const moment = require('moment');
@@ -45,7 +46,7 @@ class VentasRepository{
                     //Obtiene la lista de detalles de la venta
                     venta.detalles = await ObtenerDetalleVenta(connection, row['id']); 
 
-                    venta.cliente = new Cliente({id: row['idCliente'], nombre: row['cliente']});
+                    venta.cliente = new Cliente({id: row['idCliente'], nombre: row['cliente'], razonSocial: row['clienteRazonSocial']});
                     venta.pago = new pagoVenta({
                         recargo: parseFloat(row['recargo']), 
                         descuento: parseFloat(row['descuento']), 
@@ -222,6 +223,18 @@ class VentasRepository{
             if(!venta.pago.realizado){
                 //Registramos el Movimiento
                 await SesionServ.RegistrarMovimiento("Nueva deuda para el cliente " + venta.cliente.nombre);
+
+                //Registramos el movimiento (debe) en la cuenta corriente del cliente
+                //Restamos venta.pago.entrega: si hubo seña/anticipo en el momento de
+                //la venta, esa parte nunca se convirtió en deuda real, asi que no
+                //corresponde debitarla en la cuenta corriente
+                await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                    idCliente: venta.cliente.id!,
+                    tipo: 'venta',
+                    descripcion: 'Venta a crédito',
+                    debe: venta.total - (venta.pago.entrega ?? 0),
+                    idReferencia: venta.id
+                });
             }
 
             //insertamos los datos de la factura de la venta
@@ -279,21 +292,46 @@ class VentasRepository{
 
     async Eliminar(venta:any, obs:string): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
             //Iniciamos una transaccion
             await connection.beginTransaction();
+
+            //Leemos el estado de pago real de la venta (no confiamos en lo que
+            //venga del front) para saber si hay deuda pendiente que cancelar
+            //en la cuenta corriente del cliente
+            const [pagoRows] = await connection.query(
+                "SELECT idCliente, monto, entrega, realizado FROM ventas_pago p INNER JOIN ventas v ON v.id = p.idVenta WHERE p.idVenta = ?",
+                [venta.id]
+            );
+            const pagoInfo = (pagoRows as any)[0];
 
             //Damos de baja la venta
             await connection.query("UPDATE ventas SET fechaBaja = NOW(), obsBaja = ? WHERE id = ?", [obs, venta.id]);
 
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [venta.total, venta.idCaja]);
-            
+
             //Actualizamos el inventario
             venta.detalles.forEach(element => {
                 ActualizarInventario(connection, element, "+")
             });
+
+            //Si la venta tenia deuda pendiente, la cancelamos en la cuenta corriente.
+            //El dinero ya entregado (si hubo pago parcial) no se toca aca: una
+            //devolucion de ese dinero es una operacion de negocio distinta.
+            if (pagoInfo && !pagoInfo.realizado) {
+                const pendiente = parseFloat(pagoInfo.monto) - parseFloat(pagoInfo.entrega);
+                if (pendiente > 0) {
+                    await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                        idCliente: pagoInfo.idCliente,
+                        tipo: 'ajuste',
+                        descripcion: 'Anulación de venta a crédito',
+                        haber: pendiente,
+                        idReferencia: venta.id
+                    });
+                }
+            }
 
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Eliminar Venta nro " + venta.id);
@@ -392,7 +430,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 " SELECT v.*, " + 
                 " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
-                " COALESCE(cli.nombre, 'ELIMINADO') cliente " +
+                " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial " +
                 " FROM ventas v " +
                 " INNER JOIN ventas_pago vpag ON vpag.idVenta = v.id " +
                 " LEFT JOIN ventas_factura vfac ON vfac.idVenta = v.id " +
@@ -431,14 +469,14 @@ async function ObtenerUltimaVenta(connection):Promise<number>{
 
 async function InsertVenta(connection, venta):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas(id, idCaja, idCliente, fecha, hora) " +
-                         " VALUES(?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas(id, idCaja, idCliente, fecha, hora, total) " +
+                         " VALUES(?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [venta.id, venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora];
+        const parametros = [venta.id, venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total];
         await connection.query(consulta, parametros);
-        
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

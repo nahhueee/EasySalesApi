@@ -1,6 +1,8 @@
 import moment from 'moment';
 import db from '../db';
 import { SesionServ } from '../services/sesionService';
+import { ResultSetHeader } from 'mysql2';
+import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 
 class CuentasCorsRepository{
     
@@ -9,12 +11,12 @@ class CuentasCorsRepository{
         
         try {
              //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const rows = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             return {total:resultado[0][0].total, registros:rows[0]};
 
@@ -29,20 +31,22 @@ class CuentasCorsRepository{
         const connection = await db.getConnection();
         
         try {
-            const queryDeuda = `SELECT 
+            const queryDeuda = `SELECT
                                 SUM(d.cantidad * d.precio) AS totalImpagas
                                 FROM ventas v
                                 INNER JOIN ventas_pago p ON v.id = p.idVenta
                                 INNER JOIN ventas_detalle d ON v.id = d.idVenta
                                 WHERE v.idCliente = ?
-                                AND p.realizado = 0;`
+                                AND p.realizado = 0
+                                AND v.fechaBaja IS NULL;`
             const rows1 = await connection.query(queryDeuda, [idCliente]);
             const resultado1 = rows1[0][0];
 
             const queryEntregas = `SELECT SUM(vp.entrega) AS entregaTotal
                                     FROM ventas_pago vp
                                     INNER JOIN ventas v ON v.id = vp.idVenta
-                                    WHERE v.idCliente = ? AND vp.realizado = 0;`
+                                    WHERE v.idCliente = ? AND vp.realizado = 0
+                                    AND v.fechaBaja IS NULL;`
 
             const rows2 = await connection.query(queryEntregas, [idCliente]);
             const resultado2 = rows2[0][0];
@@ -71,11 +75,11 @@ class CuentasCorsRepository{
             await connection.beginTransaction();
 
             //Insertamos el registro de cabecera
-            const ultimoRegistro = await ObtenerUltimoRegistroEntrega(connection);
-            await connection.query(
-                "INSERT INTO ventas_entrega(id,idCliente, monto, fecha) VALUES(?,?,?,NOW())", 
-                [ultimoRegistro, data.idCliente, data.monto]
+            const [cabecera] = await connection.query<ResultSetHeader>(
+                "INSERT INTO ventas_entrega(idCliente, monto, fecha) VALUES(?,?,NOW())",
+                [data.idCliente, data.monto]
             );
+            const idEntrega = cabecera.insertId;
 
             let montoRestante = data.monto;
 
@@ -97,14 +101,14 @@ class CuentasCorsRepository{
                         // Insertamos detalle de la entrega
                         await connection.query(
                             "INSERT INTO ventas_entrega_detalle (idEntrega, idVenta, montoAplicado) VALUES (?, ?, ?)",
-                            [ultimoRegistro, row.id, row.total]
+                            [idEntrega, row.id, row.total]
                         );
 
                         //Insertamos metodo de pago de la entrega
                         await connection.query(
                             `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega)
                             VALUES (?, ?, ?, ?)`,
-                            [row.id, data.idTPago, totalAPagar, ultimoRegistro]
+                            [row.id, data.idTPago, totalAPagar, idEntrega]
                         );
 
                         montoRestante -= totalAPagar;
@@ -121,21 +125,30 @@ class CuentasCorsRepository{
                         // Insertamos detalle de la entrega
                         await connection.query(
                             "INSERT INTO ventas_entrega_detalle (idEntrega, idVenta, montoAplicado) VALUES (?, ?, ?)",
-                            [ultimoRegistro, row.id, montoRestante]
+                            [idEntrega, row.id, montoRestante]
                         );
 
                         //Insertamos metodo de pago de la entrega
                         await connection.query(
                             `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega)
                             VALUES (?, ?, ?, ?)`,
-                            [row.id, data.idTPago, montoRestante, ultimoRegistro]
+                            [row.id, data.idTPago, montoRestante, idEntrega]
                         );
 
                         montoRestante = 0;
                         break;
                     }
                 }
-            }   
+            }
+
+            //Registramos el movimiento (haber) en la cuenta corriente del cliente
+            await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                idCliente: data.idCliente,
+                tipo: 'entrega',
+                descripcion: 'Entrega de dinero',
+                haber: data.monto,
+                idReferencia: idEntrega
+            });
 
             //Mandamos la transaccion
             await connection.commit();
@@ -159,6 +172,14 @@ class CuentasCorsRepository{
         try {
             //Iniciamos una transaccion
             await connection.beginTransaction();
+
+            //Obtenemos idCliente y monto de la entrega original (los necesitamos
+            //para el ajuste del ledger antes de borrar la cabecera mas abajo)
+            const [entregaRows] = await connection.query(
+                "SELECT idCliente, monto FROM ventas_entrega WHERE id = ?",
+                [data.idEntrega]
+            );
+            const entregaOriginal = (entregaRows as any)[0];
 
             //Obtenemos los detalles de la entrega
             const consulta = " SELECT idVenta, montoAplicado FROM ventas_entrega_detalle WHERE idEntrega = ? ";
@@ -187,7 +208,19 @@ class CuentasCorsRepository{
             await connection.query("DELETE FROM ventas_entrega_detalle WHERE idEntrega = ?", [data.idEntrega]);
             await connection.query("DELETE FROM ventas_entrega WHERE id = ?", [data.idEntrega]);
             await connection.query("DELETE FROM ventas_pagos_detalle WHERE idEntrega = ?",[data.idEntrega]);
-                        
+
+            //Registramos el movimiento (debe) en la cuenta corriente: revertir una
+            //entrega es lo inverso de cobrarla, vuelve a generar la deuda original
+            if (entregaOriginal) {
+                await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                    idCliente: entregaOriginal.idCliente,
+                    tipo: 'ajuste',
+                    descripcion: 'Reversión de entrega de dinero',
+                    debe: parseFloat(entregaOriginal.monto),
+                    idReferencia: data.idEntrega
+                });
+            }
+
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega);
 
@@ -211,7 +244,11 @@ class CuentasCorsRepository{
 
             //Iniciamos una transaccion
             await connection.beginTransaction();
-            
+
+            //Necesitamos idCliente para el movimiento en la cuenta corriente
+            const [ventaRows] = await connection.query("SELECT idCliente FROM ventas WHERE id = ?", [data.idVenta]);
+            const idCliente = (ventaRows as any)[0]?.idCliente;
+
             const consulta = " UPDATE ventas_pago " +
                              " SET realizado = 1, " +
                              " entrega = monto " +
@@ -225,6 +262,17 @@ class CuentasCorsRepository{
                 `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto) VALUES (?, ?, ?)`,
                 [data.idVenta, data.idTPago, data.total]
             );
+
+            //Registramos el movimiento (haber) en la cuenta corriente del cliente
+            if (idCliente) {
+                await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                    idCliente: idCliente,
+                    tipo: 'ajuste',
+                    descripcion: 'Pago manual de venta',
+                    haber: data.total,
+                    idReferencia: data.idVenta
+                });
+            }
 
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta);
@@ -250,6 +298,14 @@ class CuentasCorsRepository{
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
+            //Necesitamos idCliente y el monto entregado actual (antes de resetearlo)
+            //para el movimiento de ajuste en la cuenta corriente
+            const [ventaRows] = await connection.query(
+                "SELECT v.idCliente, p.entrega FROM ventas v INNER JOIN ventas_pago p ON v.id = p.idVenta WHERE v.id = ?",
+                [idVenta]
+            );
+            const ventaInfo = (ventaRows as any)[0];
+
             const consulta = " UPDATE ventas_pago " +
                              " SET realizado = 0, " +
                              " entrega = 0 " +
@@ -260,6 +316,18 @@ class CuentasCorsRepository{
 
             //Quitamos los registros de pago
             await connection.query("DELETE FROM ventas_pagos_detalle WHERE idVenta = ?",[idVenta]);
+
+            //Registramos el movimiento (debe) en la cuenta corriente: revertir el pago
+            //vuelve a generar la deuda por el monto que se habia marcado como entregado
+            if (ventaInfo && parseFloat(ventaInfo.entrega) > 0) {
+                await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                    idCliente: ventaInfo.idCliente,
+                    tipo: 'ajuste',
+                    descripcion: 'Reversión de pago de venta',
+                    debe: parseFloat(ventaInfo.entrega),
+                    idReferencia: parseInt(idVenta)
+                });
+            }
 
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta);
@@ -297,32 +365,15 @@ async function ObtenerVentasImpagas(connection, idCliente:number){
     }
 }
 
-async function ObtenerUltimoRegistroEntrega(connection):Promise<number>{
-    try {
-        const rows = await connection.query(" SELECT id FROM ventas_entrega ORDER BY id DESC LIMIT 1 ");
-        let resultado:number = 0;
-
-        if([rows][0][0].length==0){
-            resultado = 1;
-        }else{
-            resultado = rows[0][0].id + 1;
-        }
-
-        return resultado;
-
-    } catch (error) {
-        throw error; 
-    }
-}
-
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [filtros.idCliente];
         //#endregion
 
         if (esTotal)
@@ -332,24 +383,25 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(filtros.tamanioPagina, (filtros.pagina - 1) * filtros.tamanioPagina);
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
             " SELECT id, fecha, monto " +
             " FROM ventas_entrega  " +
-            " WHERE idCliente = " +
-            filtros.idCliente +
+            " WHERE idCliente = ? " +
             " ORDER BY fecha ASC " +
             paginado +
             endCount;
 
-        return query;
-            
+        return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

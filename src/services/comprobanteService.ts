@@ -102,6 +102,8 @@ interface FacturaAFIP {
   direccion:          string;
   CUIL:               string;
   condicionReceptor:  string | undefined;
+  /** Nombre/razón social a mostrar para el receptor — ya resuelto con fallback "Consumidor Final". */
+  clienteReceptor:    string;
   DNI:                number | undefined;
   tipoDNI:            string | undefined;
   qr:                 string;
@@ -454,14 +456,20 @@ function buildEncabezadoFactura(
     { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5 }], margin: [0, 3, 0, 3] },
   );
 
-  // Datos del receptor (solo si existen — consumidor final puede no tener dni/condición)
+  // Datos del receptor — nombre/razón social siempre se muestra (fallback "Consumidor Final"
+  // ya resuelto en factura.clienteReceptor). DNI/condición debajo, salvo que sea una repetición
+  // exacta del nombre (ej: consumidor final sin DNI, donde condición también es "Consumidor Final").
   const dniTexto = factura.DNI ? `${factura.tipoDNI}: ${factura.DNI}` : '';
   const receptor = [dniTexto, factura.condicionReceptor].filter(Boolean).join('  |  ');
+  const receptorEsRedundante = receptor === factura.clienteReceptor;
 
-  if (receptor) {
+  filas.push(
+    { text: 'Receptor',             alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal - 1 },
+    { text: factura.clienteReceptor, alignment: 'center',             fontSize: configuracionPapel.fontSizes.normal - 1, margin: (receptor && !receptorEsRedundante) ? [0, 0, 0, 0] : [0, 0, 0, 2] },
+  );
+  if (receptor && !receptorEsRedundante) {
     filas.push(
-      { text: 'Receptor', alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal - 1 },
-      { text: receptor,   alignment: 'center',              fontSize: configuracionPapel.fontSizes.normal - 1, margin: [0, 0, 0, 2] },
+      { text: receptor, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 1, margin: [0, 0, 0, 2] },
     );
   }
 
@@ -773,9 +781,9 @@ function buildDocFacturaA4(
       widths: ['*'],
       body: [[{
         stack: [
-          labelValor('Cliente',        venta.cliente?.nombre ?? 'Consumidor Final'),
+          labelValor('Cliente',        factura.clienteReceptor),
           labelValor('Condición',      factura.condicionReceptor),
-          labelValor(`${factura.tipoDNI}`, factura.DNI),
+          ...(factura.DNI ? [labelValor(factura.tipoDNI ?? 'Documento', factura.DNI)] : []),
           labelValor('Método de pago', formatearTextoPago(venta)),
         ],
         margin: [8, 4, 8, 4],
@@ -996,6 +1004,7 @@ export class ComprobanteService {
       direccion:           parametros.direccion,
       CUIL:                parametros.cuil,
       condicionReceptor,
+      clienteReceptor:     venta.cliente?.razonSocial ?? 'Consumidor Final',
       DNI:                 facturaVenta.dni,
       tipoDNI,
       qr:                  await FacturacionServ.ObtenerQRFactura(venta.id),
