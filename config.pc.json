@@ -1,6 +1,6 @@
 {
   "adminUrl": "https://creationserver.com/adminserver/",
-  "produccion": true,
+  "produccion": false,
   "esServer": false,
   "port": 7500,
   "idApp": 1,
