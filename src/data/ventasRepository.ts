@@ -22,12 +22,12 @@ class VentasRepository{
 
         try {
              //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const [rows] = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const [rows] = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             const ventas:Venta[] = [];
            
@@ -389,13 +389,14 @@ class VentasRepository{
     //#endregion
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+        let params:any[] = [];
+
         let count:string = "";
         let endCount:string = "";
         //#endregion
@@ -403,15 +404,22 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #region FILTROS
         if (filtros.caja != 0)
             filtro += " AND v.idCaja = " + filtros.caja;
-        
+
         if (filtros.cliente != 0)
             filtro += " AND v.idCliente = " + filtros.cliente;
-        
-        
+
+
         if (filtros.estado == "Pagas")
             filtro += " AND vpag.realizado = 1";
         if (filtros.estado == "Impagas")
             filtro += " AND vpag.realizado = 0";
+
+        //Filtro puntual por venta (drill-down desde la pantalla de cuenta corriente).
+        //Parametrizado a diferencia del resto de los filtros de esta función.
+        if (filtros.idVenta){
+            filtro += " AND v.id = ? ";
+            params.push(filtros.idVenta);
+        }
         // #endregion
 
         if (esTotal)
@@ -440,11 +448,11 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 " ORDER BY v.id DESC" +
                 paginado +
                 endCount;
-        
-        return query;
-            
+
+        return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

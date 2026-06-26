@@ -6,27 +6,6 @@ import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 
 class CuentasCorsRepository{
     
-    async Obtener(filtros:any){
-        const connection = await db.getConnection();
-        
-        try {
-             //Obtengo la query segun los filtros
-            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
-            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
-
-            //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros, paramsRegistros);
-            const resultado = await connection.query(queryTotal, paramsTotal);
-
-            return {total:resultado[0][0].total, registros:rows[0]};
-
-        } catch (error:any) {
-            throw error;
-        } finally{
-            connection.release();
-        }
-    }
-
     async ObtenerDeudaTotalCliente(idCliente){
         const connection = await db.getConnection();
         
@@ -55,6 +34,30 @@ class CuentasCorsRepository{
             const totalEntregas = !resultado2?.entregaTotal ? 0 : resultado2.entregaTotal;
 
             return deudaVentas - totalEntregas;
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    //Devuelve el listado de movimientos de cuenta corriente de un cliente (pantalla de ledger).
+    //Hace LEFT JOIN contra ventas/ventas_pago (solo aplica cuando tipo='venta') para poder mostrar
+    //el estado real de la venta (pagada/con deuda/anulada) sin duplicar esa lógica en el front.
+    async ObtenerMovimientos(filtros:any){
+        const connection = await db.getConnection();
+
+        try {
+            //Obtengo la query segun los filtros
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQueryMovimientos(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQueryMovimientos(filtros,true);
+
+            //Obtengo la lista de movimientos y el total
+            const rows = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
+
+            return {total:resultado[0][0].total, registros:rows[0]};
 
         } catch (error:any) {
             throw error;
@@ -180,6 +183,25 @@ class CuentasCorsRepository{
                 [data.idEntrega]
             );
             const entregaOriginal = (entregaRows as any)[0];
+
+            if (!entregaOriginal) {
+                await connection.rollback();
+                return "La entrega que intentas revertir ya no existe.";
+            }
+
+            //Solo se puede revertir la ÚLTIMA entrega del cliente. Se valida por id
+            //(autoincremental) contra la BD, nunca por posición dentro de una lista paginada
+            //en el front (ese supuesto fue el causante de un bug en la pantalla de registros vieja).
+            const [ultimaRows] = await connection.query(
+                "SELECT MAX(id) AS idUltima FROM ventas_entrega WHERE idCliente = ?",
+                [entregaOriginal.idCliente]
+            );
+            const idUltimaEntrega = (ultimaRows as any)[0]?.idUltima;
+
+            if (Number(idUltimaEntrega) !== Number(data.idEntrega)) {
+                await connection.rollback();
+                return "Solo se puede revertir la última entrega registrada para este cliente.";
+            }
 
             //Obtenemos los detalles de la entrega
             const consulta = " SELECT idVenta, montoAplicado FROM ventas_entrega_detalle WHERE idEntrega = ? ";
@@ -365,11 +387,12 @@ async function ObtenerVentasImpagas(connection, idCliente:number){
     }
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
+async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let paginado:string = "";
+        let filtroPendientes:string = "";
 
         let count:string = "";
         let endCount:string = "";
@@ -389,12 +412,29 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             }
         }
 
+        //Vista "Pendientes": solo ventas a crédito sin saldar y sin anular.
+        //El resto de los tipos de movimiento (entrega, ajuste, nota_credito, apertura)
+        //solo se muestran en "Todo el historial".
+        if (filtros.soloPendientes){
+            filtroPendientes = " AND cc.tipo = 'venta' AND vp.realizado = 0 AND v.fechaBaja IS NULL ";
+        }
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-            " SELECT id, fecha, monto " +
-            " FROM ventas_entrega  " +
-            " WHERE idCliente = ? " +
-            " ORDER BY fecha ASC " +
+            " SELECT " +
+            "   cc.id, cc.fecha, cc.hora, cc.tipo, cc.descripcion, " +
+            "   cc.debe, cc.haber, cc.saldo, cc.idReferencia, " +
+            "   v.total AS ventaTotal, v.fechaBaja AS ventaFechaBaja, " +
+            "   vp.entrega AS ventaEntrega, vp.realizado AS ventaRealizado, " +
+            "   CASE WHEN cc.tipo = 'entrega' " +
+            "        THEN cc.idReferencia = (SELECT MAX(ve.id) FROM ventas_entrega ve WHERE ve.idCliente = cc.idCliente) " +
+            "        ELSE NULL END AS esUltimaEntrega " +
+            " FROM cuenta_corriente_movimientos cc " +
+            " LEFT JOIN ventas v ON cc.tipo = 'venta' AND v.id = cc.idReferencia " +
+            " LEFT JOIN ventas_pago vp ON vp.idVenta = v.id " +
+            " WHERE cc.idCliente = ? " +
+            filtroPendientes +
+            " ORDER BY cc.fecha DESC, cc.id DESC " +
             paginado +
             endCount;
 

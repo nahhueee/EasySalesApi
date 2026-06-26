@@ -700,7 +700,7 @@ function buildDocFactura(
   factura: FacturaAFIP,
 ): object {
   const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
-
+  console.log(factura)
   if (comprobante.papel === 'A4') {
     return buildDocFacturaA4(comprobante, resumen, venta, factura);
   }
@@ -776,13 +776,18 @@ function buildDocFacturaA4(
   };
 
   // ── 2. Datos del receptor ─────────────────────────────────────────────────
+  // "Condición" se omite cuando coincide textualmente con "Cliente" (ej: consumidor
+  // final sin nombre cargado, donde ambos valen "Consumidor Final") — mismo criterio
+  // de deduplicación que usa buildEncabezadoFactura para el layout térmico.
+  const condicionReceptorEsRedundante = factura.condicionReceptor === factura.clienteReceptor;
+
   const tablaReceptor = {
     table: {
       widths: ['*'],
       body: [[{
         stack: [
-          labelValor('Cliente',        factura.clienteReceptor),
-          labelValor('Condición',      factura.condicionReceptor),
+          labelValor('Cliente', factura.clienteReceptor),
+          ...(condicionReceptorEsRedundante ? [] : [labelValor('Condición', factura.condicionReceptor)]),
           ...(factura.DNI ? [labelValor(factura.tipoDNI ?? 'Documento', factura.DNI)] : []),
           labelValor('Método de pago', formatearTextoPago(venta)),
         ],
@@ -1004,7 +1009,7 @@ export class ComprobanteService {
       direccion:           parametros.direccion,
       CUIL:                parametros.cuil,
       condicionReceptor,
-      clienteReceptor:     venta.cliente?.razonSocial ?? 'Consumidor Final',
+      clienteReceptor:     venta.cliente?.razonSocial || venta.cliente?.nombre || 'Consumidor Final',
       DNI:                 facturaVenta.dni,
       tipoDNI,
       qr:                  await FacturacionServ.ObtenerQRFactura(venta.id),

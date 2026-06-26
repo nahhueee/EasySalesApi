@@ -1,4 +1,5 @@
 import {ClientesRepo} from '../data/clientesRepository';
+import {PadronServ} from '../services/padronService';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
@@ -73,5 +74,16 @@ router.delete('/eliminar/:id', async (req:Request, res:Response) => {
 });
 //#endregion
 
+//#region PADRON AFIP
+router.get('/consulta-padron/:cuit', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await PadronServ.ConsultarContribuyente(req.params.cuit));
+
+    } catch(error){
+        next(error);
+    }
+});
+//#endregion
+
 // Export the router
-export default router; 
+export default router;

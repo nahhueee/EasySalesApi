@@ -3,12 +3,12 @@ import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 const router : Router  = Router();
 
-router.post('/obtener', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await CuentasRepo.Obtener(req.body));
+router.post('/movimientos', async (req:Request, res:Response) => {
+    try{
+        res.json(await CuentasRepo.ObtenerMovimientos(req.body));
 
     } catch(error:any){
-        let msg = "Error al obtener el listado de registro de entregas.";
+        let msg = "Error al obtener el listado de movimientos de la cuenta corriente.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

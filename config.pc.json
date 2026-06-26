@@ -1,11 +1,11 @@
 {
   "adminUrl": "https://creationserver.com/adminserver/",
-  "produccion": false,
+  "produccion": true,
   "esServer": false,
   "port": 7500,
   "idApp": 1,
   "web": false,
-  "cuilTest": "27411750723",
+  "cuilTest": "20385020423",
   "db": {
     "host": "127.0.0.1",
     "user": "root",
