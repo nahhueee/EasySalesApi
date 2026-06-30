@@ -11,6 +11,8 @@ export class FacturaVenta{
     tipoDniDesc? : string;
     ptoVenta? : number;
     condReceptor? : number;
+    // Suma de notas_credito.total ya emitidas contra esta factura (ver ventasRepository.ObtenerQuery).
+    acreditado? : number;
 
     constructor(data?: any) {
       if (data) {
@@ -25,6 +27,7 @@ export class FacturaVenta{
         this.tipoDni = data.tipoDni;
         this.ptoVenta = data.ptoVenta;
         this.condReceptor = data.condReceptor;
+        this.acreditado = data.acreditado;
       }
     }
 }

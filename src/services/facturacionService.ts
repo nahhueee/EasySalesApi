@@ -8,6 +8,7 @@ import { AppError } from "../logger/AppError";
 import { CodigoError } from "../logger/CodigosError";
 import { ValidarConsistenciaFiscal } from "../utils/datosFiscales";
 import { ObtenerInstanciaAfip } from "./afipClienteFactory";
+import { ObjQR } from "../models/ObjQR";
 
 const QRCode = require('qrcode');
 
@@ -210,7 +211,7 @@ class FacturacionService{
 
                 return await QRCode.toDataURL(url);
             }
-          
+
             return null;
 
         } catch (error) {
@@ -218,6 +219,33 @@ class FacturacionService{
                 CodigoError.QR_ERROR,
                 'No se pudo generar el QR de la factura.', 500,
                 { modulo: 'FacturacionService', metodo: 'ObtenerQRFactura' }
+            );
+        }
+    }
+
+    /**
+     * Genera el QR a partir de un ObjQR ya armado por el caller.
+     * No se reutiliza ObtenerQRFactura() porque ese método resuelve los datos del
+     * comprobante consultando `ventas_factura` por idVenta — siempre la factura
+     * original. Una Nota de Crédito es un comprobante distinto (propio CAE/ticket/
+     * tipoComprobante/importe): el QR fiscal debe describir la NC, no la factura
+     * asociada. El caller (NotaCreditoService) arma el ObjQR con los datos de la NC.
+     */
+    async GenerarQR(objQR: ObjQR): Promise<string> {
+        try {
+            const datosFacturacion = await ParametrosRepo.ObtenerParametrosFacturacion();
+            objQR.cuit = datosFacturacion.cuil;
+
+            const jsonBase64 = Buffer.from(JSON.stringify(objQR)).toString('base64');
+            const url = `https://www.arca.gob.ar/fe/qr/?p=${jsonBase64}`;
+
+            return await QRCode.toDataURL(url);
+
+        } catch (error) {
+            throw new AppError(
+                CodigoError.QR_ERROR,
+                'No se pudo generar el QR de la nota de crédito.', 500,
+                { modulo: 'FacturacionService', metodo: 'GenerarQR' }
             );
         }
     }

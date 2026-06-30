@@ -79,6 +79,8 @@ class VentasRepository{
                         tipoDni: row['tipoDni'],
                         ptoVenta: row['ptoVenta'],
                         condReceptor: row['condReceptor'],
+                        // mysql2 devuelve el SUM() de un DECIMAL como string, hay que normalizarlo igual que el resto de los montos.
+                        acreditado: row['acreditado'] !== undefined ? Number(row['acreditado'] ?? 0) : undefined,
                     });
 
                     let ajuste = 0;
@@ -399,6 +401,14 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 
         let count:string = "";
         let endCount:string = "";
+
+        // Acreditado vía NC: se calcula siempre (antes solo en el drill-down por idVenta).
+        // idVenta tiene índice en notas_credito (ver migración) y el volumen de NCs es bajo
+        // frente al de ventas, así que el JOIN agregado es liviano incluso en el listado
+        // paginado general. Alimenta tanto "Emitir NC" vs "Eliminar" en el detalle como el
+        // estado de la columna "Fact." (facturada / NC parcial / NC total) en la tabla.
+        const selectAcreditado = ", nc.acreditado ";
+        const joinAcreditado = " LEFT JOIN (SELECT idVenta, SUM(total) AS acreditado FROM notas_credito GROUP BY idVenta) nc ON nc.idVenta = v.id ";
         //#endregion
 
         // #region FILTROS
@@ -439,10 +449,12 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
                 " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
                 " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial " +
+                selectAcreditado +
                 " FROM ventas v " +
                 " INNER JOIN ventas_pago vpag ON vpag.idVenta = v.id " +
                 " LEFT JOIN ventas_factura vfac ON vfac.idVenta = v.id " +
                 " LEFT JOIN clientes cli ON cli.id = v.idCliente " +
+                joinAcreditado +
                 " WHERE 1 = 1 " +
                 filtro +
                 " ORDER BY v.id DESC" +

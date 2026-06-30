@@ -43,8 +43,16 @@ const CONDICIONES_IVA_RECEPTOR = [
   { id: 15, descripcion: 'IVA No Alcanzado'           },
 ];
 
-/** Código AFIP → letra visible en el comprobante (A, B, C). */
-const TIPO_COMPROBANTE_LETRA: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C' };
+/**
+ * Código AFIP → letra visible en el comprobante (A, B, C).
+ * 1/6/11 = Factura A/B/C. 3/8/13 = Nota de Crédito A/B/C (TipoComprobante en objFacturar.ts).
+ */
+const TIPO_COMPROBANTE_LETRA: Record<number, string> = { 1: 'A', 6: 'B', 11: 'C', 3: 'A', 8: 'B', 13: 'C' };
+
+// Mismos códigos que la mitad derecha del mapa de arriba — separados para poder anteponer
+// "NC" a la letra en el recuadro impreso sin que la Factura (1/6/11) se vea afectada,
+// ya que ambas comparten buildEncabezadoFactura en el térmico.
+const TIPOS_NOTA_CREDITO = new Set([3, 8, 13]);
 
 const printer = new PdfPrinter(fonts);
 
@@ -107,6 +115,50 @@ interface FacturaAFIP {
   DNI:                number | undefined;
   tipoDNI:            string | undefined;
   qr:                 string;
+}
+
+/** Línea de detalle de una NC parcial — precio ya congelado de `ventas_detalle`. */
+export interface DetalleNotaCredito {
+  nomProd:  string;
+  cantidad: number;
+  precio:   number;
+}
+
+/**
+ * Payload de impresión de una Nota de Crédito, resuelto enteramente por
+ * NotaCreditoService.ObtenerImpresion() — tanto al emitir una NC nueva como al
+ * reimprimir una ya emitida (mismo criterio que generarComprobantePDF recibe el Venta
+ * completo desde el caller — esta función de PDF no vuelve a consultar la DB).
+ */
+export interface NotaCreditoImpresion {
+  tipo:     number; // TipoComprobante NC_A=3 / NC_B=8 / NC_C=13 (objFacturar.ts)
+  ticket:   number;
+  ptoVenta: number;
+  cae:      string;
+  caeVto:   Date | string;
+  neto:     number;
+  iva:      number;
+  total:    number;
+  fecha:    Date | string;
+  motivo?:  string | null;
+  /** Vacío si la NC es total (sin detalle de línea, solo el monto global). */
+  detalles: DetalleNotaCredito[];
+
+  // Receptor — heredado de la factura original (misma venta, mismo cliente)
+  dni?:            number;
+  tipoDni?:        number;
+  condReceptor?:   number;
+  clienteReceptor: string;
+
+  // Factura original contra la que se emite la NC (CbtesAsoc en AFIP)
+  comprobanteAsociado: {
+    tipo:     number;
+    ptoVenta: number;
+    ticket:   number;
+  };
+
+  /** Ya generado por FacturacionServ.GenerarQR() — esta función no llama a AFIP. */
+  qr: string;
 }
 
 /** Resumen financiero de la venta, calculado por calcularResumenVenta(). */
@@ -404,6 +456,8 @@ function buildEncabezadoFactura(
 ): object[] {
   const filas: object[] = [];
   const letraComprobante = TIPO_COMPROBANTE_LETRA[factura.tipoComprobante ?? 0] ?? 'X';
+  // Ancho 'auto': anteponer "NC " no requiere ajustar tamaños, la caja simplemente crece.
+  const textoLetra = TIPOS_NOTA_CREDITO.has(factura.tipoComprobante ?? 0) ? `NC ${letraComprobante}` : letraComprobante;
 
   // Letra del comprobante en recuadro centrado — AFIP lo requiere visible y destacado
   filas.push({
@@ -414,7 +468,7 @@ function buildEncabezadoFactura(
         table: {
           body: [[{
             stack: [
-              { text: letraComprobante, alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.titulo + 4 },
+              { text: textoLetra, alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.titulo + 4 },
               { text: `Cod:${factura.tipoComprobante}`, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 2 },
             ],
             margin: [5, 0, 5, 0],
@@ -536,6 +590,48 @@ function buildFilasDetallePresupuesto(detalles: DetallePresupuesto[], configurac
     celda(formatearMoneda(item.precio   ?? 0,  configuracionPapel), { alignment: 'right' }),
     celda(formatearMoneda(item.total    ?? 0,  configuracionPapel), { alignment: 'right' }),
   ]);
+}
+
+/**
+ * Análoga a buildFilasDetalle() pero para detalle de NC parcial. Misma forma de fila
+ * — se duplica en vez de forzar Venta | NotaCreditoImpresion, mismo criterio que
+ * buildFilasDetallePresupuesto (ver comentario arriba).
+ */
+function buildFilasDetalleNotaCredito(detalles: DetalleNotaCredito[], configuracionPapel: ConfiguracionPapel): unknown[][] {
+  return detalles.map(item => [
+    celda(formatearCantidad(item.cantidad ?? 0, configuracionPapel), { alignment: 'center' }),
+    celda(truncarTexto(item.nomProd ?? '',      configuracionPapel)),
+    celda(formatearMoneda(item.precio ?? 0,     configuracionPapel), { alignment: 'right' }),
+    celda(formatearMoneda((item.cantidad ?? 0) * (item.precio ?? 0), configuracionPapel), { alignment: 'right' }),
+  ]);
+}
+
+/**
+ * Línea "Asociada a Factura X Nº PPPP-TTTTTTTT" — trazabilidad de la NC contra el
+ * comprobante que cancela/ajusta. No tiene equivalente en buildEncabezadoFactura
+ * porque ese builder es compartido con facturas normales, que no tienen asociado.
+ */
+function buildComprobanteAsociado(
+  asociado: { tipo: number; ptoVenta: number; ticket: number },
+  configuracionPapel: ConfiguracionPapel,
+): object {
+  const letra = TIPO_COMPROBANTE_LETRA[asociado.tipo] ?? 'X';
+  return {
+    text:      `Asociada a Factura ${letra} Nº ${String(asociado.ptoVenta).padStart(4, '0')}-${String(asociado.ticket).padStart(8, '0')}`,
+    alignment: 'center',
+    bold:      true,
+    fontSize:  configuracionPapel.fontSizes.normal,
+    margin:    [0, 0, 0, 3],
+  };
+}
+
+/**
+ * Total de una NC: a diferencia de buildTotales(), no hay subtotal/ajuste/deuda —
+ * una NC no tiene descuento, recargo ni pago propio (ver restricción de NC parcial
+ * en el plan: solo se habilita sobre ventas sin descuento/recargo).
+ */
+function buildTotalNotaCredito(total: number, configuracionPapel: ConfiguracionPapel): object {
+  return filaAlineadaDerecha(`TOTAL: $${formatearMoneda(total, configuracionPapel)}`, configuracionPapel, 'total');
 }
 
 /**
@@ -859,6 +955,157 @@ function buildDocFacturaA4(
   };
 }
 
+/**
+ * Dispatcher de NC: delega a A4 o a la versión térmica según el papel configurado.
+ * No reutiliza buildDocFactura() porque ese flujo depende de Venta (resumen vía
+ * calcularResumenVenta, basado en pago) — una NC no tiene pago/descuento/recargo/deuda,
+ * solo un total fijo (ver buildTotalNotaCredito).
+ */
+function buildDocNotaCredito(
+  comprobante: ComprobanteData,
+  nc: NotaCreditoImpresion,
+  factura: FacturaAFIP,
+): object {
+  const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
+
+  if (comprobante.papel === 'A4') {
+    return buildDocNotaCreditoA4(comprobante, nc, factura, configuracionPapel);
+  }
+
+  // Layout compacto para tickets térmicos — reutiliza buildEncabezadoFactura/buildIVA/
+  // buildCAE/buildQR tal cual (son genéricos sobre FacturaAFIP, no dependen de Venta).
+  return {
+    pageSize:    configuracionPapel.pageSize,
+    pageMargins: [comprobante.margenIzq, 4, comprobante.margenDer, 4],
+    content: [
+      ...buildEncabezadoFactura(comprobante, factura, configuracionPapel),
+      buildComprobanteAsociado(nc.comprobanteAsociado, configuracionPapel),
+      buildTabla(comprobante, configuracionPapel),
+      buildTotalNotaCredito(nc.total, configuracionPapel),
+      ...buildIVA(factura, configuracionPapel),
+      buildCAE(factura, configuracionPapel),
+      buildQR(factura, configuracionPapel),
+    ],
+  };
+}
+
+/**
+ * Layout A4 de NC. Análogo a buildDocFacturaA4: mismas tres columnas de encabezado,
+ * pero la columna derecha dice "NOTA DE CRÉDITO" e incluye el comprobante asociado;
+ * la tabla de receptor omite método de pago (no aplica) y suma el motivo si hay.
+ */
+function buildDocNotaCreditoA4(
+  comprobante: ComprobanteData,
+  nc: NotaCreditoImpresion,
+  factura: FacturaAFIP,
+  configuracionPapel: ConfiguracionPapel,
+): object {
+  const letraComprobante = TIPO_COMPROBANTE_LETRA[factura.tipoComprobante ?? 0] ?? 'X';
+  const letraAsociada     = TIPO_COMPROBANTE_LETRA[nc.comprobanteAsociado.tipo] ?? 'X';
+
+  const headerTable = {
+    table: {
+      widths: ['45%', '10%', '45%'],
+      body: [[
+        {
+          stack: [
+            { text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
+            labelValor('Dirección',    factura.direccion),
+            labelValor('Cond. IVA',   factura.condicion),
+            labelValor('CUIT',        factura.CUIL),
+            labelValor('Razón Social', factura.razon),
+          ],
+        },
+        {
+          // Columna fija al 10%: "NC" va en línea propia (no inline con la letra) para no
+          // forzar el wrap de "NC A" a ese ancho con fontSize 25 — mismo criterio que el
+          // "Cod." de abajo, una etiqueta chica + el dato grande.
+          stack: [
+            { text: 'NC', fontSize: 11, bold: true, alignment: 'center', margin: [0, 10, 0, 0] },
+            { text: letraComprobante, fontSize: 25, bold: true, decoration: 'underline', alignment: 'center', margin: [0, 0, 0, 3] },
+            { text: `Cod. ${factura.tipoComprobante}`, fontSize: 7, alignment: 'center' },
+          ],
+          alignment: 'center',
+        },
+        {
+          stack: [
+            { text: 'NOTA DE CRÉDITO', fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
+            labelValor('Nro Comp',      `${factura.puntoVenta?.toString().padStart(4, '0')} - ${factura.ticket?.toString().padStart(8, '0')}`, true),
+            labelValor('Fecha Emisión', `${comprobante.fechaVenta} - ${comprobante.horaVenta}`),
+            labelValor('Asociada a',    `Factura ${letraAsociada} ${String(nc.comprobanteAsociado.ptoVenta).padStart(4, '0')}-${String(nc.comprobanteAsociado.ticket).padStart(8, '0')}`),
+          ],
+        },
+      ]],
+    },
+    layout: layoutLineas(),
+  };
+
+  const condicionReceptorEsRedundante = factura.condicionReceptor === factura.clienteReceptor;
+
+  const tablaReceptor = {
+    table: {
+      widths: ['*'],
+      body: [[{
+        stack: [
+          labelValor('Cliente', factura.clienteReceptor),
+          ...(condicionReceptorEsRedundante ? [] : [labelValor('Condición', factura.condicionReceptor)]),
+          ...(factura.DNI ? [labelValor(factura.tipoDNI ?? 'Documento', factura.DNI)] : []),
+          ...(nc.motivo?.trim() ? [labelValor('Motivo', nc.motivo)] : []),
+        ],
+        margin: [8, 4, 8, 4],
+      }]],
+    },
+    layout: {
+      fillColor: () => '#eeeeee',
+      ...layoutLineas(),
+    },
+    margin: [0, 10, 0, 10],
+  };
+
+  const tablaProductos = buildTabla(comprobante, configuracionPapel);
+
+  const tablaTotales = {
+    table: {
+      widths: ['50%', '50%'],
+      body: [[
+        {},
+        {
+          stack: [
+            buildTotalNotaCredito(nc.total, configuracionPapel),
+            ...buildIVA(factura, configuracionPapel),
+          ],
+        },
+      ]],
+    },
+    layout: layoutLineas(),
+    margin: [0, 10, 0, 0],
+  };
+
+  const pie = {
+    columns: [
+      { image: factura.qr, width: 100, alignment: 'left', margin: [0, 0, 30, 0] },
+      {
+        stack: [
+          { text: 'Comprobante Autorizado', fontSize: 10, italic: true, bold: true, margin: [8, 3, 0, 10] },
+          labelValor('CAE',             factura.cae),
+          labelValor('Vencimiento CAE', factura.caeVto),
+          labelValor('Moneda',          'PES'),
+        ],
+        width: 'auto',
+      },
+    ],
+    margin: [0, 15, 0, 0],
+  };
+
+  return {
+    pageSize:        'A4',
+    pageOrientation: 'portrait',
+    pageMargins:     [10, 10, 10, 10],
+    content:         [headerTable, tablaReceptor, tablaProductos, tablaTotales, pie],
+    styles:          estilosA4(configuracionPapel),
+  };
+}
+
 /** Estilos pdfmake para el documento A4. Separado del builder para mantenerlo legible. */
 function estilosA4(configuracionPapel: ConfiguracionPapel): object {
   return {
@@ -1013,6 +1260,76 @@ export class ComprobanteService {
       DNI:                 facturaVenta.dni,
       tipoDNI,
       qr:                  await FacturacionServ.ObtenerQRFactura(venta.id),
+    };
+  }
+
+  /**
+   * Punto de entrada público para PDF de Nota de Crédito.
+   * NotaCreditoService ya resolvió todo (CAE, QR, receptor) al emitir la NC contra
+   * AFIP — esta función no vuelve a consultar la DB ni a llamar a AFIP, solo arma el PDF.
+   */
+  async generarNotaCreditoPDF(nc: NotaCreditoImpresion, parametros: ParametrosComprobante): Promise<Buffer> {
+    const comprobante  = this.mapearComprobanteNotaCredito(nc, parametros);
+    const facturaAFIP  = await this.mapearNotaCredito(nc);
+    const docDefinition = buildDocNotaCredito(comprobante, nc, facturaAFIP);
+
+    return generarBufferPDF(docDefinition);
+  }
+
+  /**
+   * Normaliza la NC + parámetros del local en un ComprobanteData listo para los builders.
+   * Análoga a mapearComprobante(), pero la fecha/hora viene de nc.fecha (una NC no tiene
+   * el concepto de Venta.hora) y la tabla sale de buildFilasDetalleNotaCredito().
+   */
+  private mapearComprobanteNotaCredito(nc: NotaCreditoImpresion, parametros: ParametrosComprobante): ComprobanteData {
+    const configuracionPapel = obtenerConfiguracionPapel(parametros.papel);
+    const fecha              = new Date(nc.fecha);
+
+    return {
+      papel:            parametros.papel,
+      margenIzq:        parametros.margenIzq,
+      margenDer:        parametros.margenDer,
+      nombreLocal:      parametros.nomLocal,
+      descripcionLocal: parametros.desLocal,
+      direccionLocal:   parametros.dirLocal,
+      fechaVenta:       fecha.toLocaleDateString('es-ES'),
+      horaVenta:        fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+      filasTabla:       buildFilasDetalleNotaCredito(nc.detalles, configuracionPapel),
+    };
+  }
+
+  /**
+   * Construye el FacturaAFIP de la NC a partir del propio NotaCreditoImpresion —no de
+   * venta.factura como en mapearFactura()—, porque la NC tiene su propio CAE/ticket/
+   * tipoComprobante/QR. Los datos del emisor (razón social, CUIL, dirección) siguen
+   * saliendo de ParametrosRepo porque son los mismos para cualquier comprobante del local.
+   */
+  private async mapearNotaCredito(nc: NotaCreditoImpresion): Promise<FacturaAFIP> {
+    const parametros = await ParametrosRepo.ObtenerParametrosFacturacion();
+
+    const tipoDNI           = TIPOS_DOCUMENTO.find(t => t.id === nc.tipoDni)?.descripcion;
+    const condicionReceptor = CONDICIONES_IVA_RECEPTOR.find(t => t.id === nc.condReceptor)?.descripcion;
+
+    return {
+      puntoVenta:          nc.ptoVenta,
+      ticket:              nc.ticket,
+      neto:                nc.neto,
+      iva:                 nc.iva,
+      cae:                 nc.cae,
+      caeVto:              new Date(nc.caeVto).toLocaleDateString('es-AR'),
+      tipoComprobante:     nc.tipo,
+      desTipoComprobante:  TIPO_COMPROBANTE_LETRA[nc.tipo ?? 0] ?? '',
+      condicion:           parametros.condicion === 'responsable_inscripto'
+                             ? 'RESPONSABLE INSCRIPTO'
+                             : 'MONOTRIBUTISTA',
+      razon:               parametros.razon,
+      direccion:           parametros.direccion,
+      CUIL:                parametros.cuil,
+      condicionReceptor,
+      clienteReceptor:     nc.clienteReceptor,
+      DNI:                 nc.dni,
+      tipoDNI,
+      qr:                  nc.qr,
     };
   }
 }

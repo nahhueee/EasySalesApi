@@ -74,10 +74,6 @@ class PresupuestosRepository {
             let filtro = '';
             const params: any[] = [];
 
-            if (filtros.idCaja) {
-                filtro += ' AND p.idCaja = ?';
-                params.push(filtros.idCaja);
-            }
             if (filtros.idCliente) {
                 filtro += ' AND p.idCliente = ?';
                 params.push(filtros.idCliente);

@@ -1,5 +1,6 @@
 import {VentasRepo} from '../data/ventasRepository';
 import {FacturacionServ} from '../services/facturacionService';
+import {NotaCreditoServ} from '../services/notaCreditoService';
 import {Router, Request, Response} from 'express';
 //import logger from '../log/loggerGeneral';
 import {logger} from '../logger/logger'
@@ -97,11 +98,45 @@ router.get('/obtenerQR/:id', async (req:Request, res:Response, next) => {
 });
 
 router.post('/facturar', async (req:Request, res:Response, next) => {
-    try{ 
+    try{
         //Validamos permisos
         await TerminalServ.VerificarTerminalHabilitada();
 
         res.json(await FacturacionServ.Facturar(req.body));
+    } catch(error){
+        next(error);
+    }
+});
+//#endregion
+
+//#region NOTA DE CREDITO
+router.post('/notas-credito', async (req:Request, res:Response, next) => {
+    try{
+        // La NC también emite contra AFIP (vía FacturacionServ.Facturar internamente) —
+        // misma validación de terminal habilitada que /facturar.
+        await TerminalServ.VerificarTerminalHabilitada();
+
+        res.json(await NotaCreditoServ.EmitirNotaCredito(req.body));
+    } catch(error){
+        next(error);
+    }
+});
+
+// Lista de NCs emitidas para una venta — alimenta el submenú Ver/Imprimir Comprobante
+// (NC 1, NC 2, ...) en el frontend.
+router.get('/notas-credito/venta/:idVenta', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await NotaCreditoServ.ObtenerPorVenta(Number(req.params.idVenta)));
+    } catch(error:any){
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al obtener las Notas de Crédito de la venta.', 500, { modulo: 'ventasRoute.notas-credito.venta' }, error));
+    }
+});
+
+// Payload completo de impresión de una NC ya emitida — para ver/reimprimir desde el
+// historial de la venta, sin volver a pasar por AFIP (ver NotaCreditoService.ObtenerImpresion).
+router.get('/notas-credito/:idNotaCredito/impresion', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await NotaCreditoServ.ObtenerImpresion(Number(req.params.idNotaCredito)));
     } catch(error){
         next(error);
     }

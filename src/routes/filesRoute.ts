@@ -47,6 +47,37 @@ router.post('/imprimir-pdf', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/imprimir-pdf-nota-credito', async (req: Request, res: Response) => {
+  try {
+    const nc = req.body.nc;
+    const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
+    const pdfBuffer = await ComprobanteServ.generarNotaCreditoPDF(nc, parametrosImpresion);
+
+    //Crear archivo temporal
+    const tempName = `impresion_${uuid()}.pdf`;
+    const tempPath = path.join(__dirname, '..', 'temp', tempName);
+
+    fs.writeFileSync(tempPath, pdfBuffer);
+
+    //Enviar a la impresora
+    await printer.print(tempPath, {
+      printer: parametrosImpresion.impresora,
+      orientation: 'portrait',
+      scale: 'noscale'
+    });
+
+    //Eliminar archivo temporal
+    fs.unlinkSync(tempPath);
+
+    res.status(200).json('OK');
+
+  } catch (error: any) {
+    let msg = "Error al imprimir la nota de crédito.";
+    logger.error(msg + " " + error.message);
+    res.status(500).send(msg);
+  }
+});
+
 router.post('/ver-comprobante/:tipoComprobante', async (req: Request, res: Response) => {
   try {
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
@@ -61,6 +92,26 @@ router.post('/ver-comprobante/:tipoComprobante', async (req: Request, res: Respo
 
   } catch (error: any) {
     let msg = "Error al generar el comprobante.";
+    logger.error(msg + " " + error.message);
+    res.status(500).send(msg);
+  }
+});
+
+// Vista previa de una Nota de Crédito (sin imprimir) — mismo patrón que /ver-comprobante,
+// usando el mismo generador que /imprimir-pdf-nota-credito. Hoy el flujo de NC solo soporta
+// impresión silenciosa; esto habilita "Ver" desde el historial de NCs de una venta.
+router.post('/ver-comprobante-nota-credito', async (req: Request, res: Response) => {
+  try {
+    const nc = req.body.nc;
+    const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
+    const pdfBuffer = await ComprobanteServ.generarNotaCreditoPDF(nc, parametrosImpresion);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename=nota-credito.pdf');
+    res.send(pdfBuffer);
+
+  } catch (error: any) {
+    let msg = "Error al generar la nota de crédito.";
     logger.error(msg + " " + error.message);
     res.status(500).send(msg);
   }
