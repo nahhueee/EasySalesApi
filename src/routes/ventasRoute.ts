@@ -122,6 +122,16 @@ router.post('/notas-credito', async (req:Request, res:Response, next) => {
     }
 });
 
+// Resumen de NCs emitidas para una caja (cantidad + total) — pestaña "Notas de Crédito"
+// del resumen de caja. Informativo: cuánto quedó como saldo a favor de clientes.
+router.get('/notas-credito/caja/:idCaja', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await NotaCreditoServ.ObtenerResumenPorCaja(Number(req.params.idCaja)));
+    } catch(error:any){
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al obtener el resumen de NCs de la caja.', 500, { modulo: 'ventasRoute.notas-credito.caja' }, error));
+    }
+});
+
 // Lista de NCs emitidas para una venta — alimenta el submenú Ver/Imprimir Comprobante
 // (NC 1, NC 2, ...) en el frontend.
 router.get('/notas-credito/venta/:idVenta', async (req:Request, res:Response, next) => {

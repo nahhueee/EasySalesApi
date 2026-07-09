@@ -239,6 +239,12 @@ class NotaCreditoService {
     return this.ObtenerImpresion(idNotaCredito);
   }
 
+  // Resumen de NCs emitidas para una caja — alimenta la pestaña "Notas de Crédito"
+  // del resumen de caja (cantidad + total, informativo).
+  async ObtenerResumenPorCaja(idCaja: number): Promise<{ cantidad: number; total: number }> {
+    return NotasCreditoRepo.ObtenerResumenPorCaja(idCaja);
+  }
+
   // Lista de NCs de una venta — alimenta el submenú Ver/Imprimir Comprobante del frontend
   // (NC 1, NC 2, ...) para ver/reimprimir comprobantes ya emitidos.
   async ObtenerPorVenta(idVenta: number): Promise<NotaCreditoRow[]> {

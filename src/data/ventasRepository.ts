@@ -218,25 +218,69 @@ class VentasRepository{
             await InsertPagoVenta(connection, venta.pago);
             for (const element of  venta.detallePago!) {
                 element.idVenta = venta.id;
-                if(venta.pago.entrega! > 0)
+                // Guardar el detalle si tiene monto > 0 (trazabilidad).
+                // "CUENTA CORRIENTE" queda con monto=0 → no se guarda en detalle (sin efectivo).
+                // "SALDO A FAVOR" queda con el monto SAF real → sí se guarda (para auditoría).
+                if(element.monto > 0)
                     await InsertPagoVentaDetalle(connection, element);
             }
 
-            if(!venta.pago.realizado){
-                //Registramos el Movimiento
-                await SesionServ.RegistrarMovimiento("Nueva deuda para el cliente " + venta.cliente.nombre);
+            // Validación SAF (Bug 4 — no confiar en el front):
+            // Si hay un detalle de pago "SALDO A FAVOR", verificar que el cliente
+            // realmente tiene favor disponible y que el monto no lo supera.
+            const detalleSAF = (venta.detallePago ?? []).find(d =>
+                (d.tipoPago?.nombre ?? '').toUpperCase() === 'SALDO A FAVOR'
+            );
+            if(detalleSAF && detalleSAF.monto > 0){
+                if(venta.cliente.id === 1)
+                    throw new Error('El consumidor final no puede usar Saldo a Favor.');
 
-                //Registramos el movimiento (debe) en la cuenta corriente del cliente
-                //Restamos venta.pago.entrega: si hubo seña/anticipo en el momento de
-                //la venta, esa parte nunca se convirtió en deuda real, asi que no
-                //corresponde debitarla en la cuenta corriente
+                // Lockear el cliente y leer saldo actual dentro de la transacción activa
+                await connection.query('SELECT id FROM clientes WHERE id = ? FOR UPDATE', [venta.cliente.id]);
+                const [saldoRows] = await connection.query(
+                    'SELECT saldo FROM cuenta_corriente_movimientos WHERE idCliente = ? ORDER BY id DESC LIMIT 1',
+                    [venta.cliente.id]
+                );
+                const saldoActual = saldoRows[0] ? Number((saldoRows as any)[0].saldo) : 0;
+
+                if(saldoActual >= 0)
+                    throw new Error('El cliente no tiene saldo a favor para utilizar.');
+
+                const disponible = Math.abs(saldoActual);
+                if(Number(detalleSAF.monto) > disponible)
+                    throw new Error(`El monto de "Saldo a favor" ($${detalleSAF.monto}) supera el disponible ($${disponible.toFixed(2)}).`);
+            }
+
+            // Libreta completa (PR B, 2026-07-03): para todo cliente con nombre (id != 1),
+            // toda venta postea debe=total y un haber por cada pago real.
+            // "CUENTA CORRIENTE" y "SALDO A FAVOR" no generan haber — el saldo corrido
+            // los absorbe (ver documentos/handoff_implementacion_devoluciones_nc.md).
+            if(venta.cliente.id !== 1){
+                await SesionServ.RegistrarMovimiento("Nueva entrada de venta para el cliente " + venta.cliente.nombre);
+
+                // 1. Debe = total (la deuda de la venta)
                 await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
                     idCliente: venta.cliente.id!,
                     tipo: 'venta',
-                    descripcion: 'Venta a crédito',
-                    debe: venta.total - (venta.pago.entrega ?? 0),
+                    descripcion: 'Venta',
+                    debe: venta.total,
                     idReferencia: venta.id
                 });
+
+                // 2. Haber por cada pago real (excluir CC y SAF — no generan haber)
+                const MEDIOS_SIN_HABER = ['CUENTA CORRIENTE', 'SALDO A FAVOR'];
+                for(const detalle of venta.detallePago ?? []){
+                    const nombreMedio = (detalle.tipoPago?.nombre ?? '').toUpperCase();
+                    if(!MEDIOS_SIN_HABER.includes(nombreMedio) && detalle.monto > 0){
+                        await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                            idCliente: venta.cliente.id!,
+                            tipo: 'pago',
+                            descripcion: `Pago: ${detalle.tipoPago?.nombre}`,
+                            haber: detalle.monto,
+                            idReferencia: venta.id
+                        });
+                    }
+                }
             }
 
             //insertamos los datos de la factura de la venta
@@ -300,10 +344,11 @@ class VentasRepository{
             await connection.beginTransaction();
 
             //Leemos el estado de pago real de la venta (no confiamos en lo que
-            //venga del front) para saber si hay deuda pendiente que cancelar
-            //en la cuenta corriente del cliente
+            //venga del front) para revertir exactamente lo que se posteó en el ledger.
+            //Incluimos v.total porque es el monto real que se posteó como "debe" en Agregar
+            //(puede diferir de ventas_pago.monto si había recargo/descuento).
             const [pagoRows] = await connection.query(
-                "SELECT idCliente, monto, entrega, realizado FROM ventas_pago p INNER JOIN ventas v ON v.id = p.idVenta WHERE p.idVenta = ?",
+                "SELECT p.idCliente, p.monto, p.entrega, p.realizado, v.total AS totalVenta FROM ventas_pago p INNER JOIN ventas v ON v.id = p.idVenta WHERE p.idVenta = ?",
                 [venta.id]
             );
             const pagoInfo = (pagoRows as any)[0];
@@ -319,19 +364,35 @@ class VentasRepository{
                 ActualizarInventario(connection, element, "+")
             });
 
-            //Si la venta tenia deuda pendiente, la cancelamos en la cuenta corriente.
-            //El dinero ya entregado (si hubo pago parcial) no se toca aca: una
-            //devolucion de ese dinero es una operacion de negocio distinta.
-            if (pagoInfo && !pagoInfo.realizado) {
-                const pendiente = parseFloat(pagoInfo.monto) - parseFloat(pagoInfo.entrega);
-                if (pendiente > 0) {
-                    await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
-                        idCliente: pagoInfo.idCliente,
-                        tipo: 'ajuste',
-                        descripcion: 'Anulación de venta a crédito',
-                        haber: pendiente,
-                        idReferencia: venta.id
-                    });
+            // Libreta completa (PR B, 2026-07-03): revertir exactamente lo que Agregar posteó.
+            // Agregar posteó: debe=total + haber por cada pago real (no CC/SAF).
+            // El reversal espejo es: haber=total + debe por cada pago real.
+            if (pagoInfo && pagoInfo.idCliente !== 1) {
+                const totalVenta = Number(pagoInfo.totalVenta ?? 0);
+                const detallePagoVenta = await ObtenerDetallePagos(connection, venta.id);
+                const MEDIOS_SIN_HABER = ['CUENTA CORRIENTE', 'SALDO A FAVOR'];
+
+                // Reverso del debe (la venta en sí)
+                await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                    idCliente: pagoInfo.idCliente,
+                    tipo: 'ajuste',
+                    descripcion: 'Anulación de venta',
+                    haber: totalVenta,
+                    idReferencia: venta.id
+                });
+
+                // Reverso de cada haber (pago real que se había registrado)
+                for(const detalle of detallePagoVenta){
+                    const nombreMedio = (detalle.tipoPago?.nombre ?? '').toUpperCase();
+                    if(!MEDIOS_SIN_HABER.includes(nombreMedio) && detalle.monto > 0){
+                        await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                            idCliente: pagoInfo.idCliente,
+                            tipo: 'ajuste',
+                            descripcion: `Reverso pago: ${detalle.tipoPago?.nombre}`,
+                            debe: detalle.monto,
+                            idReferencia: venta.id
+                        });
+                    }
                 }
             }
 

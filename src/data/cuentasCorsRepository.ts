@@ -42,6 +42,26 @@ class CuentasCorsRepository{
         }
     }
 
+    // Saldo actual del ledger para un cliente.
+    // Retorna el campo "saldo" del último movimiento — que ya incluye todos los
+    // debe/haber acumulados. Si el cliente no tiene movimientos en el ledger, retorna 0.
+    // Saldo < 0 = favor del cliente; saldo > 0 = deuda.
+    async ObtenerSaldoLedger(idCliente: number): Promise<number> {
+        const connection = await db.getConnection();
+        try {
+            const [rows] = await connection.query(
+                'SELECT saldo FROM cuenta_corriente_movimientos WHERE idCliente = ? ORDER BY id DESC LIMIT 1',
+                [idCliente]
+            );
+            const ultimo = (rows as any)[0];
+            return ultimo ? Number(ultimo.saldo) : 0;
+        } catch (error) {
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
     //Devuelve el listado de movimientos de cuenta corriente de un cliente (pantalla de ledger).
     //Hace LEFT JOIN contra ventas/ventas_pago (solo aplica cuando tipo='venta') para poder mostrar
     //el estado real de la venta (pagada/con deuda/anulada) sin duplicar esa lógica en el front.

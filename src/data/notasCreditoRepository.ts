@@ -1,4 +1,5 @@
 import moment from "moment";
+import db from './db';
 
 export interface NotaCreditoDetalleInput {
     idVentaDetalle: number; // ventas_detalle.id (linea exacta acreditada)
@@ -179,6 +180,30 @@ class NotasCreditoRepository {
 
         } catch (error) {
             throw error;
+        }
+    }
+
+    // Resumen de NCs emitidas para todas las ventas de una caja — alimenta la pestaña
+    // "Notas de Crédito" del resumen de caja (informativo: cuánto quedó como saldo a favor).
+    async ObtenerResumenPorCaja(idCaja: number): Promise<{ cantidad: number; total: number }> {
+        const connection = await db.getConnection();
+        try {
+            const [rows] = await connection.query(
+                " SELECT COUNT(*) AS cantidad, COALESCE(SUM(nc.total), 0) AS total " +
+                " FROM notas_credito nc " +
+                " INNER JOIN ventas v ON v.id = nc.idVenta " +
+                " WHERE v.idCaja = ? AND v.fechaBaja IS NULL ",
+                [idCaja]
+            );
+            const row = (rows as any)[0];
+            return {
+                cantidad: Number(row.cantidad ?? 0),
+                total:    Number(row.total    ?? 0),
+            };
+        } catch (error) {
+            throw error;
+        } finally {
+            connection.release();
         }
     }
 

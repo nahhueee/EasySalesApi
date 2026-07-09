@@ -1,6 +1,6 @@
 import moment from 'moment';
 
-export type TipoMovimientoCC = 'apertura' | 'venta' | 'entrega' | 'nota_credito' | 'ajuste';
+export type TipoMovimientoCC = 'apertura' | 'venta' | 'pago' | 'entrega' | 'nota_credito' | 'ajuste';
 
 export interface MovimientoCC {
     idCliente: number;

@@ -25,6 +25,20 @@ router.get('/obtener-deuda/:idCliente', async (req:Request, res:Response) => {
     }
 });
 
+// Saldo actual del ledger (cuenta_corriente_movimientos) para un cliente.
+// < 0 = saldo a favor; > 0 = deuda. Usado en registrar-venta para validar tope de SAF.
+router.get('/saldo-ledger/:idCliente', async (req:Request, res:Response) => {
+    try{
+        const saldo = await CuentasRepo.ObtenerSaldoLedger(Number(req.params.idCliente));
+        res.json({ saldo });
+
+    } catch(error:any){
+        let msg = "Error al obtener el saldo del ledger del cliente nro " + req.params.idCliente + ".";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.put('/entrega', async (req:Request, res:Response) => {
     try{ 
         res.json(await CuentasRepo.EntregaDinero(req.body));
