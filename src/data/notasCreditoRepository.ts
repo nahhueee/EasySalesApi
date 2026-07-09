@@ -1,5 +1,5 @@
 import moment from "moment";
-import db from './db';
+import db from '../db';
 
 export interface NotaCreditoDetalleInput {
     idVentaDetalle: number; // ventas_detalle.id (linea exacta acreditada)
