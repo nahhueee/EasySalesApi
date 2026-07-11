@@ -10,17 +10,19 @@ exports.up = async function(knex) {
   });
 
   // 2. Insertar idempotente — CUENTA CORRIENTE
+  // icono "payments" = 8 chars, entra en VARCHAR(15)
   const existeCC = await knex('tipos_pago').where({ nombre: 'CUENTA CORRIENTE' }).first();
   if (!existeCC) {
     await knex('tipos_pago').insert({
       nombre: 'CUENTA CORRIENTE',
-      icono: 'account_balance_wallet',
+      icono: 'payments',
       color: '#6366f1',
       orden: 6
     });
   }
 
   // 3. Insertar idempotente — SALDO A FAVOR
+  // icono "savings" = 7 chars, entra en VARCHAR(15)
   const existeSAF = await knex('tipos_pago').where({ nombre: 'SALDO A FAVOR' }).first();
   if (!existeSAF) {
     await knex('tipos_pago').insert({

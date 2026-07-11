@@ -7,39 +7,9 @@ import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 class CuentasCorsRepository{
     
     async ObtenerDeudaTotalCliente(idCliente){
-        const connection = await db.getConnection();
-        
-        try {
-            const queryDeuda = `SELECT
-                                SUM(d.cantidad * d.precio) AS totalImpagas
-                                FROM ventas v
-                                INNER JOIN ventas_pago p ON v.id = p.idVenta
-                                INNER JOIN ventas_detalle d ON v.id = d.idVenta
-                                WHERE v.idCliente = ?
-                                AND p.realizado = 0
-                                AND v.fechaBaja IS NULL;`
-            const rows1 = await connection.query(queryDeuda, [idCliente]);
-            const resultado1 = rows1[0][0];
-
-            const queryEntregas = `SELECT SUM(vp.entrega) AS entregaTotal
-                                    FROM ventas_pago vp
-                                    INNER JOIN ventas v ON v.id = vp.idVenta
-                                    WHERE v.idCliente = ? AND vp.realizado = 0
-                                    AND v.fechaBaja IS NULL;`
-
-            const rows2 = await connection.query(queryEntregas, [idCliente]);
-            const resultado2 = rows2[0][0];
-
-            const deudaVentas = !resultado1?.totalImpagas ? 0 : resultado1.totalImpagas;
-            const totalEntregas = !resultado2?.entregaTotal ? 0 : resultado2.entregaTotal;
-
-            return deudaVentas - totalEntregas;
-
-        } catch (error:any) {
-            throw error;
-        } finally{
-            connection.release();
-        }
+        // El ledger es la fuente de verdad desde la implementación de libreta completa.
+        // El saldo del último movimiento ya acumula ventas, entregas, NCs y ajustes.
+        return this.ObtenerSaldoLedger(Number(idCliente));
     }
 
     // Saldo actual del ledger para un cliente.
@@ -336,51 +306,64 @@ class CuentasCorsRepository{
     async RevertirEstadoPago(idVenta:string): Promise<string>{
         const connection = await db.getConnection();
         try {
-
-            //Iniciamos una transaccion
             await connection.beginTransaction();
 
-            //Necesitamos idCliente y el monto entregado actual (antes de resetearlo)
-            //para el movimiento de ajuste en la cuenta corriente
+            // Leer método de pago ANTES de borrar ventas_pagos_detalle.
+            // El método importa para saber qué entrada del ledger revertir:
+            //   - SAF:   Agregar solo posteó debe=total (SAF no genera haber).
+            //            Revertir = haber=totalVenta para cancelar ese debe.
+            //   - Otros: Agregar posteó haber=entrega.
+            //            Revertir = debe=entrega para cancelar ese haber.
             const [ventaRows] = await connection.query(
-                "SELECT v.idCliente, p.entrega FROM ventas v INNER JOIN ventas_pago p ON v.id = p.idVenta WHERE v.id = ?",
+                `SELECT v.idCliente, v.total AS totalVenta, p.entrega,
+                        tp.nombre AS metodoPago
+                 FROM ventas v
+                 INNER JOIN ventas_pago p ON v.id = p.idVenta
+                 LEFT JOIN ventas_pagos_detalle vpd ON vpd.idVenta = v.id
+                 LEFT JOIN tipos_pago tp ON tp.id = vpd.idTPago
+                 WHERE v.id = ?
+                 LIMIT 1`,
                 [idVenta]
             );
             const ventaInfo = (ventaRows as any)[0];
 
-            const consulta = " UPDATE ventas_pago " +
-                             " SET realizado = 0, " +
-                             " entrega = 0 " +
-                             " WHERE idVenta = ?";
+            await connection.query(
+                "UPDATE ventas_pago SET realizado = 0, entrega = 0 WHERE idVenta = ?",
+                [idVenta]
+            );
+            await connection.query("DELETE FROM ventas_pagos_detalle WHERE idVenta = ?", [idVenta]);
 
-            const parametros = [idVenta];
-            await connection.query(consulta, parametros);
+            if (ventaInfo) {
+                const esSAF = (ventaInfo.metodoPago ?? '').toUpperCase() === 'SALDO A FAVOR';
+                const totalVenta = parseFloat(ventaInfo.totalVenta ?? 0);
+                const entrega   = parseFloat(ventaInfo.entrega   ?? 0);
 
-            //Quitamos los registros de pago
-            await connection.query("DELETE FROM ventas_pagos_detalle WHERE idVenta = ?",[idVenta]);
-
-            //Registramos el movimiento (debe) en la cuenta corriente: revertir el pago
-            //vuelve a generar la deuda por el monto que se habia marcado como entregado
-            if (ventaInfo && parseFloat(ventaInfo.entrega) > 0) {
-                await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
-                    idCliente: ventaInfo.idCliente,
-                    tipo: 'ajuste',
-                    descripcion: 'Reversión de pago de venta',
-                    debe: parseFloat(ventaInfo.entrega),
-                    idReferencia: parseInt(idVenta)
-                });
+                if (esSAF && totalVenta > 0) {
+                    // SAF: cancelar el debe que Agregar posteó → devuelve el crédito al cliente
+                    await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                        idCliente: ventaInfo.idCliente,
+                        tipo: 'ajuste',
+                        descripcion: 'Reversión de pago (SAF)',
+                        haber: totalVenta,
+                        idReferencia: parseInt(idVenta)
+                    });
+                } else if (!esSAF && entrega > 0) {
+                    // Otros medios: cancelar el haber que Agregar posteó → restaura la deuda
+                    await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                        idCliente: ventaInfo.idCliente,
+                        tipo: 'ajuste',
+                        descripcion: 'Reversión de pago de venta',
+                        debe: entrega,
+                        idReferencia: parseInt(idVenta)
+                    });
+                }
             }
 
-            //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta);
-
-            //Mandamos la transaccion
             await connection.commit();
-
             return "OK";
 
         } catch (error:any) {
-            //Si ocurre un error volvemos todo para atras
             await connection.rollback();
             throw error;
         } finally{
@@ -448,7 +431,13 @@ async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<{que
             "   vp.entrega AS ventaEntrega, vp.realizado AS ventaRealizado, " +
             "   CASE WHEN cc.tipo = 'entrega' " +
             "        THEN cc.idReferencia = (SELECT MAX(ve.id) FROM ventas_entrega ve WHERE ve.idCliente = cc.idCliente) " +
-            "        ELSE NULL END AS esUltimaEntrega " +
+            "        ELSE NULL END AS esUltimaEntrega, " +
+            "   CASE WHEN cc.tipo = 'venta' " +
+            "        THEN EXISTS(SELECT 1 FROM notas_credito nc WHERE nc.idVenta = cc.idReferencia) " +
+            "        ELSE 0 END AS tieneNC, " +
+            "   CASE WHEN cc.tipo = 'venta' " +
+            "        THEN EXISTS(SELECT 1 FROM ventas_factura vf WHERE vf.idVenta = cc.idReferencia) " +
+            "        ELSE 0 END AS tieneFactura " +
             " FROM cuenta_corriente_movimientos cc " +
             " LEFT JOIN ventas v ON cc.tipo = 'venta' AND v.id = cc.idReferencia " +
             " LEFT JOIN ventas_pago vp ON vp.idVenta = v.id " +

@@ -274,7 +274,7 @@ class VentasRepository{
                     if(!MEDIOS_SIN_HABER.includes(nombreMedio) && detalle.monto > 0){
                         await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
                             idCliente: venta.cliente.id!,
-                            tipo: 'pago',
+                            tipo: 'entrega',
                             descripcion: `Pago: ${detalle.tipoPago?.nombre}`,
                             haber: detalle.monto,
                             idReferencia: venta.id
@@ -348,7 +348,7 @@ class VentasRepository{
             //Incluimos v.total porque es el monto real que se posteó como "debe" en Agregar
             //(puede diferir de ventas_pago.monto si había recargo/descuento).
             const [pagoRows] = await connection.query(
-                "SELECT p.idCliente, p.monto, p.entrega, p.realizado, v.total AS totalVenta FROM ventas_pago p INNER JOIN ventas v ON v.id = p.idVenta WHERE p.idVenta = ?",
+                "SELECT v.idCliente, p.monto, p.entrega, p.realizado, v.total AS totalVenta FROM ventas_pago p INNER JOIN ventas v ON v.id = p.idVenta WHERE p.idVenta = ?",
                 [venta.id]
             );
             const pagoInfo = (pagoRows as any)[0];
@@ -563,14 +563,14 @@ async function InsertVenta(connection, venta):Promise<void>{
 
 async function InsertPagoVenta(connection, pago):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_pago(idVenta, monto, recargo, descuento, entrega, tipoModificador, realizado) " +
-                         " VALUES(?, ?, ?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas_pago(idVenta, monto, recargo, descuento, entrega, tipoModificador, realizado, pagaCon) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [pago.idVenta, pago.monto, pago.recargo, pago.descuento, pago.entrega, pago.tipoModificador, pago.realizado];
+        const parametros = [pago.idVenta, pago.monto, pago.recargo, pago.descuento, pago.entrega, pago.tipoModificador, pago.realizado, pago.pagaCon ?? null];
         await connection.query(consulta, parametros);
-        
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

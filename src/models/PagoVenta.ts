@@ -7,6 +7,8 @@ export class pagoVenta {
     descuento: number = 0;
     tipoModificador?: 'porcentaje' | 'monto';
     realizado?: boolean;
+    /** Monto entregado por el cliente en efectivo (para calcular vuelto). Solo EFECTIVO. */
+    pagaCon?: number;
 
     constructor(data?: any) {
         if (data) {
@@ -17,6 +19,7 @@ export class pagoVenta {
           this.recargo = data.recargo;
           this.tipoModificador = data.tipoModificador;
           this.realizado = (data.realizado==1) ? true : false;
+          this.pagaCon = data.pagaCon ?? null;
         }
     }
 }

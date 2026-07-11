@@ -205,6 +205,12 @@ class NotaCreditoService {
         });
       }
 
+      // NC total: cerrar la venta. La NC es la anulación fiscal post-cierre.
+      // Con fechaBaja seteada los botones de acción desaparecen y el badge muestra "NC Total".
+      if (!esParcial) {
+        await connection.query('UPDATE ventas SET fechaBaja = NOW() WHERE id = ?', [venta.id]);
+      }
+
       await connection.commit();
 
     } catch (error) {

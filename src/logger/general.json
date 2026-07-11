@@ -343,5 +343,10 @@
     "message": "Error al obtener las listas de precios. Table 'dbeasysales.listas_precio' doesn't exist",
     "level": "error",
     "timestamp": "14-06-26 23:53"
+  },
+  {
+    "message": "Error al intentar eliminar el cliente. Cannot delete or update a parent row: a foreign key constraint fails (`dbeasysales`.`cuenta_corriente_movimientos`, CONSTRAINT `cuenta_corriente_movimientos_idcliente_foreign` FOREIGN KEY (`idCliente`) REFERENCES `clientes` (`id`))",
+    "level": "error",
+    "timestamp": "10-07-26 23:30"
   }
 ]

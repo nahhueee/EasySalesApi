@@ -144,13 +144,22 @@ class ClientesRepository{
 
     async Eliminar(id:string): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
+            // Si el cliente tiene movimientos en CC → baja lógica (preserva auditoría).
+            // Si no tiene historial → eliminación física.
+            const [movs] = await connection.query<any[]>(
+                "SELECT COUNT(*) AS total FROM cuenta_corriente_movimientos WHERE idCliente = ?", [id]
+            );
+
+            if (movs[0].total > 0) {
+                await connection.query("UPDATE clientes SET fechaBaja = NOW() WHERE id = ?", [id]);
+                await SesionServ.RegistrarMovimiento("Dar de baja Cliente nro " + id);
+                return "BAJA";
+            }
+
             await connection.query("DELETE FROM clientes WHERE id = ?", [id]);
-
-            //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Eliminar Cliente nro " + id);
-
             return "OK";
 
         } catch (error:any) {
@@ -175,12 +184,13 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         //#endregion
 
         // #region FILTROS
+        filtro += " WHERE c.fechaBaja IS NULL ";
         if (filtros.busqueda != null && filtros.busqueda != ""){
-            filtro += " WHERE c.nombre LIKE ? ";
+            filtro += " AND c.nombre LIKE ? ";
             params.push("%" + filtros.busqueda + "%");
         }
         if (filtros.idCliente != null && filtros.idCliente != 0){
-            filtro += " WHERE c.id = ? ";
+            filtro += " AND c.id = ? ";
             params.push(filtros.idCliente);
         }
         // #endregion
@@ -198,9 +208,13 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             }
         }
 
+        const saldoSelect = !esTotal
+            ? `, (SELECT saldo FROM cuenta_corriente_movimientos WHERE idCliente = c.id ORDER BY id DESC LIMIT 1) AS saldo`
+            : '';
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-            " SELECT c.* " +
+            " SELECT c.* " + saldoSelect +
             " FROM clientes c" +
             filtro +
             " ORDER BY c.id DESC" +
@@ -232,7 +246,7 @@ async function ValidarExistenciaNombre(connection, data:any, modificando:boolean
 
 async function ValidarExistenciaDocumento(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
-        let consulta = " SELECT id FROM clientes WHERE nroDocumento = ? ";
+        let consulta = " SELECT id FROM clientes WHERE nroDocumento = ? AND fechaBaja IS NULL ";
         if(modificando) consulta += " AND id <> ? ";
 
         const parametros = [data.nroDocumento, data.id];
