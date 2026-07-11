@@ -47,7 +47,7 @@ class ClientesRepository{
         const connection = await db.getConnection();
 
         try {
-            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva FROM clientes');
+            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva, direccion FROM clientes WHERE fechaBaja IS NULL');
             return [rows][0];
 
         } catch (error:any) {
@@ -76,13 +76,14 @@ class ClientesRepository{
                     return "Ya existe un cliente con el mismo documento.";
             }
 
-            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial) VALUES (?, ?, ?, ?, ?)";
+            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial, direccion) VALUES (?, ?, ?, ?, ?, ?)";
             const parametros = [
                 data.nombre.toUpperCase(),
                 data.tipoDocumento ?? null,
                 data.nroDocumento ?? null,
                 data.condicionIva ?? null,
-                data.razonSocial ? data.razonSocial.toUpperCase() : null
+                data.razonSocial ? data.razonSocial.toUpperCase() : null,
+                data.direccion ? data.direccion.toUpperCase() : null
             ];
 
             await connection.query(consulta, parametros);
@@ -117,7 +118,7 @@ class ClientesRepository{
             }
 
                 const consulta = `UPDATE clientes
-                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?
+                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?, direccion = ?
                 WHERE id = ? `;
 
             const parametros = [
@@ -126,6 +127,7 @@ class ClientesRepository{
                 data.nroDocumento ?? null,
                 data.condicionIva ?? null,
                 data.razonSocial ? data.razonSocial.toUpperCase() : null,
+                data.direccion ? data.direccion.toUpperCase() : null,
                 data.id
             ];
             await connection.query(consulta, parametros);

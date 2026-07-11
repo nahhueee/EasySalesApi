@@ -90,6 +90,8 @@ interface ComprobanteData {
   horaVenta:        string | undefined;
   /** Filas de la tabla de productos, ya formateadas para pdfmake. */
   filasTabla:       unknown[][];
+  /** Recuadro en blanco para que el cliente anote observaciones a mano. Solo aplica a tickets (no A4, ver buildObservaciones). Opcional: mapearComprobanteNotaCredito/mapearPresupuestoComprobante no lo setean porque esos documentos no lo usan. */
+  mostrarObservaciones?: boolean;
 }
 
 /**
@@ -109,12 +111,14 @@ interface FacturaAFIP {
   razon:              string;
   direccion:          string;
   CUIL:               string;
-  condicionReceptor:  string | undefined;
+  condicionReceptor:   string | undefined;
   /** Nombre/razón social a mostrar para el receptor — ya resuelto con fallback "Consumidor Final". */
-  clienteReceptor:    string;
-  DNI:                number | undefined;
-  tipoDNI:            string | undefined;
-  qr:                 string;
+  clienteReceptor:     string;
+  /** Dirección del receptor — se muestra solo si existe (no todos los clientes la tienen). */
+  direccionReceptor?:  string;
+  DNI:                 number | undefined;
+  tipoDNI:             string | undefined;
+  qr:                  string;
 }
 
 /** Línea de detalle de una NC parcial — precio ya congelado de `ventas_detalle`. */
@@ -186,6 +190,8 @@ interface ParametrosComprobante {
   nomLocal:  string;
   desLocal:  string;
   dirLocal:  string;
+  /** Preferencia de impresión (default true, ver migración parametros_impresion): agrega un recuadro en blanco al pie del ticket para anotaciones. No aplica a A4. */
+  mostrarObservaciones?: boolean;
 }
 
 /**
@@ -517,13 +523,20 @@ function buildEncabezadoFactura(
   const receptor = [dniTexto, factura.condicionReceptor].filter(Boolean).join('  |  ');
   const receptorEsRedundante = receptor === factura.clienteReceptor;
 
+  const tieneLineaExtra = (receptor && !receptorEsRedundante) || !!factura.direccionReceptor;
+
   filas.push(
-    { text: 'Receptor',             alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal - 1 },
-    { text: factura.clienteReceptor, alignment: 'center',             fontSize: configuracionPapel.fontSizes.normal - 1, margin: (receptor && !receptorEsRedundante) ? [0, 0, 0, 0] : [0, 0, 0, 2] },
+    { text: 'Receptor',              alignment: 'center', bold: true, fontSize: configuracionPapel.fontSizes.normal - 1 },
+    { text: factura.clienteReceptor, alignment: 'center',             fontSize: configuracionPapel.fontSizes.normal - 1, margin: tieneLineaExtra ? [0, 0, 0, 0] : [0, 0, 0, 2] },
   );
   if (receptor && !receptorEsRedundante) {
     filas.push(
-      { text: receptor, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 1, margin: [0, 0, 0, 2] },
+      { text: receptor, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 1, margin: factura.direccionReceptor ? [0, 0, 0, 0] : [0, 0, 0, 2] },
+    );
+  }
+  if (factura.direccionReceptor) {
+    filas.push(
+      { text: factura.direccionReceptor, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal - 1, margin: [0, 0, 0, 2] },
     );
   }
 
@@ -715,6 +728,35 @@ function buildQR(factura: FacturaAFIP, configuracionPapel: ConfiguracionPapel): 
   };
 }
 
+/**
+ * Recuadro en blanco al pie del ticket para que el cliente anote observaciones a mano
+ * (pedido explícito: "un lugarcito, cuadradito, para escribir cosas"). Ancho completo del
+ * área de contenido vía widths:['*'] (mismo patrón que buildCAE) para no depender del
+ * tamaño de papel; alto fijo, suficiente para un par de líneas manuscritas.
+ * Preferencia "Impresión > Mostrar observaciones" en parametros_impresion (default true) —
+ * ver mapearComprobante(). Nunca se llama para A4 (gateado en el caller).
+ */
+function buildObservaciones(configuracionPapel: ConfiguracionPapel): object {
+  return {
+    stack: [
+      { text: 'Observaciones', fontSize: configuracionPapel.fontSizes.normal, bold: true, margin: [0, 6, 0, 2] },
+      {
+        table: {
+          widths: ['*'],
+          heights: [50],
+          body: [['']],
+        },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => '#000000',
+          vLineColor: () => '#000000',
+        },
+      },
+    ],
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BUILDERS DE DOCUMENTO COMPLETO
 // ─────────────────────────────────────────────────────────────────────────────
@@ -733,6 +775,7 @@ function buildDocInterno(comprobante: ComprobanteData, resumen: ResumenVenta | n
       ...buildClienteYPago(venta, configuracionPapel),
       buildTabla(comprobante, configuracionPapel),
       ...buildTotales(resumen, configuracionPapel),
+      ...(comprobante.papel !== 'A4' && comprobante.mostrarObservaciones ? [buildObservaciones(configuracionPapel)] : []),
     ],
   };
 }
@@ -796,7 +839,6 @@ function buildDocFactura(
   factura: FacturaAFIP,
 ): object {
   const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
-  console.log(factura)
   if (comprobante.papel === 'A4') {
     return buildDocFacturaA4(comprobante, resumen, venta, factura);
   }
@@ -812,6 +854,7 @@ function buildDocFactura(
       ...buildIVA(factura, configuracionPapel),
       buildCAE(factura, configuracionPapel),
       buildQR(factura, configuracionPapel),
+      ...(comprobante.mostrarObservaciones ? [buildObservaciones(configuracionPapel)] : []),
     ],
   };
 }
@@ -885,6 +928,7 @@ function buildDocFacturaA4(
           labelValor('Cliente', factura.clienteReceptor),
           ...(condicionReceptorEsRedundante ? [] : [labelValor('Condición', factura.condicionReceptor)]),
           ...(factura.DNI ? [labelValor(factura.tipoDNI ?? 'Documento', factura.DNI)] : []),
+          ...(factura.direccionReceptor ? [labelValor('Dirección', factura.direccionReceptor)] : []),
           labelValor('Método de pago', formatearTextoPago(venta)),
         ],
         margin: [8, 4, 8, 4],
@@ -1226,6 +1270,7 @@ export class ComprobanteService {
       fechaVenta:       fecha.toLocaleDateString('es-ES'),
       horaVenta:        venta.hora,
       filasTabla:       buildFilasDetalle(venta, configuracionPapel),
+      mostrarObservaciones: parametros.mostrarObservaciones !== false,
     };
   }
 
@@ -1257,6 +1302,7 @@ export class ComprobanteService {
       CUIL:                parametros.cuil,
       condicionReceptor,
       clienteReceptor:     venta.cliente?.razonSocial || venta.cliente?.nombre || 'Consumidor Final',
+      direccionReceptor:   venta.cliente?.direccion || undefined,
       DNI:                 facturaVenta.dni,
       tipoDNI,
       qr:                  await FacturacionServ.ObtenerQRFactura(venta.id),

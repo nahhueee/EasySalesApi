@@ -33,13 +33,43 @@ interface FilaPreview {
     yaTieneMovimientos: boolean;
 }
 
+/**
+ * Calcula el saldo histórico de un cliente leyendo directamente las tablas
+ * de ventas, SIN usar el ledger. Es la lógica que tenía ObtenerDeudaTotalCliente
+ * antes de la libreta completa.
+ *
+ * Necesaria para clientes que aún no tienen movimientos en cuenta_corriente_movimientos
+ * (es decir, no pasaron por el snapshot de Sub-fase B). En ese caso ObtenerSaldoLedger
+ * devuelve 0, lo que crearía aperturas incorrectas.
+ *
+ * Fórmula: SUM(v.total - p.entrega) para todas las ventas no realizadas y no dadas de baja.
+ * p.entrega es acumulativo (seña inicial + entregas posteriores vía ActualizarEstadoPago).
+ */
+async function ObtenerSaldoDesdeVentas(idCliente: number): Promise<number> {
+    const connection = await db.getConnection();
+    try {
+        const [rows] = await connection.query(
+            `SELECT COALESCE(SUM(v.total - COALESCE(p.entrega, 0)), 0) AS saldo
+             FROM ventas v
+             INNER JOIN ventas_pago p ON p.idVenta = v.id
+             WHERE v.idCliente = ?
+               AND p.realizado = 0
+               AND v.fechaBaja IS NULL`,
+            [idCliente]
+        );
+        return Number((rows as any)[0].saldo);
+    } finally {
+        connection.release();
+    }
+}
+
 async function CalcularPreview(): Promise<FilaPreview[]> {
     const connection = await db.getConnection();
     let clientes: any[];
     let idsConMovimientos: Set<number>;
 
     try {
-        const [rowsClientes] = await connection.query('SELECT id, nombre FROM clientes ORDER BY id');
+        const [rowsClientes] = await connection.query('SELECT id, nombre FROM clientes WHERE fechaBaja IS NULL ORDER BY id');
         clientes = rowsClientes as any[];
 
         const [rowsMovimientos] = await connection.query('SELECT DISTINCT idCliente FROM cuenta_corriente_movimientos');
@@ -51,13 +81,22 @@ async function CalcularPreview(): Promise<FilaPreview[]> {
     const filas: FilaPreview[] = [];
 
     for (const cliente of clientes) {
-        const saldo = await CuentasRepo.ObtenerDeudaTotalCliente(cliente.id);
+        const yaTieneMovimientos = idsConMovimientos.has(cliente.id);
+
+        // Si ya tiene movimientos en el ledger (Sub-fase B corrida):
+        //   ObtenerDeudaTotalCliente lee el ledger → correcto.
+        // Si NO tiene movimientos (cliente sin snapshot previo):
+        //   ObtenerDeudaTotalCliente delegaría a ObtenerSaldoLedger → devolvería 0 → incorrecto.
+        //   En ese caso calculamos desde las tablas de ventas directamente.
+        const saldo = yaTieneMovimientos
+            ? await CuentasRepo.ObtenerDeudaTotalCliente(cliente.id)
+            : await ObtenerSaldoDesdeVentas(cliente.id);
 
         filas.push({
             idCliente: cliente.id,
             nombre: cliente.nombre,
-            saldo: saldo || 0,
-            yaTieneMovimientos: idsConMovimientos.has(cliente.id)
+            saldo: Number(saldo) || 0,
+            yaTieneMovimientos
         });
     }
 

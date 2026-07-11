@@ -5,6 +5,7 @@ export class Cliente {
     nroDocumento?:number;
     condicionIva?:number;
     razonSocial?:string;
+    direccion?:string;
 
     constructor(data?: any) {
         if (data) {
@@ -14,6 +15,7 @@ export class Cliente {
           this.nroDocumento = data.nroDocumento;
           this.condicionIva = data.condicionIva;
           this.razonSocial = data.razonSocial;
+          this.direccion = data.direccion;
         }
     }
 }

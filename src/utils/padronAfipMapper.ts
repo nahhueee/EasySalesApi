@@ -31,6 +31,13 @@ export interface SugerenciaPadron {
   razonSocial: string | null;
   /** Código local de CONDICIONES_IVA, o null si no se pudo determinar con confianza razonable. */
   condicionIva: number | null;
+  /**
+   * Línea de dirección del domicilio fiscal (datosGenerales.domicilioFiscal.direccion).
+   * El padrón también trae localidad/provincia/código postal por separado, pero solo se
+   * mapea la línea de dirección porque es el único campo que el modelo Cliente persiste hoy.
+   * Null si el padrón no trae domicilioFiscal.
+   */
+  direccion: string | null;
   /** 'alta': dato explícito en el padrón. 'sin_determinar': el campo debe completarse manualmente. */
   confianza: 'alta' | 'sin_determinar';
   /** Mensaje a mostrar al usuario cuando confianza es 'sin_determinar' o el CUIT está inactivo. */
@@ -45,6 +52,7 @@ export function MapearSugerenciaPadron(personaReturn: any): SugerenciaPadron {
   const regimenGeneral = personaReturn?.datosRegimenGeneral;
 
   const razonSocial = ObtenerRazonSocial(generales);
+  const direccion = generales.domicilioFiscal?.direccion ?? null;
   const cuitInactivo = !!generales.estadoClave && generales.estadoClave !== 'ACTIVO';
 
   const tieneIva = (regimenGeneral?.impuesto ?? []).some((i: any) => i.idImpuesto === IMPUESTO_IVA);
@@ -58,6 +66,7 @@ export function MapearSugerenciaPadron(personaReturn: any): SugerenciaPadron {
     resultado = {
       razonSocial,
       condicionIva: CONDICION_IVA_RESPONSABLE_INSCRIPTO,
+      direccion,
       confianza: 'alta',
       cuitInactivo
     };
@@ -65,6 +74,7 @@ export function MapearSugerenciaPadron(personaReturn: any): SugerenciaPadron {
     resultado = {
       razonSocial,
       condicionIva: CONDICION_IVA_MONOTRIBUTO,
+      direccion,
       confianza: 'alta',
       cuitInactivo
     };
@@ -72,6 +82,7 @@ export function MapearSugerenciaPadron(personaReturn: any): SugerenciaPadron {
     resultado = {
       razonSocial,
       condicionIva: null,
+      direccion,
       confianza: 'sin_determinar',
       advertencia: 'ARCA no registra inscripción en IVA ni Monotributo para este contribuyente. Verificá manualmente si corresponde Exento o No Alcanzado.',
       cuitInactivo
