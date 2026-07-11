@@ -433,6 +433,18 @@ function buildClienteYPago(venta: Venta, configuracionPapel: ConfiguracionPapel)
     });
   }
 
+  // Lista de precios aplicada (handoff_multiprecio_venta_sonnet, Fase 4). Se omite cuando es
+  // Minorista (el caso normal) para no ensuciar el ticket; solo interesa dejar constancia
+  // cuando se vendió con una lista distinta. Esta función no se usa en buildDocFactura ni
+  // buildDocFacturaA4, así que la factura AFIP nunca muestra esta línea (a propósito).
+  if (venta.nombreLista && venta.nombreLista !== 'Minorista') {
+    filas.push({
+      text:     `Lista: ${venta.nombreLista}`,
+      fontSize: configuracionPapel.fontSizes.normal,
+      margin:   [0, 0, 0, 0],
+    });
+  }
+
   // Pago combinado: puede haber más de un método en una misma venta
   if (venta.detallePago?.length) {
     const pagos = venta.detallePago

@@ -63,20 +63,40 @@ class ProductosRepository{
 
     //Busca los productos segun lo que digite el usuario
     //en la ventana de nueva venta
+    //idLista opcional: si viene y no es la lista default, resuelve el precio contra
+    //productos_precios con fallback automatico a productos.precio (Minorista) si el
+    //producto no tiene fila en esa lista. Sin idLista (o flag listasPrecios off), el
+    //comportamiento es identico al de siempre: sin JOIN, lee productos.precio directo.
     async BuscarProductos(filtro:any){
         const connection = await db.getConnection();
 
         try {
-            let consulta = 'SELECT id, codigo, nombre, costo, precio, unidad, imagen FROM productos WHERE id <> 1 AND soloPrecio = 0 ';
+            const idLista = filtro.idLista ? Number(filtro.idLista) : null;
+            // Solo consultamos la lista default si realmente vino un idLista a resolver:
+            // sin esto, cada búsqueda (autocomplete/scanner) pagaría un SELECT extra
+            // aunque el flag listasPrecios esté off o no se haya mandado idLista.
+            const usarLista = idLista != null && idLista !== await GetIdListaDefault(connection);
 
-            if (filtro.metodo == 'codigo')
-                consulta += " AND codigo = '" + filtro.valor + "'";
+            const selectPrecio = usarLista ? 'COALESCE(pp.precio, p.precio)' : 'p.precio';
+            const join = usarLista ? ' LEFT JOIN productos_precios pp ON pp.idProducto = p.id AND pp.idLista = ? ' : '';
 
-            if (filtro.metodo == 'nombre')
-                consulta += " AND LOWER(nombre) LIKE '%" + filtro.valor + "%'";
+            let consulta = `SELECT p.id, p.codigo, p.nombre, p.costo, ${selectPrecio} AS precio, p.unidad, p.imagen
+                             FROM productos p ${join}
+                             WHERE p.id <> 1 AND p.soloPrecio = 0 `;
+            const params:any[] = usarLista ? [idLista] : [];
 
-            consulta += "ORDER BY nombre ASC";
-            const [rows] = await connection.query(consulta);
+            if (filtro.metodo == 'codigo'){
+                consulta += ' AND p.codigo = ? ';
+                params.push(filtro.valor);
+            }
+
+            if (filtro.metodo == 'nombre'){
+                consulta += ' AND LOWER(p.nombre) LIKE ? ';
+                params.push('%' + filtro.valor + '%');
+            }
+
+            consulta += ' ORDER BY p.nombre ASC';
+            const [rows] = await connection.query(consulta, params);
 
             const productos:Producto[] = [];
 
@@ -113,6 +133,42 @@ class ProductosRepository{
         try {
             const [rows] = await connection.query('SELECT id, codigo, nombre FROM productos WHERE soloPrecio = 1');
             return [rows][0];
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    //Recalculo batch de precios para renglones ya cargados en una venta (new-venta), al cambiar
+    //cliente o lista manualmente. Devuelve, por cada id, el precio resuelto para esa lista y si
+    //se uso fallback a Minorista (no hay fila en productos_precios para ese producto+lista).
+    //No confundir con ObtenerProductosIds: ese es de uso general (bulk en main-productos) y no
+    //conoce listas de precio, mezclarlo hubiese acoplado dos features sin relacion.
+    async ResolverPreciosLista(ids:number[], idLista:number){
+        const connection = await db.getConnection();
+
+        try {
+            if (!ids || ids.length === 0) return [];
+
+            const idListaDefault = await GetIdListaDefault(connection);
+
+            if (idLista === idListaDefault) {
+                const [rows] = await connection.query(
+                    'SELECT id, precio, false AS fallback FROM productos WHERE id IN (?)', [ids]
+                );
+                return rows;
+            }
+
+            const [rows] = await connection.query(
+                `SELECT p.id, COALESCE(pp.precio, p.precio) AS precio, (pp.id IS NULL) AS fallback
+                 FROM productos p
+                 LEFT JOIN productos_precios pp ON pp.idProducto = p.id AND pp.idLista = ?
+                 WHERE p.id IN (?)`,
+                [idLista, ids]
+            );
+            return rows;
 
         } catch (error:any) {
             throw error;

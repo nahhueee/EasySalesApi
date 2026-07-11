@@ -61,11 +61,23 @@ router.get('/verificar/:cod', async (req:Request, res:Response) => {
 });
 
 router.post('/buscar-productos', async (req:Request, res:Response) => {
-    try{ 
+    try{
         res.json(await ProductosRepo.BuscarProductos(req.body));
 
     } catch(error:any){
         let msg = "Error intentando buscar productos.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.post('/resolver-precios-lista', async (req:Request, res:Response) => {
+    try{
+        const { ids, idLista } = req.body;
+        res.json(await ProductosRepo.ResolverPreciosLista(ids, idLista));
+
+    } catch(error:any){
+        let msg = "Error al resolver precios por lista.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

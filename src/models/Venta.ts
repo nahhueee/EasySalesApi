@@ -13,6 +13,8 @@ export class Venta {
     fechaBaja?: Date;
     obsBaja?: string;
     idPresupuesto?: number;    // Si la venta proviene de un presupuesto
+    idLista?: number;          // Lista de precios efectivamente usada en la venta (null = Minorista)
+    nombreLista?: string;      // Solo lectura (JOIN a listas_precio): para mostrar en el comprobante interno, ver Fase 4
 
     cliente: Cliente = new Cliente();
     pago: pagoVenta = new pagoVenta();

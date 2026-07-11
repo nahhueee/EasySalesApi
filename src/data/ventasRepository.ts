@@ -42,7 +42,9 @@ class VentasRepository{
                     venta.hora = row['hora'];
                     venta.fechaBaja = row['fechaBaja'];
                     venta.obsBaja = row['obsBaja'];
-                    
+                    venta.idLista = row['idLista'];
+                    venta.nombreLista = row['nombreLista'];
+
                     //Obtiene la lista de detalles de la venta
                     venta.detalles = await ObtenerDetalleVenta(connection, row['id']); 
 
@@ -506,15 +508,17 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-                " SELECT v.*, " + 
+                " SELECT v.*, " +
                 " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
-                " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial, cli.direccion clienteDireccion " +
+                " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial, cli.direccion clienteDireccion, " +
+                " lp.nombre nombreLista " + //Lista de precios aplicada (handoff_multiprecio_venta_sonnet Fase 4); null si la venta no usó lista (flag off)
                 selectAcreditado +
                 " FROM ventas v " +
                 " INNER JOIN ventas_pago vpag ON vpag.idVenta = v.id " +
                 " LEFT JOIN ventas_factura vfac ON vfac.idVenta = v.id " +
                 " LEFT JOIN clientes cli ON cli.id = v.idCliente " +
+                " LEFT JOIN listas_precio lp ON lp.id = v.idLista " +
                 joinAcreditado +
                 " WHERE 1 = 1 " +
                 filtro +
@@ -550,10 +554,10 @@ async function ObtenerUltimaVenta(connection):Promise<number>{
 
 async function InsertVenta(connection, venta):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas(id, idCaja, idCliente, fecha, hora, total) " +
-                         " VALUES(?, ?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas(id, idCaja, idCliente, fecha, hora, total, idLista) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [venta.id, venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total];
+        const parametros = [venta.id, venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total, venta.idLista ?? null];
         await connection.query(consulta, parametros);
 
     } catch (error) {

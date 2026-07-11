@@ -47,7 +47,7 @@ class ClientesRepository{
         const connection = await db.getConnection();
 
         try {
-            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva, direccion FROM clientes WHERE fechaBaja IS NULL');
+            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva, direccion, idLista FROM clientes WHERE fechaBaja IS NULL');
             return [rows][0];
 
         } catch (error:any) {
@@ -76,14 +76,15 @@ class ClientesRepository{
                     return "Ya existe un cliente con el mismo documento.";
             }
 
-            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial, direccion) VALUES (?, ?, ?, ?, ?, ?)";
+            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial, direccion, idLista) VALUES (?, ?, ?, ?, ?, ?, ?)";
             const parametros = [
                 data.nombre.toUpperCase(),
                 data.tipoDocumento ?? null,
                 data.nroDocumento ?? null,
                 data.condicionIva ?? null,
                 data.razonSocial ? data.razonSocial.toUpperCase() : null,
-                data.direccion ? data.direccion.toUpperCase() : null
+                data.direccion ? data.direccion.toUpperCase() : null,
+                data.idLista ?? null
             ];
 
             await connection.query(consulta, parametros);
@@ -118,7 +119,7 @@ class ClientesRepository{
             }
 
                 const consulta = `UPDATE clientes
-                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?, direccion = ?
+                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?, direccion = ?, idLista = ?
                 WHERE id = ? `;
 
             const parametros = [
@@ -128,6 +129,7 @@ class ClientesRepository{
                 data.condicionIva ?? null,
                 data.razonSocial ? data.razonSocial.toUpperCase() : null,
                 data.direccion ? data.direccion.toUpperCase() : null,
+                data.idLista ?? null,
                 data.id
             ];
             await connection.query(consulta, parametros);
