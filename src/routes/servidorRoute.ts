@@ -18,7 +18,7 @@ router.get('/forzar', async (req:Request, res:Response) => {
 });
 
 router.get('/estado', async (req:Request, res:Response) => {
-    try{ 
+    try{
         res.json(config.esServer);
 
     } catch(error:any){
@@ -28,5 +28,26 @@ router.get('/estado', async (req:Request, res:Response) => {
     }
 });
 
+// Activa/desactiva el modo servidor: persiste config.pc.json y reinicia PM2.
+// Reemplaza al comando Tauri change_config_reset (ver servidorService.CambiarModoServidor).
+router.post('/modo', async (req:Request, res:Response) => {
+    try{
+        const { esServer } = req.body;
+
+        if (typeof esServer !== 'boolean') {
+            res.status(400).send("El campo 'esServer' es requerido y debe ser booleano.");
+            return;
+        }
+
+        await ServidorServ.CambiarModoServidor(esServer);
+        res.json("OK");
+
+    } catch(error:any){
+        let msg = "Error al intentar configurar el modo servidor.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 // Export the router
-export default router; 
+export default router;

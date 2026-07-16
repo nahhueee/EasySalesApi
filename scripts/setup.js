@@ -37,8 +37,12 @@ async function setup() {
     // Archivos base que el server necesita para correr
     const filesToCopy = [
       { from: "package.json", to: "package.json" },
+      // package-lock.json: no lo necesita el server en runtime, pero sí "npm ci"
+      // cuando build:server-installer instala node_modules directo en dist/.
+      { from: "package-lock.json", to: "package-lock.json" },
       { from: "scripts/knexfile.js", to: "scripts/knexfile.js" },
       { from: "src/db/script.sql", to: "src/db/script.sql" },
+      { from: "src/db/script-bootstrap.sql", to: "src/db/script-bootstrap.sql" },
       { from: ".env", to: ".env"},
 
       { from: "src/fonts/Roboto-Italic.ttf", to: "src/fonts/Roboto-Italic.ttf" },
@@ -69,6 +73,14 @@ async function setup() {
     if (await fs.pathExists(tasksSrc)) {
       await fs.copy(tasksSrc, tasksDest);
     }
+
+    // node_modules NO se copia acá a propósito: este setup.js corre como parte de
+    // "npm run build", que también usa "npm run release" (updater incremental de
+    // terminales existentes, ver scripts/release.js + build-update.js). Meter
+    // node_modules en TODOS los builds sería tiempo perdido en cada release normal
+    // sin necesidad. Para el instalador de servidor (que sí lo necesita), ver el
+    // script "build:server-installer" en package.json — corre npm ci directo
+    // sobre dist/ como paso aparte, después de este build.
 
     // Ajustar config para producción
     const configPath = path.join(DIST_DIR, configFile);

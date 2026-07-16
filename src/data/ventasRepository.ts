@@ -482,10 +482,15 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             filtro += " AND v.idCliente = " + filtros.cliente;
 
 
+        //Pagas/Impagas miran el estado de pago pero excluyen las anuladas: una venta dada de baja
+        //no debe aparecer como "pagada" ni como "deuda" (su plata ya no cuenta). Las bajas solo
+        //salen en "Anuladas" o en "Todas".
         if (filtros.estado == "Pagas")
-            filtro += " AND vpag.realizado = 1";
+            filtro += " AND vpag.realizado = 1 AND v.fechaBaja IS NULL";
         if (filtros.estado == "Impagas")
-            filtro += " AND vpag.realizado = 0";
+            filtro += " AND vpag.realizado = 0 AND v.fechaBaja IS NULL";
+        if (filtros.estado == "Anuladas")
+            filtro += " AND v.fechaBaja IS NOT NULL";
 
         //Filtro puntual por venta (drill-down desde la pantalla de cuenta corriente).
         //Parametrizado a diferencia del resto de los filtros de esta función.
