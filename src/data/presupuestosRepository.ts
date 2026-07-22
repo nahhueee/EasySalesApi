@@ -237,6 +237,68 @@ class PresupuestosRepository {
     }
     //#endregion
 
+    //#region EDITAR
+    // Reemplaza los detalles y recalcula el total. Solo permitido si el presupuesto
+    // sigue 'vigente' — el mismo FOR UPDATE que usa ventasRepository al convertir
+    // evita que se edite mientras se está facturando concurrentemente.
+    // validezHasta es opcional: si no viene, se respeta la fecha ya guardada
+    // (el frontend solo la manda si el usuario la tocó explícitamente).
+    async Editar(id: number, presupuesto: Presupuesto, idUsuarioModifico: number): Promise<void> {
+        const connection = await db.getConnection();
+
+        try {
+            await connection.beginTransaction();
+
+            const [pRows]: any = await connection.query(
+                `SELECT estado FROM presupuestos WHERE id = ? FOR UPDATE`,
+                [id]
+            );
+
+            if (!pRows[0] || pRows[0].estado !== 'vigente') {
+                throw new Error('El presupuesto no está vigente: fue convertido, anulado o venció.');
+            }
+
+            const setValidez = presupuesto.validezHasta ? ', validezHasta = ?' : '';
+            const params: any[] = [presupuesto.idCliente, presupuesto.total, idUsuarioModifico];
+            if (presupuesto.validezHasta) params.push(moment(presupuesto.validezHasta).format('YYYY-MM-DD'));
+            params.push(id);
+
+            await connection.query(
+                `UPDATE presupuestos
+                 SET idCliente = ?, total = ?, fechaModificacion = NOW(), idUsuarioModifico = ?${setValidez}
+                 WHERE id = ?`,
+                params
+            );
+
+            await connection.query(`DELETE FROM presupuestos_detalle WHERE idPresupuesto = ?`, [id]);
+
+            for (const detalle of presupuesto.detalles) {
+                await connection.query(
+                    `INSERT INTO presupuestos_detalle (idPresupuesto, idProducto, nomProd, cantidad, precio, costo, total)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        id,
+                        detalle.idProducto,
+                        detalle.nomProd,
+                        detalle.cantidad,
+                        detalle.precio,
+                        detalle.costo,
+                        detalle.total,
+                    ]
+                );
+            }
+
+            await connection.commit();
+
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+    //#endregion
+
     //#region ANULAR
     async Anular(id: number): Promise<void> {
         const connection = await db.getConnection();

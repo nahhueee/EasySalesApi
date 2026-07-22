@@ -9,8 +9,8 @@
     "build": "tsc && node scripts/setup.js",
     "build:server-installer": "npm run build && npm ci --omit=dev --prefix dist",
     "release": "node scripts/release.js",
+    "migration": "cd scripts && knex migrate:latest",
     "migrate:make": "cd scripts && knex migrate:make",
-    "migrate:latest": "cd scripts && knex migrate:latest",
     "migrate:rollback": "cd scripts && knex migrate:rollback",
     "delete-tag": "node scripts/delete-tag.js"
   },

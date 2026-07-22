@@ -111,6 +111,15 @@ router.post('/agregar', async (req: Request, res: Response, next) => {
     }
 });
 
+router.put('/editar/:id', async (req: Request, res: Response, next) => {
+    try {
+        await PresupuestosRepo.Editar(parseInt(req.params.id), req.body, req.body.idUsuarioModifico);
+        res.json('OK');
+    } catch (error: any) {
+        next(new AppError(CodigoError.INTERNAL_ERROR, error.message ?? 'Error al editar el presupuesto.', 500, { modulo: 'presupuestosRoute.editar' }, error));
+    }
+});
+
 router.put('/anular/:id', async (req: Request, res: Response, next) => {
     try {
         await PresupuestosRepo.Anular(parseInt(req.params.id));
