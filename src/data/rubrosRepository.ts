@@ -28,7 +28,7 @@ class RubrosRepository{
         const connection = await db.getConnection();
         
         try {
-            const [rows] = await connection.query('SELECT id, nombre FROM categorias WHERE id <> 1');
+            const [rows] = await connection.query('SELECT id, nombre, color FROM categorias WHERE id <> 1');
             return [rows][0];
 
         } catch (error:any) {
@@ -48,8 +48,8 @@ class RubrosRepository{
             if(existe)//Verificamos si ya existe un rubro con el mismo nombre 
                 return "Ya existe un rubro con el mismo nombre.";
             
-            const consulta = "INSERT INTO categorias(nombre) VALUES (?)";
-            const parametros = [data.nombre.toUpperCase()];
+            const consulta = "INSERT INTO categorias(nombre, color) VALUES (?, ?)";
+            const parametros = [data.nombre.toUpperCase(), data.color || null];
             
             await connection.query(consulta, parametros);
             return "OK";
@@ -69,11 +69,12 @@ class RubrosRepository{
             if(existe)//Verificamos si ya existe un rubro con el mismo nombre
                 return "Ya existe un rubro con el mismo nombre.";
             
-                const consulta = `UPDATE categorias 
-                SET nombre = ?
+                const consulta = `UPDATE categorias
+                SET nombre = ?,
+                    color = ?
                 WHERE id = ? `;
 
-            const parametros = [data.nombre.toUpperCase(), data.id];
+            const parametros = [data.nombre.toUpperCase(), data.color || null, data.id];
             await connection.query(consulta, parametros);
             return "OK";
 
@@ -86,10 +87,18 @@ class RubrosRepository{
 
     async Eliminar(id:string): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
+            // Reasignamos a "Sin asignar" (id 0) los productos que quedarían huérfanos
+            const [result]: any = await connection.query(
+                "UPDATE productos SET idCategoria = 0 WHERE idCategoria = ?", [id]);
+            const productosReasignados = result.affectedRows || 0;
+
             await connection.query("DELETE FROM categorias WHERE id = ?", [id]);
-            return "OK";
+
+            return productosReasignados > 0
+                ? `OK - ${productosReasignados} producto(s) reasignado(s) a Sin asignar`
+                : "OK";
 
         } catch (error:any) {
             throw error;
@@ -129,7 +138,8 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-            " SELECT c.* " +
+            " SELECT c.*, " +
+            "   (SELECT COUNT(*) FROM productos p WHERE p.idCategoria = c.id) AS cantidadProductos " +
             " FROM categorias c " +
             " WHERE c.id <> 1 " +
             filtro +

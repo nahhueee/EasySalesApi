@@ -250,6 +250,39 @@ class EstadisticasRepository{
         }
     }
 
+    //Ventas por categoría — LEFT JOIN + COALESCE para que los productos sin categoría (o ya
+    //borrados) caigan en "Sin asignar" en vez de perderse: la suma de todas las barras tiene
+    //que dar el mismo total que el resto de los reportes de ventas del período (mismo criterio
+    //que ObtenerGraficoProductos: no filtra por pago realizado, solo ventas no anuladas).
+    async ObtenerGraficoVentasPorCategoria(filtros:FiltroEstadistica){
+        const connection = await db.getConnection();
+        const { fechaDesde, fechaHasta } = obtenerRangosFecha(filtros);
+
+        try {
+            const consulta = " SELECT COALESCE(c.nombre, 'Sin asignar') EjeX, " +
+                             "        SUM(vd.precio * vd.cantidad) EjeY, " +
+                             "        c.color color " +
+                             " FROM ventas_detalle vd " +
+                             " INNER JOIN ventas v ON v.id = vd.idVenta " +
+                             " INNER JOIN cajas cj ON cj.id = v.idCaja " +
+                             " LEFT JOIN productos p ON p.id = vd.idProducto " +
+                             " LEFT JOIN categorias c ON c.id = p.idCategoria AND c.id <> 1 " +
+                             " WHERE v.fecha BETWEEN ? AND ? " +
+                             " AND v.fechaBaja IS NULL " +
+                             " AND cj.fechaBaja IS NULL " +
+                             " GROUP BY EjeX, color " +
+                             " ORDER BY EjeY DESC;";
+
+            const [rows] = await connection.query(consulta, [fechaDesde, fechaHasta]);
+            return await TransformarDatosConColor([rows][0]);
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     //Obtiene las ganancias por caja
     async ObtenerGraficoGanancias(idCaja:string){
         const connection = await db.getConnection();
@@ -346,7 +379,28 @@ async function TransformarDatos(inputArray:any){
         // Devolvemos un objeto con los dos arrays
         return { ejeY, ejeX };
     } catch (error) {
-        throw error; 
+        throw error;
+    }
+}
+
+//Mismo contrato que TransformarDatos, sumando el color de cada categoría (null en "Sin
+//asignar", que no tiene fila propia en la tabla categorias) para que el gráfico pinte cada
+//barra con el mismo color que el usuario ve en el ABM.
+async function TransformarDatosConColor(inputArray:any){
+    try {
+        const ejeX: string[] = [];
+        const ejeY: number[] = [];
+        const colores: (string | null)[] = [];
+
+        inputArray.forEach(item => {
+            ejeY.push(item.EjeY);
+            ejeX.push(item.EjeX);
+            colores.push(item.color ?? null);
+        });
+
+        return { ejeY, ejeX, colores };
+    } catch (error) {
+        throw error;
     }
 }
 

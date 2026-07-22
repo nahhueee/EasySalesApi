@@ -58,6 +58,11 @@ class ProductosRepository{
             soloPrecio: row['soloPrecio'],
         });
 
+        // No forman parte del modelo Producto (son del JOIN a categorias, ver ObtenerQuery) —
+        // se agregan sueltas para no ensuciar el constructor con campos que no le pertenecen.
+        (producto as any).categoriaNombre = row['categoriaNombre'];
+        (producto as any).categoriaColor = row['categoriaColor'];
+
         return producto;
     }
 
@@ -350,8 +355,8 @@ class ProductosRepository{
             // Si vienen precios[], usamos los de la lista default; si no, usamos los campos top-level
             const precioBase = ResolverPrecioBase(data);
 
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio,idCategoria)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -366,7 +371,8 @@ class ProductosRepository{
                                 data.vencimiento ? moment(data.vencimiento).format('YYYY-MM-DD'): null,
                                 data.unidad,
                                 data.imagen,
-                                data.soloPrecio ? 1 : 0];
+                                data.soloPrecio ? 1 : 0,
+                                data.idCategoria || 0];
 
             const [result]: any = await connection.query(consulta, parametros);
             const idProducto = result.insertId;
@@ -417,7 +423,8 @@ class ProductosRepository{
                                 vencimiento = ?,
                                 unidad = ?,
                                 imagen = ?,
-                                soloPrecio = ?
+                                soloPrecio = ?,
+                                idCategoria = ?
                                 WHERE id = ?`;
 
             const parametros = [data.codigo.toUpperCase(),
@@ -434,6 +441,7 @@ class ProductosRepository{
                                 data.unidad,
                                 data.imagen,
                                 data.soloPrecio ? 1 : 0,
+                                data.idCategoria || 0,
                                 data.id];
 
             await connection.query(consulta, parametros);
@@ -509,6 +517,28 @@ class ProductosRepository{
                               WHERE id = ?`;
 
             const parametros = [data.faltante, data.idProducto];
+
+            await connection.query(consulta, parametros);
+            return "OK";
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    //Relacionar un producto a una categoría con un solo click desde el modal de categorías —
+    //update puntual, no pasa por Modificar() para no tener que mandar precios/costo/etc.
+    async AsignarCategoria(data:any): Promise<string>{
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = `UPDATE productos SET
+                              idCategoria = ?
+                              WHERE id = ?`;
+
+            const parametros = [data.idCategoria || 0, data.idProducto];
 
             await connection.query(consulta, parametros);
             return "OK";
@@ -845,8 +875,9 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
 
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-                " SELECT p.* " +
+                " SELECT p.*, c.nombre AS categoriaNombre, c.color AS categoriaColor " +
                 " FROM productos p " +
+                " LEFT JOIN categorias c ON c.id = p.idCategoria AND c.id <> 1 " +
                 " WHERE p.id <> 1 " +
                 filtro +
                 orden +

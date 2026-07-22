@@ -209,6 +209,17 @@ router.put('/actualizar-faltante', async (req:Request, res:Response) => {
     }
 });
 
+router.put('/asignar-categoria', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosRepo.AsignarCategoria(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar asignar la categoría del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.put('/actualizar-vencimiento', async (req:Request, res:Response) => {
     try{ 
         res.json(await ProductosRepo.ActualizarVencimiento(req.body));

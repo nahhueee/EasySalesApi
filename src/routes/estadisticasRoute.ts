@@ -70,6 +70,17 @@ router.post('/get-productos', async (req:Request, res:Response) => {
     }
 });
 
+router.post('/get-ventas-categoria', async (req:Request, res:Response) => {
+    try{
+        res.json(await EstadisticasRepo.ObtenerGraficoVentasPorCategoria(req.body));
+
+    } catch(error:any){
+        let msg = "Error al obtener los datos para el gráfico de ventas por categoría.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.get('/grafico-ganancias/:id', async (req:Request, res:Response) => {
     try{ 
         res.json(await EstadisticasRepo.ObtenerGraficoGanancias(req.params.id));
