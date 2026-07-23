@@ -42,16 +42,28 @@ interface FilaPreview {
  * (es decir, no pasaron por el snapshot de Sub-fase B). En ese caso ObtenerSaldoLedger
  * devuelve 0, lo que crearía aperturas incorrectas.
  *
- * Fórmula: SUM(v.total - p.entrega) para todas las ventas no realizadas y no dadas de baja.
+ * Fórmula: SUM(detalle - p.entrega) para todas las ventas no realizadas y no dadas de baja.
+ * El total de cada venta se recalcula desde ventas_detalle (cantidad*precio), igual que
+ * ObtenerVentasImpagas — NO se usa v.total. Motivo (incidente 2026-07-22): v.total viene
+ * de una migración (20260622091000_ventas_total.js) que en varios comercios todavía no
+ * corrió o quedó a medio backfillear (se colgaba por falta de índice en
+ * ventas_detalle.idVenta), dejando la columna en NULL para la mayoría del historial —
+ * en algunos comercios ni siquiera existe la columna. Calcular desde el detalle evita
+ * depender por completo del estado de esa migración en cada comercio.
  * p.entrega es acumulativo (seña inicial + entregas posteriores vía ActualizarEstadoPago).
  */
 async function ObtenerSaldoDesdeVentas(idCliente: number): Promise<number> {
     const connection = await db.getConnection();
     try {
         const [rows] = await connection.query(
-            `SELECT COALESCE(SUM(v.total - COALESCE(p.entrega, 0)), 0) AS saldo
+            `SELECT COALESCE(SUM(det.total - COALESCE(p.entrega, 0)), 0) AS saldo
              FROM ventas v
              INNER JOIN ventas_pago p ON p.idVenta = v.id
+             INNER JOIN (
+                SELECT idVenta, SUM(cantidad * precio) AS total
+                FROM ventas_detalle
+                GROUP BY idVenta
+             ) det ON det.idVenta = v.id
              WHERE v.idCliente = ?
                AND p.realizado = 0
                AND v.fechaBaja IS NULL`,
