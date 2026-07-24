@@ -15,6 +15,15 @@ router.post('/obtener', async (req:Request, res:Response, next) => {
     }
 });
 
+router.get('/activas', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await CajasRepo.ObtenerActivas());
+
+    } catch(error:any){
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al obtener el listado de cajas activas.', 500, { modulo: 'cajasRoute.activas' }, error));
+    }
+});
+
 router.get('/obtener-caja/:id', async (req:Request, res:Response, next) => {
     try{
         res.json(await CajasRepo.ObtenerCaja({idCaja: req.params.id }));

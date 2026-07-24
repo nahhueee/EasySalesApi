@@ -14,6 +14,17 @@ router.post('/movimientos', async (req:Request, res:Response) => {
     }
 });
 
+router.get('/cobros-caja/:idCaja', async (req:Request, res:Response) => {
+    try{
+        res.json(await CuentasRepo.ObtenerCobrosCaja(Number(req.params.idCaja)));
+
+    } catch(error:any){
+        let msg = "Error al obtener los cobros de fiado de la caja nro " + req.params.idCaja + ".";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.get('/obtener-deuda/:idCliente', async (req:Request, res:Response) => {
     try{ 
         res.json(await CuentasRepo.ObtenerDeudaTotalCliente(req.params.idCliente));

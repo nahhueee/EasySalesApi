@@ -3,6 +3,13 @@ import db from '../db';
 import { SesionServ } from '../services/sesionService';
 import { ResultSetHeader } from 'mysql2';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
+import { MovimientosRepo } from './movimientosRepository';
+
+// tipos_pago.id del medio EFECTIVO. Verificado contra los seeds/backups (script.sql,
+// script-bootstrap.sql, respaldos): siempre id=1. El front de entrega-ventas ya hardcodea
+// ids de tipos_pago (excluye id=4=TARJETA), así que hardcodear acá es consistente con el
+// estilo existente. Riesgo: si se reordena el seed de tipos_pago, esto se rompe en silencio.
+const ID_TIPO_PAGO_EFECTIVO = 1;
 
 class CuentasCorsRepository{
     
@@ -56,12 +63,97 @@ class CuentasCorsRepository{
         }
     }
 
+    // Cobros de fiado (parciales y pagos completos) relevantes para el resumen de una caja,
+    // para la sección "Cobros" (auditabilidad — no altera el total del arqueo, que sigue
+    // saliendo de cajas_movimientos vía TotalesXTipoPago/entradas). Distingue:
+    //   - "parcial": ventas_entrega (EntregaDinero), idCaja vive en el header.
+    //   - "completo": ventas_pagos_detalle (ActualizarEstadoPago) — se identifica por el
+    //     ledger (tipo='ajuste', descripcion='Pago manual de venta') y se toma la ÚLTIMA fila
+    //     de ventas_pagos_detalle de esa venta (la que insertó ActualizarEstadoPago), porque
+    //     esa tabla también recibe filas del pago original de la venta y no tiene un flag
+    //     propio que distinga "pago fiado saldado después" de "pago de contado al vender".
+    // Fuente de verdad para "qué pasó": cuenta_corriente_movimientos (ledger), no vpd directo.
+    //
+    // Filtro: (idCaja del cobro = esta caja) OR (fecha del cobro = fecha de apertura de esta
+    // caja). El "OR idCaja" es necesario porque una caja puede quedar activa varios días
+    // (finalizada=0 no implica "hoy") — un cobro imputado HOY a una caja abierta hace días
+    // tiene que aparecer en su resumen aunque la fecha no coincida, porque ya impactó su
+    // arqueo (cajas_movimientos/entradas). El filtro por fecha solo cubre el caso "sin
+    // asociar/otra caja", como contexto de qué pasó el día que esta caja abrió.
+    async ObtenerCobrosCaja(idCaja:number){
+        const connection = await db.getConnection();
+
+        try {
+            const [cajaRows] = await connection.query("SELECT fecha FROM cajas WHERE id = ?", [idCaja]);
+            const fechaCaja = (cajaRows as any)[0]?.fecha;
+            if (!fechaCaja) return [];
+
+            const fecha = moment(fechaCaja).format('YYYY-MM-DD');
+
+            const consulta = `
+                SELECT 'parcial' AS origen, ccm.hora, cli.nombre AS cliente, ccm.haber AS monto,
+                       tp.nombre AS metodo, tp.icono, tp.color, ve.idCaja
+                FROM cuenta_corriente_movimientos ccm
+                INNER JOIN clientes cli ON cli.id = ccm.idCliente
+                INNER JOIN ventas_entrega ve ON ve.id = ccm.idReferencia
+                LEFT JOIN tipos_pago tp ON tp.id = (
+                    SELECT vpd.idTPago FROM ventas_pagos_detalle vpd
+                    WHERE vpd.idEntrega = ve.id ORDER BY vpd.id ASC LIMIT 1
+                )
+                WHERE ccm.tipo = 'entrega' AND (ve.idCaja = ? OR ccm.fecha = ?)
+
+                UNION ALL
+
+                SELECT 'completo' AS origen, ccm.hora, cli.nombre AS cliente, ccm.haber AS monto,
+                       tp.nombre AS metodo, tp.icono, tp.color, vpd.idCaja
+                FROM cuenta_corriente_movimientos ccm
+                INNER JOIN clientes cli ON cli.id = ccm.idCliente
+                INNER JOIN ventas_pagos_detalle vpd ON vpd.id = (
+                    SELECT MAX(vpd2.id) FROM ventas_pagos_detalle vpd2 WHERE vpd2.idVenta = ccm.idReferencia
+                )
+                LEFT JOIN tipos_pago tp ON tp.id = vpd.idTPago
+                WHERE ccm.tipo = 'ajuste' AND ccm.descripcion = 'Pago manual de venta'
+                      AND (vpd.idCaja = ? OR ccm.fecha = ?)
+
+                ORDER BY hora ASC
+            `;
+
+            const [rows] = await connection.query(consulta, [idCaja, fecha, idCaja, fecha]);
+
+            return (rows as any[]).map(r => ({
+                origen: r.origen,
+                hora: r.hora,
+                cliente: r.cliente,
+                monto: parseFloat(r.monto),
+                metodo: r.metodo,
+                icono: r.icono,
+                color: r.color,
+                asociacion: r.idCaja == null
+                    ? 'sin-asociar'
+                    : (Number(r.idCaja) === Number(idCaja) ? 'esta-caja' : 'otra-caja'),
+                idCajaAsociada: r.idCaja
+            }));
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
     async EntregaDinero(data:any): Promise<string>{
-        
+
         const connection = await db.getConnection();
 
         //Obtenemos el listado de ventas del cliente en estado impagas
         let resultados = await ObtenerVentasImpagas(connection, data.idCliente);
+
+        // Guard de efectivo en el backend (defensa en profundidad, no confiar solo en la UI):
+        // idCaja solo se acepta si el medio de pago es EFECTIVO. Con cualquier otro medio se
+        // fuerza a null aunque venga con valor — los movimientos de caja hoy son solo efectivo.
+        const idCajaImputada = (Number(data.idTPago) === ID_TIPO_PAGO_EFECTIVO && data.idCaja)
+            ? Number(data.idCaja)
+            : null;
 
         try {
             //Iniciamos una transaccion
@@ -69,8 +161,8 @@ class CuentasCorsRepository{
 
             //Insertamos el registro de cabecera
             const [cabecera] = await connection.query<ResultSetHeader>(
-                "INSERT INTO ventas_entrega(idCliente, monto, fecha) VALUES(?,?,NOW())",
-                [data.idCliente, data.monto]
+                "INSERT INTO ventas_entrega(idCliente, monto, fecha, idCaja) VALUES(?,?,NOW(),?)",
+                [data.idCliente, data.monto, idCajaImputada]
             );
             const idEntrega = cabecera.insertId;
 
@@ -143,6 +235,18 @@ class CuentasCorsRepository{
                 idReferencia: idEntrega
             });
 
+            //Si se imputó a una caja (efectivo), registramos la ENTRADA en la misma transacción:
+            //atomicidad no negociable, si esto falla se revierte todo el cobro.
+            if (idCajaImputada) {
+                await MovimientosRepo.Agregar({
+                    idCaja: idCajaImputada,
+                    tipoMovimiento: 'ENTRADA',
+                    monto: data.monto,
+                    descripcion: `Cobro fiado - cliente ${data.idCliente} - entrega #${idEntrega}`,
+                    idEntrega: idEntrega
+                }, connection);
+            }
+
             //Mandamos la transaccion
             await connection.commit();
 
@@ -166,10 +270,11 @@ class CuentasCorsRepository{
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
-            //Obtenemos idCliente y monto de la entrega original (los necesitamos
-            //para el ajuste del ledger antes de borrar la cabecera mas abajo)
+            //Obtenemos idCliente, monto e idCaja de la entrega original (los necesitamos
+            //para el ajuste del ledger y para revertir el movimiento de caja antes de
+            //borrar la cabecera mas abajo)
             const [entregaRows] = await connection.query(
-                "SELECT idCliente, monto FROM ventas_entrega WHERE id = ?",
+                "SELECT idCliente, monto, idCaja FROM ventas_entrega WHERE id = ?",
                 [data.idEntrega]
             );
             const entregaOriginal = (entregaRows as any)[0];
@@ -191,6 +296,39 @@ class CuentasCorsRepository{
             if (Number(idUltimaEntrega) !== Number(data.idEntrega)) {
                 await connection.rollback();
                 return "Solo se puede revertir la última entrega registrada para este cliente.";
+            }
+
+            //Si el cobro estaba imputado a una caja, revertimos el movimiento de ENTRADA.
+            //Bloqueamos la reversión si esa caja ya fue finalizada (decisión con Nahu,
+            //2026-07-23): no se altera el arqueo de una caja ya cerrada, requiere ajuste manual.
+            if (entregaOriginal.idCaja) {
+                const [movRows] = await connection.query(
+                    `SELECT cm.id, cm.idCaja, cm.monto, cm.tipoMovimiento, c.finalizada
+                     FROM cajas_movimientos cm
+                     INNER JOIN cajas c ON c.id = cm.idCaja
+                     WHERE cm.idEntrega = ? AND cm.tipoMovimiento = 'ENTRADA'`,
+                    [data.idEntrega]
+                );
+                const movimiento = (movRows as any)[0];
+
+                if (movimiento) {
+                    if (Number(movimiento.finalizada) === 1) {
+                        await connection.rollback();
+                        return "No se puede revertir: la caja a la que se imputó este cobro ya fue finalizada. Requiere un ajuste manual.";
+                    }
+
+                    // No se borra la ENTRADA original: se compensa con una SALIDA por el mismo
+                    // monto, para preservar la trazabilidad (queda el rastro de que hubo un
+                    // cobro y de que se revirtió). El neto en cajas.entradas/salidas da igual
+                    // que si nunca hubiera pasado.
+                    await MovimientosRepo.Agregar({
+                        idCaja: movimiento.idCaja,
+                        tipoMovimiento: 'SALIDA',
+                        monto: movimiento.monto,
+                        descripcion: `Reversión de cobro fiado - entrega #${data.idEntrega}`,
+                        idEntrega: data.idEntrega
+                    }, connection);
+                }
             }
 
             //Obtenemos los detalles de la entrega
@@ -269,11 +407,18 @@ class CuentasCorsRepository{
             const parametros = [data.idVenta];
             await connection.query(consulta, parametros);
 
+            // Guard de efectivo en el backend (defensa en profundidad, no confiar solo en la UI):
+            // idCaja solo se acepta si el medio de pago es EFECTIVO.
+            const idCajaImputada = (Number(data.idTPago) === ID_TIPO_PAGO_EFECTIVO && data.idCaja)
+                ? Number(data.idCaja)
+                : null;
+
             //Insertamos el idTipoPago
-            await connection.query(
-                `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto) VALUES (?, ?, ?)`,
-                [data.idVenta, data.idTPago, data.total]
+            const [detalle] = await connection.query<ResultSetHeader>(
+                `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idCaja) VALUES (?, ?, ?, ?)`,
+                [data.idVenta, data.idTPago, data.total, idCajaImputada]
             );
+            const idVentaPagoDetalle = detalle.insertId;
 
             //Registramos el movimiento (haber) en la cuenta corriente del cliente
             if (idCliente) {
@@ -286,9 +431,20 @@ class CuentasCorsRepository{
                 });
             }
 
+            //Si se imputó a una caja (efectivo), registramos la ENTRADA en la misma transacción.
+            if (idCajaImputada) {
+                await MovimientosRepo.Agregar({
+                    idCaja: idCajaImputada,
+                    tipoMovimiento: 'ENTRADA',
+                    monto: data.total,
+                    descripcion: `Cobro fiado (pago completo) - cliente ${idCliente} - venta #${data.idVenta}`,
+                    idVentaPagoDetalle: idVentaPagoDetalle
+                }, connection);
+            }
+
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta);
-            
+
             //Mandamos la transaccion
             await connection.commit();
 
@@ -316,7 +472,7 @@ class CuentasCorsRepository{
             //            Revertir = debe=entrega para cancelar ese haber.
             const [ventaRows] = await connection.query(
                 `SELECT v.idCliente, v.total AS totalVenta, p.entrega,
-                        tp.nombre AS metodoPago
+                        tp.nombre AS metodoPago, vpd.id AS idVentaPagoDetalle, vpd.idCaja
                  FROM ventas v
                  INNER JOIN ventas_pago p ON v.id = p.idVenta
                  LEFT JOIN ventas_pagos_detalle vpd ON vpd.idVenta = v.id
@@ -326,6 +482,37 @@ class CuentasCorsRepository{
                 [idVenta]
             );
             const ventaInfo = (ventaRows as any)[0];
+
+            //Si el pago estaba imputado a una caja, revertimos el movimiento de ENTRADA
+            //ANTES de borrar ventas_pagos_detalle (FK cajas_movimientos.idVentaPagoDetalle).
+            //Mismo bloqueo que en RevertirEntregaDinero si la caja ya fue finalizada.
+            if (ventaInfo?.idCaja) {
+                const [movRows] = await connection.query(
+                    `SELECT cm.id, cm.idCaja, cm.monto, cm.tipoMovimiento, c.finalizada
+                     FROM cajas_movimientos cm
+                     INNER JOIN cajas c ON c.id = cm.idCaja
+                     WHERE cm.idVentaPagoDetalle = ? AND cm.tipoMovimiento = 'ENTRADA'`,
+                    [ventaInfo.idVentaPagoDetalle]
+                );
+                const movimiento = (movRows as any)[0];
+
+                if (movimiento) {
+                    if (Number(movimiento.finalizada) === 1) {
+                        await connection.rollback();
+                        return "No se puede revertir: la caja a la que se imputó este cobro ya fue finalizada. Requiere un ajuste manual.";
+                    }
+
+                    // Mismo criterio que en RevertirEntregaDinero: se compensa con SALIDA,
+                    // no se borra la ENTRADA original.
+                    await MovimientosRepo.Agregar({
+                        idCaja: movimiento.idCaja,
+                        tipoMovimiento: 'SALIDA',
+                        monto: movimiento.monto,
+                        descripcion: `Reversión de cobro fiado (pago completo) - venta #${idVenta}`,
+                        idVentaPagoDetalle: ventaInfo.idVentaPagoDetalle
+                    }, connection);
+                }
+            }
 
             await connection.query(
                 "UPDATE ventas_pago SET realizado = 0, entrega = 0 WHERE idVenta = ?",

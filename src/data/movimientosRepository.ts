@@ -1,4 +1,5 @@
 import db from '../db';
+import { ResultSetHeader } from 'mysql2';
 
 class MovimientosRepository{
 
@@ -26,65 +27,82 @@ class MovimientosRepository{
     //#endregion
 
     //#region ABM
-    async Agregar(data:any): Promise<string>{
-        const connection = await db.getConnection();
+    // Si se pasa "connection" (ya abierta por el caller, dentro de su propia transacción),
+    // la reusamos y NO manejamos beginTransaction/commit/rollback/release acá: eso queda
+    // a cargo del caller, para poder garantizar atomicidad con otras operaciones (ej. cobro
+    // de fiado + movimiento de caja en la misma transacción). Si no se pasa, se comporta
+    // igual que antes (conexión y transacción propias).
+    async Agregar(data:any, connection?:any): Promise<string>{
+        const conexionExterna = !!connection;
+        const conn = connection ?? await db.getConnection();
 
         try {
-            //Iniciamos una transaccion
-            await connection.beginTransaction();
+            if(!conexionExterna) await conn.beginTransaction();
 
             //Insertamos el movimiento
-            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion) " +
-                             " VALUES(?, ?, ?, ?) ";
-            const parametros = [data.idCaja, data.tipoMovimiento.toUpperCase(), data.monto, data.descripcion];
-            await connection.query(consulta, parametros);
+            // idEntrega / idVentaPagoDetalle: referencia opcional al cobro de fiado que originó
+            // este movimiento (cobro parcial o pago completo respectivamente), para poder
+            // localizarlo y revertirlo con precisión. Nulos en los usos existentes (ABM manual
+            // de movimientos de caja).
+            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle) " +
+                             " VALUES(?, ?, ?, ?, ?, ?) ";
+            const parametros = [
+                data.idCaja,
+                data.tipoMovimiento.toUpperCase(),
+                data.monto,
+                data.descripcion,
+                data.idEntrega ?? null,
+                data.idVentaPagoDetalle ?? null
+            ];
+            const [resultado] = await conn.query(consulta, parametros) as [ResultSetHeader, any];
 
 
             //Actualizamos el monto de la caja
             if(data.tipoMovimiento.toUpperCase() == "ENTRADA")
-                await connection.query("UPDATE cajas SET entradas = entradas + ? WHERE id = ?", [data.monto, data.idCaja]);
+                await conn.query("UPDATE cajas SET entradas = entradas + ? WHERE id = ?", [data.monto, data.idCaja]);
 
             if(data.tipoMovimiento.toUpperCase() == "SALIDA")
-                await connection.query("UPDATE cajas SET salidas = salidas + ? WHERE id = ?", [data.monto, data.idCaja]);
+                await conn.query("UPDATE cajas SET salidas = salidas + ? WHERE id = ?", [data.monto, data.idCaja]);
 
-            
-            //Mandamos la transaccion
-            await connection.commit();
-            return "OK";
+
+            if(!conexionExterna) await conn.commit();
+            return conexionExterna ? String(resultado.insertId) : "OK";
 
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
-            await connection.rollback();
+            if(!conexionExterna) await conn.rollback();
             throw error;
         } finally{
-            connection.release();
+            if(!conexionExterna) conn.release();
         }
     }
 
-    async Eliminar(data:any): Promise<string>{
-        const connection = await db.getConnection();
-        
+    async Eliminar(data:any, connection?:any): Promise<string>{
+        const conexionExterna = !!connection;
+        const conn = connection ?? await db.getConnection();
+
         try {
+            if(!conexionExterna) await conn.beginTransaction();
+
             //Eliminamos el movimiento
-            await connection.query("DELETE FROM cajas_movimientos WHERE id = ?", [data.id]);
+            await conn.query("DELETE FROM cajas_movimientos WHERE id = ?", [data.id]);
 
             //Actualizamos el monto de la caja
             if(data.tipoMovimiento.toUpperCase() == "ENTRADA")
-                await connection.query("UPDATE cajas SET entradas = entradas - ? WHERE id = ?", [data.monto, data.idCaja]);
+                await conn.query("UPDATE cajas SET entradas = entradas - ? WHERE id = ?", [data.monto, data.idCaja]);
 
             if(data.tipoMovimiento.toUpperCase() == "SALIDA")
-                await connection.query("UPDATE cajas SET salidas = salidas - ? WHERE id = ?", [data.monto, data.idCaja]);
-            
-            //Mandamos la transaccion
-            await connection.commit();
+                await conn.query("UPDATE cajas SET salidas = salidas - ? WHERE id = ?", [data.monto, data.idCaja]);
+
+            if(!conexionExterna) await conn.commit();
             return "OK";
 
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
-            await connection.rollback();
+            if(!conexionExterna) await conn.rollback();
             throw error;
         } finally{
-            connection.release();
+            if(!conexionExterna) conn.release();
         }
     }
     //#endregion

@@ -51,6 +51,19 @@ class CajasRepository{
         }
     }
 
+    // Cajas activas (finalizada=0) para el selector de imputación de cobros de fiado.
+    // Reusa Obtener/ObtenerQuery (mismo filtro finalizada=0 que ya usa el listado de cajas)
+    // y devuelve solo lo que el selector necesita para ser legible con varias cajas abiertas.
+    async ObtenerActivas(){
+        const { registros } = await this.Obtener({ finalizada: 0 });
+        return (registros as Caja[]).map(c => ({
+            id: c.id,
+            fecha: c.fecha,
+            hora: c.hora,
+            responsable: c.responsable
+        }));
+    }
+
     async ObtenerCaja(filtros:any){
         const connection = await db.getConnection();
         
