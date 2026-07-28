@@ -37,6 +37,7 @@ class EtiquetasRepository{
                 id: row['id'],
                 descripcion: row['descripcion'],
                 tamanio: row['tamanio'],
+                papel: row['papel'],
                 titulo: row['titulo'],
                 mOferta: row['mOferta'] == 1 ? true : false,
                 mCodigo: row['mCodigo'] == 1 ? true : false,
@@ -76,15 +77,16 @@ class EtiquetasRepository{
             
             const consulta = `
                 INSERT INTO etiquetas (
-                    descripcion,tamanio,titulo,
+                    descripcion,tamanio,papel,titulo,
                     mOferta,mCodigo,mPrecio,mNombre,mVencimiento,
                     bordeColor,bordeAncho,tituloColor,tituloAlineacion,
                     ofertaFondo,ofertaAlineacion,nombreAlineacion,vencimientoAlineacion,precioAlineacion,precioColor
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
             const parametros = [
                 data.descripcion?.toUpperCase(),
                 data.tamanio,
+                data.papel,
                 data.titulo,
                 data.mOferta,
                 data.mCodigo,
@@ -126,9 +128,10 @@ class EtiquetasRepository{
             
             const consulta = `
                 UPDATE etiquetas 
-                SET 
+                SET
                     descripcion = ?,
                     tamanio = ?,
+                    papel = ?,
                     titulo = ?,
                     mOferta = ?,
                     mCodigo = ?,
@@ -151,6 +154,7 @@ class EtiquetasRepository{
             const parametros = [
                 data.descripcion?.toUpperCase(),
                 data.tamanio,
+                data.papel,
                 data.titulo,
                 data.mOferta,
                 data.mCodigo,
@@ -168,7 +172,7 @@ class EtiquetasRepository{
                 data.precioAlineacion,
                 data.precioColor,
                 data.id
-            ];   
+            ];
 
             await connection.query(consulta, parametros);
 

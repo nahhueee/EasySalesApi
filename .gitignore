@@ -4,6 +4,7 @@
 /src/logger/update.json
 /src/logger/backup.json
 /src/logger/facturacion.json
+/src/logger/error.log
 /src/session.json
 /src/log/*
 /src/upload/*

@@ -32,11 +32,26 @@ interface FilaDetalle {
     saldo: number;
 }
 
+interface FilaEntrega {
+    idEntrega: number;
+    fecha: string;
+    monto: number;
+    detalle: string;
+}
+
+interface FilaPagoSinFecha {
+    idVenta: number;
+    total: number;
+    fechaVenta: string;
+}
+
 interface ClienteConDeuda {
     idCliente: number;
     nombre: string;
     saldoTotal: number;
     detalle: FilaDetalle[];
+    entregas: FilaEntrega[];
+    pagosSinFecha: FilaPagoSinFecha[];
 }
 
 async function ObtenerClientes(): Promise<{ id: number; nombre: string }[]> {
@@ -93,6 +108,79 @@ async function ObtenerDetalleCliente(idCliente: number): Promise<FilaDetalle[]> 
 }
 
 /**
+ * Entregas de dinero registradas con fecha — solo cubre el flujo EntregaDinero
+ * (cobro parcial o repartido entre varias ventas, tabla ventas_entrega). El otro
+ * camino de cobro, ActualizarEstadoPago (marcar una venta fiado como pagada
+ * completa de una), NO pasa por ventas_entrega y no guarda fecha de pago —
+ * ver ObtenerPagosSinFechaCliente para esos casos.
+ */
+async function ObtenerEntregasCliente(idCliente: number): Promise<FilaEntrega[]> {
+    const connection = await db.getConnection();
+    try {
+        const [rows] = await connection.query(
+            `SELECT ve.id AS idEntrega, ve.fecha, ve.monto,
+                    GROUP_CONCAT(
+                        CONCAT('Venta ', ved.idVenta, ': $', ved.montoAplicado)
+                        ORDER BY ved.idVenta SEPARATOR ' | '
+                    ) AS detalle
+             FROM ventas_entrega ve
+             LEFT JOIN ventas_entrega_detalle ved ON ved.idEntrega = ve.id
+             WHERE ve.idCliente = ?
+             GROUP BY ve.id, ve.fecha, ve.monto
+             ORDER BY ve.fecha ASC, ve.id ASC`,
+            [idCliente]
+        );
+
+        return (rows as any[]).map(r => ({
+            idEntrega: r.idEntrega,
+            fecha: r.fecha,
+            monto: Number(r.monto),
+            detalle: r.detalle ?? ''
+        }));
+    } finally {
+        connection.release();
+    }
+}
+
+/**
+ * Ventas de este cliente marcadas como pagadas por completo (realizado=1) que
+ * NO tienen ningún renglón en ventas_entrega_detalle — es decir, se pagaron
+ * vía ActualizarEstadoPago ("marcar como pagada"), no vía EntregaDinero. Ese
+ * camino no guarda fecha de pago en ningún lado; la única fecha disponible es
+ * la de la venta, que NO es la fecha en que se cobró. Se listan aparte y
+ * marcadas como tales para no confundirlas con una entrega real fechada.
+ */
+async function ObtenerPagosSinFechaCliente(idCliente: number): Promise<FilaPagoSinFecha[]> {
+    const connection = await db.getConnection();
+    try {
+        const [rows] = await connection.query(
+            `SELECT v.id AS idVenta, v.fecha AS fechaVenta, det.total AS total
+             FROM ventas v
+             INNER JOIN ventas_pago p ON p.idVenta = v.id
+             INNER JOIN (
+                SELECT idVenta, SUM(cantidad * precio) AS total
+                FROM ventas_detalle
+                GROUP BY idVenta
+             ) det ON det.idVenta = v.id
+             WHERE v.idCliente = ?
+               AND p.realizado = 1
+               AND v.fechaBaja IS NULL
+               AND NOT EXISTS (SELECT 1 FROM ventas_entrega_detalle ved WHERE ved.idVenta = v.id)
+             ORDER BY v.fecha ASC, v.id ASC`,
+            [idCliente]
+        );
+
+        return (rows as any[]).map(r => ({
+            idVenta: r.idVenta,
+            fechaVenta: r.fechaVenta,
+            total: Number(r.total)
+        }));
+    } finally {
+        connection.release();
+    }
+}
+
+/**
  * Nombre de hoja de Excel válido: máximo 31 caracteres, sin \ / ? * [ ] :,
  * y único dentro del libro (se antepone el id del cliente para evitar
  * colisiones entre clientes con nombres parecidos o repetidos).
@@ -140,7 +228,51 @@ function ArmarHojaCliente(cliente: ClienteConDeuda): XLSX.WorkSheet {
     });
 
     const hoja = XLSX.utils.json_to_sheet(filas);
-    hoja['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+    hoja['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 60 }];
+
+    let filaLibre = filas.length + 2; // +1 header, +1 para dejar la siguiente fila libre
+
+    // Tabla 2: entregas de dinero con fecha (flujo EntregaDinero)
+    filaLibre++; // fila en blanco antes del título
+    XLSX.utils.sheet_add_aoa(hoja, [['Entregas de dinero registradas (con fecha)']], { origin: `A${filaLibre}` });
+    filaLibre++;
+
+    if (cliente.entregas.length > 0) {
+        const filasEntregas = cliente.entregas.map(e => ({
+            'Fecha': e.fecha,
+            'Nro Entrega': e.idEntrega,
+            'Monto entregado': e.monto,
+            'Aplicado a': e.detalle
+        }));
+        const totalEntregado = cliente.entregas.reduce((acc, e) => acc + e.monto, 0);
+        filasEntregas.push({
+            'Fecha': '' as any, 'Nro Entrega': '' as any,
+            'Monto entregado': totalEntregado, 'Aplicado a': 'TOTAL ENTREGADO (con fecha)' as any
+        });
+        XLSX.utils.sheet_add_json(hoja, filasEntregas, { origin: `A${filaLibre}` });
+        filaLibre += filasEntregas.length + 1;
+    } else {
+        XLSX.utils.sheet_add_aoa(hoja, [['(sin entregas registradas por este medio)']], { origin: `A${filaLibre}` });
+        filaLibre += 2;
+    }
+
+    // Tabla 3: ventas pagadas por completo sin fecha de pago (ActualizarEstadoPago)
+    if (cliente.pagosSinFecha.length > 0) {
+        filaLibre++;
+        XLSX.utils.sheet_add_aoa(hoja, [
+            ['Ventas pagadas por completo SIN fecha de pago registrada'],
+            ['(marcadas como pagadas manualmente — el sistema no guarda cuándo se cobraron, solo la fecha de la venta)']
+        ], { origin: `A${filaLibre}` });
+        filaLibre += 2;
+
+        const filasPagos = cliente.pagosSinFecha.map(p => ({
+            'Fecha de la venta (no la del pago)': p.fechaVenta,
+            'Nro Venta': p.idVenta,
+            'Monto pagado': p.total
+        }));
+        XLSX.utils.sheet_add_json(hoja, filasPagos, { origin: `A${filaLibre}` });
+    }
+
     return hoja;
 }
 
@@ -155,7 +287,10 @@ async function Main() {
         if (detalle.length === 0) continue; // sin ventas pendientes, no aporta nada al reporte
 
         const saldoTotal = detalle.reduce((acc, d) => acc + d.saldo, 0);
-        clientes.push({ idCliente: c.id, nombre: c.nombre, saldoTotal, detalle });
+        const entregas = await ObtenerEntregasCliente(c.id);
+        const pagosSinFecha = await ObtenerPagosSinFechaCliente(c.id);
+
+        clientes.push({ idCliente: c.id, nombre: c.nombre, saldoTotal, detalle, entregas, pagosSinFecha });
     }
 
     if (clientes.length === 0) {

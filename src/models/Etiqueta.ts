@@ -2,6 +2,7 @@ export class Etiqueta{
   id? : number;
   descripcion? : string;
   tamanio? : string;
+  papel? : string;
   titulo?:string;
   mOferta?: boolean;
   mCodigo?: boolean;
@@ -25,6 +26,7 @@ export class Etiqueta{
         this.id = data.id;
         this.descripcion = data.descripcion;
         this.tamanio = data.tamanio;
+        this.papel = data.papel;
         this.titulo = data.titulo;
         this.mOferta = data.mOferta;
         this.mCodigo = data.mCodigo;
