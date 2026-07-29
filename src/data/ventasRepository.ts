@@ -81,6 +81,10 @@ class VentasRepository{
                         tipoDni: row['tipoDni'],
                         ptoVenta: row['ptoVenta'],
                         condReceptor: row['condReceptor'],
+                        // Receptor congelado al emitir el comprobante. NULL en facturas previas
+                        // a la migracion 20260728100000 — el PDF cae al fallback venta.cliente.
+                        receptorNombre: row['receptorNombre'],
+                        receptorDireccion: row['receptorDireccion'],
                         // mysql2 devuelve el SUM() de un DECIMAL como string, hay que normalizarlo igual que el resto de los montos.
                         acreditado: row['acreditado'] !== undefined ? Number(row['acreditado'] ?? 0) : undefined,
                     });
@@ -516,6 +520,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
                 " SELECT v.*, " +
                 " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
+                " vfac.receptorNombre, vfac.receptorDireccion, " + //Receptor congelado al emitir (ver migracion 20260728100000)
                 " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial, cli.direccion clienteDireccion, " +
                 " lp.nombre nombreLista " + //Lista de precios aplicada (handoff_multiprecio_venta_sonnet Fase 4); null si la venta no usó lista (flag off)
                 selectAcreditado +
@@ -598,10 +603,13 @@ async function InsertPagoVentaDetalle(connection, pago):Promise<void>{
 
 async function InsertFacturaVenta(connection, factura):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, ptoVenta, condReceptor) " +
-                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
+        //receptorNombre/receptorDireccion: snapshot del receptor al momento de emitir. El
+        //comprobante es inmutable, asi que no se derivan de la tabla clientes al imprimir
+        //(ver comprobanteService.mapearFactura y migracion 20260728100000).
+        const consulta = " INSERT INTO ventas_factura(idVenta, cae, caeVto, ticket, tipoFactura, neto, iva, dni, tipoDni, ptoVenta, condReceptor, receptorNombre, receptorDireccion) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [factura.idVenta, factura.cae, moment(factura.caeVto).format('YYYY-MM-DD'), factura.ticket, factura.tipoComprobante, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.ptoVenta, factura.condReceptor];
+        const parametros = [factura.idVenta, factura.cae, moment(factura.caeVto).format('YYYY-MM-DD'), factura.ticket, factura.tipoComprobante, factura.neto, factura.iva, factura.dni, factura.tipoDni, factura.ptoVenta, factura.condReceptor, factura.receptorNombre ?? null, factura.receptorDireccion ?? null];
         await connection.query(consulta, parametros);
 
     } catch (error) {

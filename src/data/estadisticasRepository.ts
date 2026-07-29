@@ -250,16 +250,25 @@ class EstadisticasRepository{
         }
     }
 
-    //Ventas por categoría — LEFT JOIN + COALESCE para que los productos sin categoría (o ya
-    //borrados) caigan en "Sin asignar" en vez de perderse: la suma de todas las barras tiene
-    //que dar el mismo total que el resto de los reportes de ventas del período (mismo criterio
-    //que ObtenerGraficoProductos: no filtra por pago realizado, solo ventas no anuladas).
+    //Ventas por categoría — se sigue usando LEFT JOIN (no INNER) a propósito: necesitamos
+    //que las ventas sin categoría entren en el resultado para poder informar su monto, aunque
+    //después no se grafiquen. Los productos con idCategoria 0/NULL, los de la categoría 1
+    //(de sistema, oculta en el ABM) y los ya borrados quedan agrupados con c.id NULL.
+    //
+    //TransformarDatosConColor los saca de las barras y devuelve su total en montoSinCategoria,
+    //que el front muestra como nota al pie. Sin ese dato el gráfico no cerraría contra el
+    //total de ventas del período y el comercio vería plata faltante sin explicación.
+    //(Mismo criterio que ObtenerGraficoProductos: no filtra por pago realizado, solo ventas
+    //no anuladas.)
     async ObtenerGraficoVentasPorCategoria(filtros:FiltroEstadistica){
         const connection = await db.getConnection();
         const { fechaDesde, fechaHasta } = obtenerRangosFecha(filtros);
 
         try {
-            const consulta = " SELECT COALESCE(c.nombre, 'Sin asignar') EjeX, " +
+            //c.id se selecciona para discriminar "sin categoría" de forma confiable: el color
+            //no sirve como discriminador porque una categoría real puede tener color NULL.
+            const consulta = " SELECT c.id idCategoria, " +
+                             "        COALESCE(c.nombre, 'Sin asignar') EjeX, " +
                              "        SUM(vd.precio * vd.cantidad) EjeY, " +
                              "        c.color color " +
                              " FROM ventas_detalle vd " +
@@ -270,7 +279,7 @@ class EstadisticasRepository{
                              " WHERE v.fecha BETWEEN ? AND ? " +
                              " AND v.fechaBaja IS NULL " +
                              " AND cj.fechaBaja IS NULL " +
-                             " GROUP BY EjeX, color " +
+                             " GROUP BY idCategoria, EjeX, color " +
                              " ORDER BY EjeY DESC;";
 
             const [rows] = await connection.query(consulta, [fechaDesde, fechaHasta]);
@@ -383,22 +392,35 @@ async function TransformarDatos(inputArray:any){
     }
 }
 
-//Mismo contrato que TransformarDatos, sumando el color de cada categoría (null en "Sin
-//asignar", que no tiene fila propia en la tabla categorias) para que el gráfico pinte cada
-//barra con el mismo color que el usuario ve en el ABM.
+//Mismo contrato que TransformarDatos, sumando el color de cada categoría para que el gráfico
+//pinte cada barra con el mismo color que el usuario ve en el ABM.
+//
+//Las filas sin categoría (idCategoria NULL) NO se grafican: ensucian el gráfico y no le dicen
+//nada al comercio. Su total se devuelve aparte en montoSinCategoria para que el front lo
+//muestre como nota al pie — así el gráfico sigue siendo auditable contra el total del período.
 async function TransformarDatosConColor(inputArray:any){
     try {
         const ejeX: string[] = [];
         const ejeY: number[] = [];
         const colores: (string | null)[] = [];
+        let montoSinCategoria = 0;
 
         inputArray.forEach(item => {
+            const monto = Number(item.EjeY) || 0;
+
+            //idCategoria NULL agrupa: idCategoria 0/NULL en productos, la categoría 1
+            //(de sistema) y los productos ya borrados.
+            if (item.idCategoria == null) {
+                montoSinCategoria += monto;
+                return;
+            }
+
             ejeY.push(item.EjeY);
             ejeX.push(item.EjeX);
             colores.push(item.color ?? null);
         });
 
-        return { ejeY, ejeX, colores };
+        return { ejeY, ejeX, colores, montoSinCategoria };
     } catch (error) {
         throw error;
     }

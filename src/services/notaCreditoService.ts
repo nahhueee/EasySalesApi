@@ -320,7 +320,10 @@ class NotaCreditoService {
         dni:          venta.factura.dni,
         tipoDni:      venta.factura.tipoDni,
         condReceptor: venta.factura.condReceptor,
-        clienteReceptor: venta.cliente?.razonSocial || venta.cliente?.nombre || 'Consumidor Final',
+        // Igual que la factura: primero el receptor congelado en ventas_factura, y solo
+        // como fallback venta.cliente (facturas previas a la migracion 20260728100000).
+        // Asi la NC siempre acredita a nombre de quien figura en la factura original.
+        clienteReceptor: venta.factura.receptorNombre || venta.cliente?.razonSocial || venta.cliente?.nombre || 'Consumidor Final',
 
         comprobanteAsociado: {
           tipo:     venta.factura.tipoComprobante!,

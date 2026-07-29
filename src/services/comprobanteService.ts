@@ -1313,8 +1313,12 @@ export class ComprobanteService {
       direccion:           parametros.direccion,
       CUIL:                parametros.cuil,
       condicionReceptor,
-      clienteReceptor:     venta.cliente?.razonSocial || venta.cliente?.nombre || 'Consumidor Final',
-      direccionReceptor:   venta.cliente?.direccion || undefined,
+      // El receptor sale del snapshot congelado en la factura, no de venta.cliente: al
+      // facturar una venta ya registrada el cliente elegido en el modal puede no ser el
+      // de la venta (tipicamente la venta quedo en Consumidor Final). El fallback a
+      // venta.cliente cubre las facturas anteriores a la migracion 20260728100000.
+      clienteReceptor:     venta.factura?.receptorNombre || venta.cliente?.razonSocial || venta.cliente?.nombre || 'Consumidor Final',
+      direccionReceptor:   venta.factura?.receptorDireccion || venta.cliente?.direccion || undefined,
       DNI:                 facturaVenta.dni,
       tipoDNI,
       qr:                  await FacturacionServ.ObtenerQRFactura(venta.id),

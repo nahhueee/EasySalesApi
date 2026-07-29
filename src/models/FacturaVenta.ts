@@ -11,6 +11,12 @@ export class FacturaVenta{
     tipoDniDesc? : string;
     ptoVenta? : number;
     condReceptor? : number;
+    // Receptor congelado al momento de emitir el comprobante. Un comprobante fiscal es
+    // inmutable: si se derivara de la tabla clientes, renombrar un cliente cambiaria lo que
+    // imprimen sus facturas viejas. NULL en facturas previas a la migracion 20260728100000,
+    // donde comprobanteService cae al fallback venta.cliente.
+    receptorNombre? : string;
+    receptorDireccion? : string;
     // Suma de notas_credito.total ya emitidas contra esta factura (ver ventasRepository.ObtenerQuery).
     acreditado? : number;
 
@@ -27,6 +33,8 @@ export class FacturaVenta{
         this.tipoDni = data.tipoDni;
         this.ptoVenta = data.ptoVenta;
         this.condReceptor = data.condReceptor;
+        this.receptorNombre = data.receptorNombre;
+        this.receptorDireccion = data.receptorDireccion;
         this.acreditado = data.acreditado;
       }
     }
