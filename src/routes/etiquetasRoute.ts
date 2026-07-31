@@ -1,7 +1,15 @@
 import {EtiquetasRepo} from '../data/etiquetasRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
+import { v4 as uuid } from 'uuid';
+import { ParametrosRepo } from '../data/parametrosRepository';
+import { EtiquetaService } from '../services/etiquetaService';
 const router : Router  = Router();
+const path = require('path');
+const fs = require('fs');
+const printer = require('pdf-to-printer');
+
+const EtiquetaServ = new EtiquetaService();
 
 //#region OBTENER
 router.get('/obtener', async (req:Request, res:Response) => {
@@ -72,5 +80,45 @@ router.delete('/eliminar/:id', async (req:Request, res:Response) => {
 });
 //#endregion
 
+//#region IMPRESION
+// Impresión silenciosa de etiquetas en papel térmico (58mm/80mm): sin diálogo del
+// navegador, mismo patrón que files/imprimir-pdf (pdf-to-printer, scale:'noscale').
+// El flujo A4 sigue generándose en el front (abre el visor de PDF para revisar antes
+// de imprimir) y no pasa por acá.
+router.post('/imprimir-pdf', async (req: Request, res: Response) => {
+  try {
+    const { etiqueta, productos } = req.body;
+    const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
+
+    if (!parametrosImpresion?.impresora) {
+      res.status(400).send('No hay una impresora configurada en Parámetros de Impresión.');
+      return;
+    }
+
+    const pdfBuffer = await EtiquetaServ.generarEtiquetasPDF(etiqueta, productos);
+
+    const tempName = `etiquetas_${uuid()}.pdf`;
+    const tempPath = path.join(__dirname, '..', 'temp', tempName);
+
+    fs.writeFileSync(tempPath, pdfBuffer);
+
+    await printer.print(tempPath, {
+      printer: parametrosImpresion.impresora,
+      orientation: 'portrait',
+      scale: 'noscale'
+    });
+
+    fs.unlinkSync(tempPath);
+
+    res.status(200).json('OK');
+
+  } catch (error: any) {
+    let msg = "Error al imprimir las etiquetas.";
+    logger.error(msg + " " + error.message);
+    res.status(500).send(msg);
+  }
+});
+//#endregion
+
 // Export the router
-export default router; 
+export default router;
