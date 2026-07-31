@@ -141,7 +141,7 @@ class CuentasCorsRepository{
         }
     }
 
-    async EntregaDinero(data:any): Promise<string>{
+    async EntregaDinero(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
 
         const connection = await db.getConnection();
 
@@ -251,7 +251,7 @@ class CuentasCorsRepository{
             await connection.commit();
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Nueva entrega de dinero al cliente: " + data.idCliente);
+            await SesionServ.RegistrarMovimiento("Nueva entrega de dinero al cliente: " + data.idCliente, usuarioId, puestoId);
 
             return "OK";
 
@@ -264,7 +264,7 @@ class CuentasCorsRepository{
         }
     }
 
-    async RevertirEntregaDinero(data:any): Promise<string>{
+    async RevertirEntregaDinero(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
         try {
             //Iniciamos una transaccion
@@ -372,7 +372,7 @@ class CuentasCorsRepository{
             }
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega);
+            await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega, usuarioId, puestoId);
 
             //Mandamos la transaccion
             await connection.commit();
@@ -388,7 +388,7 @@ class CuentasCorsRepository{
         }
     }
 
-    async ActualizarEstadoPago(data:any): Promise<string>{
+    async ActualizarEstadoPago(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
         try {
 
@@ -443,7 +443,7 @@ class CuentasCorsRepository{
             }
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta);
+            await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta, usuarioId, puestoId);
 
             //Mandamos la transaccion
             await connection.commit();
@@ -459,7 +459,7 @@ class CuentasCorsRepository{
         }
     }
 
-    async RevertirEstadoPago(idVenta:string): Promise<string>{
+    async RevertirEstadoPago(idVenta:string, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
@@ -546,7 +546,7 @@ class CuentasCorsRepository{
                 }
             }
 
-            await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta);
+            await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta, usuarioId, puestoId);
             await connection.commit();
             return "OK";
 

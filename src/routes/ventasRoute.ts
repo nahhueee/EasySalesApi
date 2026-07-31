@@ -7,6 +7,7 @@ import {logger} from '../logger/logger'
 import { TerminalServ } from '../services/terminalService';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
+import { datosAuditoria } from '../utils/auditoria';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -50,7 +51,8 @@ router.get('/totales-pagas-impagas/:id', async (req:Request, res:Response, next)
 //#region ABM
 router.post('/agregar', async (req:Request, res:Response, next) => {
     try{
-        res.json(await VentasRepo.Agregar(req.body));
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await VentasRepo.Agregar(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         next(new AppError(
@@ -74,7 +76,8 @@ router.post('/guardar-factura', async (req:Request, res:Response, next) => {
 
 router.put('/eliminar', async (req:Request, res:Response, next) => {
     try{
-        res.json(await VentasRepo.Eliminar(req.body.venta, req.body.observacion));
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await VentasRepo.Eliminar(req.body.venta, req.body.observacion, usuarioId, puestoId));
 
     } catch(error:any){
         // Guard fiscal (Lote 5): si el repo ya armó un AppError específico

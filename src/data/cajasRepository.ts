@@ -97,23 +97,23 @@ class CajasRepository{
     //#endregion
 
     //#region ABM
-    async Finalizar(data:any): Promise<string>{
+    async Finalizar(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
             const consulta = " UPDATE cajas " +
                              " SET finalizada = ? " +
                              " WHERE id = ?";
-            
+
             const parametros = [data.finalizada, data.idCaja];
-            
+
             await connection.query(consulta, parametros);
 
             //Registramos el Movimiento
             if(data.finalizada == 1)
-                await SesionServ.RegistrarMovimiento("Finalizar la caja nro " + data.idCaja);
+                await SesionServ.RegistrarMovimiento("Finalizar la caja nro " + data.idCaja, usuarioId, puestoId);
             else
-                await SesionServ.RegistrarMovimiento("Revertir la caja nro " + data.idCaja);
+                await SesionServ.RegistrarMovimiento("Revertir la caja nro " + data.idCaja, usuarioId, puestoId);
 
 
             return "OK";
@@ -125,7 +125,7 @@ class CajasRepository{
         }
     }
 
-    async Agregar(data:any): Promise<number>{
+    async Agregar(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<number>{
         const connection = await db.getConnection();
         
         try {
@@ -140,7 +140,7 @@ class CajasRepository{
             const idCaja = resultado.insertId;
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Agregar Nueva Caja nro " + idCaja);
+            await SesionServ.RegistrarMovimiento("Agregar Nueva Caja nro " + idCaja, usuarioId, puestoId);
 
             //Terminamos retornando el id de la caja insertada
             return idCaja;
@@ -152,7 +152,7 @@ class CajasRepository{
         }
     }
 
-    async Modificar(data:any): Promise<string>{
+    async Modificar(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
         
         try {
@@ -167,7 +167,7 @@ class CajasRepository{
             await connection.query(consulta, parametros);
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Modificar Caja nro " + data.id);
+            await SesionServ.RegistrarMovimiento("Modificar Caja nro " + data.id, usuarioId, puestoId);
 
             return "OK";
 
@@ -178,9 +178,9 @@ class CajasRepository{
         }
     }
 
-    async Eliminar(id:string): Promise<string>{
+    async Eliminar(id:string, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
             let consulta = " UPDATE cajas " +
                            " SET fechaBaja = ? " +
@@ -189,7 +189,7 @@ class CajasRepository{
             await connection.query(consulta, [new Date(), id]);
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Caja nro " + id);
+            await SesionServ.RegistrarMovimiento("Eliminar Caja nro " + id, usuarioId, puestoId);
 
             return "OK";
 

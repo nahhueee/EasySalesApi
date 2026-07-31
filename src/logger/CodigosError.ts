@@ -25,6 +25,12 @@ export enum CodigoError {
   AUTH_NO_HABILITADO = 'AUTH_NO_HABILITADO',
 
   /**
+   * Login de usuario (admin) fallido: usuario inexistente o password incorrecta.
+   * Severidad: BAJA — error de usuario esperado, no requiere atención del operador.
+   */
+  LOGIN_INVALIDO = 'LOGIN_INVALIDO',
+
+  /**
    * Los certificados AFIP no están configurados o están vencidos.
    * Causa típica: instalación nueva sin WSAA, vencimiento anual.
    * Severidad: ALTA — sin certificados no se puede facturar.
@@ -182,6 +188,7 @@ export const SEVERIDAD: Record<CodigoError, Severidad> = {
   [CodigoError.VALIDACION]:                'BAJA',
   [CodigoError.TERMINAL_NO_ENCONTRADA]:    'BAJA',
   [CodigoError.AUTH_NO_HABILITADO]:        'BAJA',
+  [CodigoError.LOGIN_INVALIDO]:            'BAJA',
   [CodigoError.CERTIFICADOS]:              'ALTA',
   [CodigoError.AFIP_TIMEOUT]:              'ALTA',
   [CodigoError.AFIP_NO_DISPONIBLE]:        'ALTA',

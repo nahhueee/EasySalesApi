@@ -87,6 +87,12 @@ class HeartbeatService {
                 erroresRecientes,
                 ultimoBackupFecha:         estadoBackup?.fecha ?? null,
                 ultimoBackupOk:            estadoBackup !== null ? (estadoBackup.ok ? 1 : 0) : null,
+                // ⚠️ Hardcodeado: el panel de flota muestra este número y por lo tanto miente
+                // para toda instalación LAN. El nombre del campo es legacy y usa "terminal"
+                // con el sentido de máquina; lo que cuenta en realidad son PUESTOS.
+                // Corrección pendiente: COUNT sobre la tabla local `puestos` filtrando por
+                // ultimo_visto reciente. Ver architecture.md §12.3.1 y §16.1.
+                // El nombre de la clave no se cambia: es contrato con AdminServer.
                 terminalesLanActivas:      1,
                 eventoActualizacion,
                 eventoActualizacionFront,

@@ -249,6 +249,16 @@ function compararVersiones(local: string, remote: string): number {
 
 function ObtenerTerminalLocal(): string | null {
   const ROOT_DIR = process.cwd();
+  // ⚠️ Esta lectura es deliberadamente independiente de la del backend (src/services/
+  // terminalService.ts). No unificarla: el updater no se distribuye en el ZIP de release
+  // (build-update.js empaqueta solo dist/src y package.json), así que este archivo es el
+  // que quedó instalado en cada comercio y solo se actualiza yendo presencialmente.
+  // Acoplarlo a src/ lo volvería frágil ante cambios que sí se distribuyen.
+  //
+  // Por la misma razón, `terminal.json` es un contrato congelado: renombrarlo deja a las
+  // instalaciones existentes sin canal de actualización. Ver architecture.md §9.5 y §16.7.
+  //
+  // "Terminal" acá = instalación completa (unidad de licencia), no una máquina.
   const TERMINAL_FILE = path.join(ROOT_DIR, 'terminal.json');
 
     if (!fs.existsSync(TERMINAL_FILE)) throw new Error("No se ecuentra archivo terminal.json");

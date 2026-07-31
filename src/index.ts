@@ -172,7 +172,10 @@ app.get('/easysales/version', (req, res) =>{
 // Expone el terminal_id al frontend para el gate de canary y telemetría.
 // Devuelve { terminal: string } si terminal.json existe y está bien formado, o 404 si no hay terminal.
 app.get('/easysales/terminal', (req, res) => {
-    const TERMINAL_FILE = path.join(__dirname, '..', 'terminal.json');
+    // process.cwd(), no __dirname/'..': el resto de los servicios que leen terminal.json
+    // (terminalService, heartbeatService, errorBatchService, adminService) y el updater usan
+    // process.cwd(). Bajo PM2 no son necesariamente el mismo path — ver handoff_pr1_identidad_puesto.md §6.
+    const TERMINAL_FILE = path.join(process.cwd(), 'terminal.json');
     if (!fs.existsSync(TERMINAL_FILE)) {
         return res.status(404).json({ terminal: null });
     }

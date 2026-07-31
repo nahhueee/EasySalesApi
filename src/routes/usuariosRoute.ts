@@ -2,7 +2,21 @@ import {UsuariosRepo} from '../data/usuariosRepository';
 import { SesionServ } from '../services/sesionService';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
 const router : Router  = Router();
+
+router.post('/login', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await UsuariosRepo.Login(req.body.idUsuario, req.body.pass));
+
+    } catch(error:any){
+        // Preservar el AppError del repo (401 + mensaje específico) — no envolverlo en
+        // un genérico, si no el front nunca sabe si falló por credenciales o por otra cosa.
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al intentar iniciar sesión.', 500, { modulo: 'usuariosRoute.login' }, error));
+    }
+});
 
 //#region OBTENER
 router.post('/obtener', async (req:Request, res:Response) => {

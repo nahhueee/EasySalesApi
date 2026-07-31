@@ -1,6 +1,7 @@
 import {CuentasRepo} from '../data/cuentasCorsRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
+import { datosAuditoria } from '../utils/auditoria';
 const router : Router  = Router();
 
 router.post('/movimientos', async (req:Request, res:Response) => {
@@ -51,8 +52,9 @@ router.get('/saldo-ledger/:idCliente', async (req:Request, res:Response) => {
 });
 
 router.put('/entrega', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await CuentasRepo.EntregaDinero(req.body));
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CuentasRepo.EntregaDinero(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         let msg = "No se pudo realizar el proceso de entrega de dinero.";
@@ -62,8 +64,9 @@ router.put('/entrega', async (req:Request, res:Response) => {
 });
 
 router.put('/revertir-entrega', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await CuentasRepo.RevertirEntregaDinero(req.body));
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CuentasRepo.RevertirEntregaDinero(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         let msg = "No se pudo realizar la reversión de la última entrega.";
@@ -73,8 +76,9 @@ router.put('/revertir-entrega', async (req:Request, res:Response) => {
 });
 
 router.put('/actualizar-pago', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await CuentasRepo.ActualizarEstadoPago(req.body));
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CuentasRepo.ActualizarEstadoPago(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         let msg = "No se pudo actualizar el estado de pago.";
@@ -83,8 +87,9 @@ router.put('/actualizar-pago', async (req:Request, res:Response) => {
     }
 });
 router.get('/revertir-pago/:idVenta', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await CuentasRepo.RevertirEstadoPago(req.params.idVenta));
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CuentasRepo.RevertirEstadoPago(req.params.idVenta, usuarioId, puestoId));
 
     } catch(error:any){
         let msg = "No se pudo revertir el pago de la venta.";

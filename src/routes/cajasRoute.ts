@@ -3,6 +3,7 @@ import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
+import { datosAuditoria } from '../utils/auditoria';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -37,7 +38,8 @@ router.get('/obtener-caja/:id', async (req:Request, res:Response, next) => {
 //#region ABM
 router.put('/finalizar', async (req:Request, res:Response, next) => {
     try{
-        res.json(await CajasRepo.Finalizar(req.body));
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CajasRepo.Finalizar(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         next(new AppError(
@@ -52,7 +54,8 @@ router.put('/finalizar', async (req:Request, res:Response, next) => {
 
 router.post('/agregar', async (req:Request, res:Response, next) => {
     try{
-        res.json(await CajasRepo.Agregar(req.body));
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CajasRepo.Agregar(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         next(new AppError(
@@ -67,7 +70,8 @@ router.post('/agregar', async (req:Request, res:Response, next) => {
 
 router.put('/modificar', async (req:Request, res:Response, next) => {
     try{
-        res.json(await CajasRepo.Modificar(req.body));
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CajasRepo.Modificar(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         next(new AppError(CodigoError.INTERNAL_ERROR, `Error al intentar modificar la caja nro ${req.body.id}.`, 500, { modulo: 'cajasRoute.modificar' }, error));
@@ -76,7 +80,8 @@ router.put('/modificar', async (req:Request, res:Response, next) => {
 
 router.delete('/eliminar/:id', async (req:Request, res:Response, next) => {
     try{
-        res.json(await CajasRepo.Eliminar(req.params.id));
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CajasRepo.Eliminar(req.params.id, usuarioId, puestoId));
 
     } catch(error:any){
         next(new AppError(CodigoError.INTERNAL_ERROR, `Error al intentar eliminar la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.eliminar' }, error));

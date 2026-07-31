@@ -197,7 +197,7 @@ class VentasRepository{
     //#endregion
 
     //#region ABM
-    async Agregar(venta:Venta): Promise<string>{
+    async Agregar(venta:Venta, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
 
         try {
@@ -264,7 +264,7 @@ class VentasRepository{
             // "CUENTA CORRIENTE" y "SALDO A FAVOR" no generan haber — el saldo corrido
             // los absorbe (ver documentos/handoff_implementacion_devoluciones_nc.md).
             if(venta.cliente.id !== 1){
-                await SesionServ.RegistrarMovimiento("Nueva entrada de venta para el cliente " + venta.cliente.nombre);
+                await SesionServ.RegistrarMovimiento("Nueva entrada de venta para el cliente " + venta.cliente.nombre, usuarioId, puestoId);
 
                 // 1. Debe = total (la deuda de la venta)
                 await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
@@ -344,7 +344,7 @@ class VentasRepository{
         }
     }
 
-    async Eliminar(venta:any, obs:string): Promise<string>{
+    async Eliminar(venta:any, obs:string, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
 
         try {
@@ -422,7 +422,7 @@ class VentasRepository{
             }
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Venta nro " + venta.id);
+            await SesionServ.RegistrarMovimiento("Eliminar Venta nro " + venta.id, usuarioId, puestoId);
 
             //Mandamos la transaccion
             await connection.commit();
