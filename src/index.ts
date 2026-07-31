@@ -41,7 +41,16 @@ const server = http.createServer(app);
 app.set('port', process.env.Port || config.port);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(cors());
+
+// CORS: sólo la versión web corre en un navegador real (Angular HttpClient).
+// La app de escritorio (Tauri) usa su cliente HTTP nativo — no pasa por el
+// webview, no manda Origin, y CORS no protege nada ahí. Ver Lote 1.3, Fase 2.
+if (config.web) {
+    app.use(cors({ origin: 'https://creationserver.com' }));
+} else {
+    app.use(cors());
+}
+
 app.use(express.static(path.join(__dirname, 'upload')));
 
 if(!config.produccion){
@@ -55,9 +64,11 @@ if(!config.produccion){
 }
 
 //setings SocketIo
+// Mismo criterio que el CORS de Express (ver arriba): sólo la versión web
+// necesita restricción real.
 const io = socketIo(server, {
     cors: {
-      origin: "*", 
+      origin: config.web ? 'https://creationserver.com' : '*',
       methods: ["GET", "POST", "PUT", "DELETE"],
     },
 });
