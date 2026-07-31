@@ -88,6 +88,14 @@ export enum CodigoError {
   NOT_FOUND = 'NOT_FOUND',
 
   /**
+   * Intento de eliminar una venta facturada (con CAE). El único camino
+   * para una venta con CAE es emitir una Nota de Crédito.
+   * Severidad: BAJA — regla de negocio esperada, no es un bug.
+   * Ver documentos/handoff_fase2_correcciones.md, Lote 5.
+   */
+  VENTA_FACTURADA_REQUIERE_NC = 'VENTA_FACTURADA_REQUIERE_NC',
+
+  /**
    * Error interno no categorizado.
    * Causa típica: excepción inesperada, bug en código.
    * Severidad: ALTA — requiere investigación.
@@ -183,6 +191,7 @@ export const SEVERIDAD: Record<CodigoError, Severidad> = {
   [CodigoError.ADMIN_SERVER_ERROR]:        'MEDIA',
   [CodigoError.APPCLIENTE_CREACION_ERROR]: 'MEDIA',
   [CodigoError.NOT_FOUND]:                 'BAJA',
+  [CodigoError.VENTA_FACTURADA_REQUIERE_NC]: 'BAJA',
   [CodigoError.INTERNAL_ERROR]:            'ALTA',
   // Operacionales
   [CodigoError.HEARTBEAT_FALLIDO]:         'IGNORAR_REMOTO',

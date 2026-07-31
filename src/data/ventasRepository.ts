@@ -1,4 +1,5 @@
 import db from '../db';
+import { ResultSetHeader } from 'mysql2';
 import { Venta } from '../models/Venta';
 import { Cliente } from '../models/Cliente';
 import { pagoVenta } from '../models/PagoVenta';
@@ -12,6 +13,8 @@ import { SesionServ } from '../services/sesionService';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { DetallePago } from '../models/DetallePago';
 import { TipoPago } from '../models/TipoPago';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
 const moment = require('moment');
 
 class VentasRepository{
@@ -198,9 +201,6 @@ class VentasRepository{
         const connection = await db.getConnection();
 
         try {
-            //Obtenemos el proximo nro de venta a insertar
-            venta.id = await ObtenerUltimaVenta(connection);
-
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
@@ -216,8 +216,10 @@ class VentasRepository{
                 }
             }
 
-            //Insertamos la venta
-            await InsertVenta(connection,venta);
+            //Insertamos la venta. venta.id se asigna acá (insertId de AUTO_INCREMENT) y
+            //se usa de acá en adelante para detalles, factura y cuenta corriente — no mover
+            //ningún uso de venta.id por encima de esta línea.
+            venta.id = await InsertVenta(connection,venta);
 
             //insertamos los datos del pago de la venta
             venta.pago.idVenta = venta.id;
@@ -298,8 +300,8 @@ class VentasRepository{
             //Insertamos los detalles de la venta
             for (const element of  venta.detalles) {
                 element.idVenta = venta.id;
-                InsertDetalleVenta(connection, element);
-                ActualizarInventario(connection, element, "-")
+                await InsertDetalleVenta(connection, element);
+                await ActualizarInventario(connection, element, "-")
             };
 
             //Actualizamos el total de ventas caja
@@ -346,6 +348,23 @@ class VentasRepository{
         const connection = await db.getConnection();
 
         try {
+            // Guard fiscal (Lote 5, Fase 2): una venta con CAE no se elimina, se acredita
+            // con una Nota de Crédito. La UI ya no ofrece el botón (ver ventas.component.ts
+            // mostrarEliminar/mostrarNC), esto es la validación equivalente en el backend
+            // para no depender solo del front.
+            const [facturaRows] = await connection.query(
+                "SELECT cae FROM ventas_factura WHERE idVenta = ? AND cae IS NOT NULL",
+                [venta.id]
+            );
+            if ((facturaRows as any[]).length > 0) {
+                throw new AppError(
+                    CodigoError.VENTA_FACTURADA_REQUIERE_NC,
+                    'Esta venta está facturada (tiene CAE). No se puede eliminar: emití una Nota de Crédito en su lugar.',
+                    400,
+                    { modulo: 'ventasRepository.Eliminar', idVenta: venta.id }
+                );
+            }
+
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
@@ -366,9 +385,9 @@ class VentasRepository{
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [venta.total, venta.idCaja]);
 
             //Actualizamos el inventario
-            venta.detalles.forEach(element => {
-                ActualizarInventario(connection, element, "+")
-            });
+            for (const element of venta.detalles) {
+                await ActualizarInventario(connection, element, "+")
+            }
 
             // Libreta completa (PR B, 2026-07-03): revertir exactamente lo que Agregar posteó.
             // Agregar posteó: debe=total + haber por cada pago real (no CC/SAF).
@@ -550,31 +569,14 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 }
 
 //#region INSERT
-async function ObtenerUltimaVenta(connection):Promise<number>{
+async function InsertVenta(connection, venta):Promise<number>{
     try {
-        const rows = await connection.query(" SELECT id FROM ventas ORDER BY id DESC LIMIT 1 ");
-        let resultado:number = 0;
+        const consulta = " INSERT INTO ventas(idCaja, idCliente, fecha, hora, total, idLista) " +
+                         " VALUES(?, ?, ?, ?, ?, ?) ";
 
-        if([rows][0][0].length==0){
-            resultado = 1;
-        }else{
-            resultado = rows[0][0].id + 1;
-        }
-
-        return resultado;
-
-    } catch (error) {
-        throw error; 
-    }
-}
-
-async function InsertVenta(connection, venta):Promise<void>{
-    try {
-        const consulta = " INSERT INTO ventas(id, idCaja, idCliente, fecha, hora, total, idLista) " +
-                         " VALUES(?, ?, ?, ?, ?, ?, ?) ";
-
-        const parametros = [venta.id, venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total, venta.idLista ?? null];
-        await connection.query(consulta, parametros);
+        const parametros = [venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total, venta.idLista ?? null];
+        const [resultado] = await connection.query(consulta, parametros) as [ResultSetHeader, any];
+        return resultado.insertId;
 
     } catch (error) {
         throw error;

@@ -1,4 +1,5 @@
 import db from '../db';
+import { ResultSetHeader } from 'mysql2';
 import { Caja } from '../models/Caja';
 import { SesionServ } from '../services/sesionService';
 const moment = require('moment');
@@ -128,14 +129,15 @@ class CajasRepository{
         const connection = await db.getConnection();
         
         try {
-            let idCaja:number = await ObtenerUltimaCaja(connection);
-            
-            const consulta = " INSERT INTO cajas(id, idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada) " +
-                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            
-            const parametros = [idCaja, data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0];
-            
-            await connection.query(consulta, parametros);
+            const consulta = " INSERT INTO cajas(idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada) " +
+                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?)";
+
+            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0];
+
+            //id real de AUTO_INCREMENT (antes se "adivinaba" con ObtenerUltimaCaja, sin
+            //transacción ni lock — dos cajeros abriendo caja al mismo tiempo podían chocar)
+            const [resultado] = await connection.query<ResultSetHeader>(consulta, parametros);
+            const idCaja = resultado.insertId;
 
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Agregar Nueva Caja nro " + idCaja);
@@ -261,24 +263,6 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 
     } catch (error) {
         throw error;
-    }
-}
-
-async function ObtenerUltimaCaja(connection):Promise<number>{
-    try {
-        const rows = await connection.query(" SELECT id FROM cajas ORDER BY id DESC LIMIT 1 ");
-        let resultado:number = 0;
-
-        if([rows][0][0].length==0){
-            resultado = 1;
-        }else{
-            resultado = rows[0][0].id + 1;
-        }
-
-        return resultado;
-        
-    } catch (error) {
-        throw error; 
     }
 }
 

@@ -77,6 +77,11 @@ router.put('/eliminar', async (req:Request, res:Response, next) => {
         res.json(await VentasRepo.Eliminar(req.body.venta, req.body.observacion));
 
     } catch(error:any){
+        // Guard fiscal (Lote 5): si el repo ya armó un AppError específico
+        // (ej. VENTA_FACTURADA_REQUIERE_NC), lo dejamos pasar tal cual —
+        // envolverlo en el genérico de abajo le esconde el mensaje al usuario.
+        if (error instanceof AppError) return next(error);
+
         next(new AppError(
             CodigoError.INTERNAL_ERROR,
             'Error al intentar eliminar la venta.',

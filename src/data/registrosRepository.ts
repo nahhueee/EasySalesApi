@@ -1,5 +1,6 @@
 import moment from 'moment';
 import db from '../db';
+import { ResultSetHeader } from 'mysql2';
 import { RegistroDetalle } from '../models/DetalleRegistro';
 import { Registro } from '../models/Registro';
 import { SesionServ } from '../services/sesionService';
@@ -77,23 +78,23 @@ class RegistrosRepository{
             if(existe)//Verificamos si ya existe un registro con la misma desc
                 return "Ya existe un registro con la misma descripcion.";
 
-            //Obtenemos el proximo nro de registro a insertar
-            data.id = await ObtenerUltimoRegistro(connection);
-
             //Iniciamos una transaccion
             await connection.beginTransaction();
-            
+
             const consulta = "INSERT INTO registros(descripcion,prioridad,total) VALUES (?,?,?)";
             const parametros = [data.descripcion.toUpperCase(), data.prioridad, data.total];
-            
-            await connection.query(consulta, parametros);
+
+            //id real de AUTO_INCREMENT (antes se "adivinaba" con ObtenerUltimoRegistro,
+            //que con dos altas concurrentes podía linkear los detalles al id equivocado)
+            const [resultado] = await connection.query<ResultSetHeader>(consulta, parametros);
+            data.id = resultado.insertId;
 
             //eliminamos los registros
             await connection.query('DELETE FROM registros_detalle WHERE idRegistro = ?', [data.id]);
             //Insertamos los detalles del registro
             for (const element of  data.detalles) {
                 element.idRegistro = data.id;
-                InsertDetalleRegistro(connection, element);
+                await InsertDetalleRegistro(connection, element);
             };
 
             //Registramos el Movimiento
@@ -136,7 +137,7 @@ class RegistrosRepository{
             //Insertamos los detalles del registro
             for (const element of  data.detalles) {
                 element.idRegistro = data.id;
-                InsertDetalleRegistro(connection, element);
+                await InsertDetalleRegistro(connection, element);
             };
 
             //Registramos el Movimiento
@@ -236,24 +237,6 @@ async function ValidarExistencia(connection, data:any, modificando:boolean):Prom
         if(rows[0].length > 0) return true;
 
         return false;
-    } catch (error) {
-        throw error; 
-    }
-}
-
-async function ObtenerUltimoRegistro(connection):Promise<number>{
-    try {
-        const rows = await connection.query(" SELECT id FROM registros ORDER BY id DESC LIMIT 1 ");
-        let resultado:number = 0;
-
-        if([rows][0][0].length==0){
-            resultado = 1;
-        }else{
-            resultado = rows[0][0].id + 1;
-        }
-
-        return resultado;
-
     } catch (error) {
         throw error; 
     }
