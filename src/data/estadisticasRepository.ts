@@ -52,7 +52,9 @@ class EstadisticasRepository{
         
         try {
             const { fechaDesde, fechaHasta } = obtenerRangosFecha(filtros);
-            let adicional = filtros.caja && filtros.caja != 0 ? " AND v.idCaja = " + filtros.caja : " AND (v.fecha BETWEEN ? AND ?) ";
+            const usarCaja = filtros.caja && filtros.caja != 0;
+            let adicional = usarCaja ? " AND v.idCaja = ? " : " AND (v.fecha BETWEEN ? AND ?) ";
+            let paramsAdicional: any[] = usarCaja ? [filtros.caja] : [fechaDesde, fechaHasta];
 
             //#region CONSULTAS
             const consultaTotales =  " SELECT  " +
@@ -70,7 +72,7 @@ class EstadisticasRepository{
                                      adicional;
 
 
-            const [resultTotales] = await connection.query(consultaTotales, [fechaDesde, fechaHasta]);
+            const [resultTotales] = await connection.query(consultaTotales, paramsAdicional);
 
 
             const consultaCantidad = " SELECT  " +
@@ -100,7 +102,7 @@ class EstadisticasRepository{
                                     " ) t;";
 
 
-            const [resultCantidad] = await connection.query(consultaCantidad, [fechaDesde, fechaHasta]);
+            const [resultCantidad] = await connection.query(consultaCantidad, paramsAdicional);
             //#endregion
 
            return {
@@ -191,11 +193,11 @@ class EstadisticasRepository{
         const connection = await db.getConnection();
         
         try {
-            let queryRegistros = await ObtenerAcumuladosQuery(filtros,false);
-            let queryTotal = await ObtenerAcumuladosQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerAcumuladosQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerAcumuladosQuery(filtros,true);
 
-            const [rows] = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const [rows] = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             const registros:TotalAcumulado[] = [];
 
@@ -426,27 +428,32 @@ async function TransformarDatosConColor(inputArray:any){
     }
 }
 
-async function ObtenerAcumuladosQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerAcumuladosQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
 
         // #region FILTROS
-        if (filtros.nombre != null && filtros.nombre != "") 
-            filtro += " AND p.nombre LIKE '%"+ filtros.nombre + "%' ";
+        if (filtros.nombre != null && filtros.nombre != ""){
+            filtro += " AND p.nombre LIKE ? ";
+            params.push("%" + filtros.nombre + "%");
+        }
 
         if(filtros.caja == 0){
             const { fechaDesde, fechaHasta } = obtenerRangosFecha(filtros);
             filtro += " AND (p.soloPrecio = 1 or p.codigo = '*') ";
-            filtro += " AND (v.fecha BETWEEN '" + fechaDesde + "' AND '" + fechaHasta + "')";
+            filtro += " AND (v.fecha BETWEEN ? AND ?)";
+            params.push(fechaDesde, fechaHasta);
         }else{
-            filtro += " AND v.idCaja = " + filtros.caja;
+            filtro += " AND v.idCaja = ?";
+            params.push(filtros.caja);
         }
         // #endregion
 
@@ -457,8 +464,10 @@ async function ObtenerAcumuladosQuery(filtros:any,esTotal:boolean):Promise<strin
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
 
         //Arma la Query con el paginado y los filtros correspondientes
@@ -467,17 +476,17 @@ async function ObtenerAcumuladosQuery(filtros:any,esTotal:boolean):Promise<strin
             " INNER JOIN productos p ON p.id = vd.idProducto " +
             " INNER JOIN ventas v ON v.id = vd.idVenta " +
             " INNER JOIN cajas c ON c.id = v.idCaja " +
-            " WHERE c.fechaBaja IS NULL AND v.fechaBaja IS NULL " + 
+            " WHERE c.fechaBaja IS NULL AND v.fechaBaja IS NULL " +
             filtro +
             " GROUP BY vd.idProducto " +
             " ORDER BY total DESC " +
             paginado +
             endCount;
 
-            return query;
-            
+            return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

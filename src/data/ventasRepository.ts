@@ -479,11 +479,15 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         //#endregion
 
         // #region FILTROS
-        if (filtros.caja != 0)
-            filtro += " AND v.idCaja = " + filtros.caja;
+        if (filtros.caja != 0){
+            filtro += " AND v.idCaja = ?";
+            params.push(filtros.caja);
+        }
 
-        if (filtros.cliente != 0)
-            filtro += " AND v.idCliente = " + filtros.cliente;
+        if (filtros.cliente != 0){
+            filtro += " AND v.idCliente = ?";
+            params.push(filtros.cliente);
+        }
 
 
         //Pagas/Impagas miran el estado de pago pero excluyen las anuladas: una venta dada de baja
@@ -511,10 +515,12 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
                 " SELECT v.*, " +

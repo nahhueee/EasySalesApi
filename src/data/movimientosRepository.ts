@@ -9,12 +9,12 @@ class MovimientosRepository{
         
         try {
              //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const rows = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
             
             return {total:resultado[0][0].total, registros:rows[0]};
 
@@ -108,21 +108,25 @@ class MovimientosRepository{
     //#endregion
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
-        
+
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
 
         // #region FILTROS
-        filtro = " WHERE idCaja = " + filtros.caja;
+        filtro = " WHERE idCaja = ?";
+        params.push(filtros.caja);
 
+        // tipoMovimiento es un enum acotado a 1/otro, mapeado a literales fijos — no hay
+        // input de usuario libre en el string, seguro sin parametrizar.
         if (filtros.tipoMovimiento != 0)
             filtro += " AND tipoMovimiento = " + (filtros.tipoMovimiento == 1 ? "'ENTRADA'" : "'SALIDA'");
         // #endregion
@@ -134,10 +138,12 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
                 " SELECT * " +
@@ -147,7 +153,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 paginado +
                 endCount;
 
-        return query;
+        return {query, params};
             
     } catch (error) {
         throw error; 

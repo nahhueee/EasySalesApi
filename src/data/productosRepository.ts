@@ -12,12 +12,12 @@ class ProductosRepository{
 
         try {
              //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const [rows] = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const [rows] = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             const productos:Producto[] = [];
 
@@ -816,7 +816,15 @@ function ResolverPrecioBase(data: any): any {
     };
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+// Columnas habilitadas para ORDER BY. No se puede parametrizar un nombre de
+// columna con "?" — se valida contra esta allowlist en vez de concatenar
+// filtros.orden directo (ver Lote 3, Fase 2 de seguridad).
+const COLUMNAS_ORDEN: Record<string, string> = {
+    id: 'id', nombre: 'nombre', codigo: 'codigo', cantidad: 'cantidad',
+    costo: 'costo', precio: 'precio', vencimiento: 'vencimiento', faltante: 'faltante',
+};
+
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
@@ -826,19 +834,23 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
 
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
 
         // #region FILTROS
         if (filtros.busqueda != null && filtros.busqueda != "") {
             switch (filtros.tipoBusqueda) {
                 case 'ambos':
-                    filtro += " AND (p.nombre LIKE '%"+ filtros.busqueda + "%' OR p.codigo LIKE '%" + filtros.busqueda + "%')";
+                    filtro += " AND (p.nombre LIKE ? OR p.codigo LIKE ?)";
+                    params.push("%" + filtros.busqueda + "%", "%" + filtros.busqueda + "%");
                     break;
                 case 'codigo':
-                    filtro += " AND p.codigo = " + filtros.busqueda + "";
+                    filtro += " AND p.codigo = ?";
+                    params.push(filtros.busqueda);
                     break;
                 case 'descripcion':
-                    filtro += " AND LOWER(p.nombre) LIKE '%" + filtros.busqueda + "%'";
+                    filtro += " AND LOWER(p.nombre) LIKE ?";
+                    params.push("%" + filtros.busqueda + "%");
                     break;
             }
         }
@@ -852,8 +864,9 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         // #endregion
 
         // #region ORDENAMIENTO
-        if (filtros.orden != null && filtros.orden != ""){
-            orden += " ORDER BY p."+ filtros.orden + " " + filtros.direccion;
+        const direccion = filtros.direccion != null && filtros.direccion.toString().toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+        if (filtros.orden != null && filtros.orden != "" && COLUMNAS_ORDEN[filtros.orden]){
+            orden += " ORDER BY p." + COLUMNAS_ORDEN[filtros.orden] + " " + direccion;
         }else if(filtros.vencimientos != null && filtros.vencimientos == true){
             orden += " ORDER BY p.vencimiento ASC";
         }
@@ -869,8 +882,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
 
         //Arma la Query con el paginado y los filtros correspondientes
@@ -884,7 +899,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 paginado +
                 endCount;
 
-        return query;
+        return {query, params};
 
     } catch (error) {
         throw error;

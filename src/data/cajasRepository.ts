@@ -11,12 +11,12 @@ class CajasRepository{
         
         try {
              //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const [rows] = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const [rows] = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             const cajas:Caja[] = [];
 
@@ -68,9 +68,9 @@ class CajasRepository{
         const connection = await db.getConnection();
         
         try {
-            let consulta = await ObtenerQuery(filtros,false);
-            const rows = await connection.query(consulta);
-           
+            let { query: consulta, params } = await ObtenerQuery(filtros,false);
+            const rows = await connection.query(consulta, params);
+
             const row = rows[0][0];
             let caja:Caja = new Caja({
                 id: row['id'],
@@ -200,30 +200,35 @@ class CajasRepository{
     //#endregion
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
-
-       
 
         // #region FILTROS
         if (filtros.idCaja != null && filtros.idCaja != 0)
             {
-                filtro += " AND c.id = " + filtros.idCaja;
+                filtro += " AND c.id = ?";
+                params.push(filtros.idCaja);
             }
         else
         {
-            if (filtros.responsable != null && filtros.responsable != 0) filtro += " AND c.idResponsable = " + filtros.responsable;
+            if (filtros.responsable != null && filtros.responsable != 0){
+                filtro += " AND c.idResponsable = ?";
+                params.push(filtros.responsable);
+            }
+            // moment().format('YYYY-MM-DD') siempre devuelve un string fijo (o "Invalid date"),
+            // no hay input de usuario libre acá — seguro sin parametrizar.
             if (filtros.inicio != null && filtros.inicio != "") filtro += " AND c.fecha >= '" + moment(filtros.inicio).format('YYYY-MM-DD') + "' ";
             if (filtros.fin != null && filtros.fin != "") filtro += " AND c.fecha <= '" + moment(filtros.fin).format('YYYY-MM-DD') + "' ";
-        
+
             filtro += (filtros.finalizada) ? " AND c.finalizada = 1 " : " AND c.finalizada = 0 ";
         }
         // #endregion
@@ -235,10 +240,12 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
                 " SELECT c.*, COALESCE(u.nombre, 'ELIMINADO') responsable, SUM(c.inicial + c.ventas + c.entradas - c.salidas) total " +
@@ -250,10 +257,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
                 " ORDER BY c.id DESC" +
                 paginado +
                 endCount;
-        return query;
-            
+        return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

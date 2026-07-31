@@ -10,12 +10,12 @@ class UsuariosRepository{
         
         try {
             //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const rows = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             return {total:resultado[0][0].total, registros:rows[0]};
 
@@ -28,10 +28,10 @@ class UsuariosRepository{
 
     async ObtenerUsuario(filtros:any){
         const connection = await db.getConnection();
-        
+
         try {
-            let consulta = await ObtenerQuery(filtros,false);
-            const rows = await connection.query(consulta);
+            let { query: consulta, params } = await ObtenerQuery(filtros,false);
+            const rows = await connection.query(consulta, params);
             
             return rows[0][0];
 
@@ -75,12 +75,12 @@ class UsuariosRepository{
         
         try {
             //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQueryMovimientos(filtros,false);
-            let queryTotal = await ObtenerQueryMovimientos(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQueryMovimientos(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQueryMovimientos(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const rows = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const rows = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             return {total:resultado[0][0].total, registros:rows[0]};
 
@@ -185,20 +185,23 @@ class UsuariosRepository{
     //#endregion
 }
 
-async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
 
         // #region FILTROS
-        if(filtros.idUsuario != null && filtros.idUsuario != 0)
-            filtro += " AND um.idUsuario = '" + filtros.idUsuario + "'";
+        if(filtros.idUsuario != null && filtros.idUsuario != 0){
+            filtro += " AND um.idUsuario = ?";
+            params.push(filtros.idUsuario);
+        }
         // #endregion
 
         if (esTotal)
@@ -208,10 +211,12 @@ async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<stri
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
             " SELECT um.*, u.nombre, c.nombre cargo" +
@@ -223,31 +228,36 @@ async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<stri
             " ORDER BY um.fecha DESC" +
             paginado +
             endCount;
-        
-        return query;
-            
+
+        return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
 
         // #region FILTROS
-        if (filtros.busqueda != null && filtros.busqueda != "") 
-            filtro += " AND u.nombre LIKE '%"+ filtros.busqueda + "%' ";
-        
-        if(filtros.usuario != null && filtros.usuario != 0)
-            filtro += " AND u.id = '" + filtros.usuario + "'";
+        if (filtros.busqueda != null && filtros.busqueda != ""){
+            filtro += " AND u.nombre LIKE ? ";
+            params.push("%" + filtros.busqueda + "%");
+        }
+
+        if(filtros.usuario != null && filtros.usuario != 0){
+            filtro += " AND u.id = ?";
+            params.push(filtros.usuario);
+        }
         // #endregion
 
         if (esTotal)
@@ -257,10 +267,12 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
             " SELECT u.*, c.nombre cargo " +
@@ -271,11 +283,11 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             " ORDER BY u.id DESC" +
             paginado +
             endCount;
-        
-        return query;
-            
+
+        return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 

@@ -11,11 +11,14 @@ class EtiquetasRepository{
         
         try {
             let query = " SELECT * FROM etiquetas ";
-            if (descripcion != null && descripcion != "") 
-                query += " WHERE descripcion LIKE '%"+ descripcion + "%' ";
+            let params:any[] = [];
+            if (descripcion != null && descripcion != ""){
+                query += " WHERE descripcion LIKE ? ";
+                params.push("%" + descripcion + "%");
+            }
             query += "ORDER BY id DESC"
 
-            const rows = await connection.query(query);
+            const rows = await connection.query(query, params);
             return rows[0];
 
         } catch (error:any) {

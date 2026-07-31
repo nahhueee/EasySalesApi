@@ -12,12 +12,12 @@ class RegistrosRepository{
         
         try {
              //Obtengo la query segun los filtros
-            let queryRegistros = await ObtenerQuery(filtros,false);
-            let queryTotal = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
 
             //Obtengo la lista de registros y el total
-            const [rows] = await connection.query(queryRegistros);
-            const resultado = await connection.query(queryTotal);
+            const [rows] = await connection.query(queryRegistros, paramsRegistros);
+            const resultado = await connection.query(queryTotal, paramsTotal);
 
             const registros:Registro[] = [];
            
@@ -46,8 +46,8 @@ class RegistrosRepository{
         const connection = await db.getConnection();
         
         try {
-            let consulta = await ObtenerQuery(filtros,false);
-            const rows = await connection.query(consulta);
+            let { query: consulta, params } = await ObtenerQuery(filtros,false);
+            const rows = await connection.query(consulta, params);
            
             const row = rows[0][0];
             let registro:Registro = new Registro({
@@ -172,22 +172,27 @@ class RegistrosRepository{
     //#endregion
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
+async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
         let filtro:string = "";
         let paginado:string = "";
-    
+
         let count:string = "";
         let endCount:string = "";
+        let params:any[] = [];
         //#endregion
 
         // #region FILTROS
-        if (filtros.busqueda != null && filtros.busqueda != "") 
-            filtro += " AND r.descripcion LIKE '%"+ filtros.busqueda + "%' ";
-        if (filtros.idRegistro != null && filtros.idRegistro != "") 
-            filtro += " AND r.id = "+ filtros.idRegistro;
+        if (filtros.busqueda != null && filtros.busqueda != ""){
+            filtro += " AND r.descripcion LIKE ? ";
+            params.push("%" + filtros.busqueda + "%");
+        }
+        if (filtros.idRegistro != null && filtros.idRegistro != ""){
+            filtro += " AND r.id = ?";
+            params.push(filtros.idRegistro);
+        }
         // #endregion
 
         if (esTotal)
@@ -197,10 +202,12 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null)
-                paginado = " LIMIT " + filtros.tamanioPagina + " OFFSET " + ((filtros.pagina - 1) * filtros.tamanioPagina);
+            if (filtros.tamanioPagina != null){
+                paginado = " LIMIT ? OFFSET ? ";
+                params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
+            }
         }
-            
+
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
             " SELECT r.* " +
@@ -211,10 +218,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<string>{
             paginado +
             endCount;
 
-        return query;
-            
+        return {query, params};
+
     } catch (error) {
-        throw error; 
+        throw error;
     }
 }
 
