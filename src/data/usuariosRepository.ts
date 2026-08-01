@@ -89,9 +89,15 @@ class UsuariosRepository{
 
     async UsuariosSelector(){
         const connection = await db.getConnection();
-        
+
         try {
-            const [rows] = await connection.query('SELECT id, nombre FROM usuarios');
+            // Se agrega idCargo/cargo (mismo JOIN que Login) para que el login pueda
+            // distinguir admin/empleado sin una segunda llamada a ObtenerUsuario.
+            const [rows] = await connection.query(
+                " SELECT u.id, u.nombre, u.idCargo, c.nombre cargo " +
+                " FROM usuarios u " +
+                " LEFT JOIN cargos c on c.id = u.idCargo "
+            );
             return [rows][0];
 
         } catch (error:any) {
