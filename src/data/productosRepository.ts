@@ -87,7 +87,7 @@ class ProductosRepository{
 
             let consulta = `SELECT p.id, p.codigo, p.nombre, p.costo, ${selectPrecio} AS precio, p.unidad, p.imagen
                              FROM productos p ${join}
-                             WHERE p.id <> 1 AND p.soloPrecio = 0 `;
+                             WHERE p.id <> 1 AND p.soloPrecio = 0 AND p.fechaBaja IS NULL `;
             const params:any[] = usarLista ? [idLista] : [];
 
             if (filtro.metodo == 'codigo'){
@@ -472,6 +472,21 @@ class ProductosRepository{
         const connection = await db.getConnection();
 
         try {
+            // Si el producto tiene historial de precios o ventas asociadas → baja lógica (preserva trazabilidad).
+            // Si no tiene historial → eliminación física.
+            const [refs] = await connection.query<any[]>(
+                `SELECT
+                    (SELECT COUNT(*) FROM producto_precio_historial WHERE idProducto = ?) AS historial,
+                    (SELECT COUNT(*) FROM ventas_detalle WHERE idProducto = ?) AS ventas`,
+                [id, id]
+            );
+
+            if (refs[0].historial > 0 || refs[0].ventas > 0) {
+                await connection.query("UPDATE productos SET fechaBaja = NOW() WHERE id = ?", [id]);
+                await SesionServ.RegistrarMovimiento("Dar de baja Producto nro " + id);
+                return "BAJA";
+            }
+
             // Eliminar precios asociados primero (FK)
             await connection.query("DELETE FROM productos_precios WHERE idProducto = ?", [id]);
             await connection.query("DELETE FROM productos WHERE id = ?", [id]);
@@ -893,7 +908,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
                 " SELECT p.*, c.nombre AS categoriaNombre, c.color AS categoriaColor " +
                 " FROM productos p " +
                 " LEFT JOIN categorias c ON c.id = p.idCategoria AND c.id <> 1 " +
-                " WHERE p.id <> 1 " +
+                " WHERE p.id <> 1 AND p.fechaBaja IS NULL " +
                 filtro +
                 orden +
                 paginado +
