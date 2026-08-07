@@ -17,5 +17,7 @@ import { Request } from 'express';
 export function datosAuditoria(req: Request): { usuarioId: string | null, puestoId: string | null } {
     const usuarioId = req.header('x-usuario-id') || null;
     const puestoId = req.header('x-puesto-id') || null;
+    // TEMP — sacar tras diagnosticar PR 1
+    console.log('[Auditoría/DEBUG]', req.method, req.originalUrl, '→', { usuarioId, puestoId });
     return { usuarioId, puestoId };
 }
