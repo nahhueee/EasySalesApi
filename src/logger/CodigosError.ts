@@ -108,6 +108,15 @@ export enum CodigoError {
    */
   INTERNAL_ERROR = 'INTERNAL_ERROR',
 
+  /**
+   * Error capturado por el ErrorHandler global de Angular (excepción de JS/
+   * framework en el front, no una respuesta HTTP — esas ya quedan logueadas
+   * server-side por errorMiddleware). Reportado vía POST /logs/front.
+   * Severidad: MEDIA — visible en AdminServer, pero sin la urgencia de un
+   * error de backend real. Ver global-error-handler.service.ts (EasySalesApp).
+   */
+  FRONT_ERROR = 'FRONT_ERROR',
+
   // ── Operacionales / background ────────────────────────────────────────────
 
   /**
@@ -200,6 +209,7 @@ export const SEVERIDAD: Record<CodigoError, Severidad> = {
   [CodigoError.NOT_FOUND]:                 'BAJA',
   [CodigoError.VENTA_FACTURADA_REQUIERE_NC]: 'BAJA',
   [CodigoError.INTERNAL_ERROR]:            'ALTA',
+  [CodigoError.FRONT_ERROR]:               'MEDIA',
   // Operacionales
   [CodigoError.HEARTBEAT_FALLIDO]:         'IGNORAR_REMOTO',
   [CodigoError.BACKUP_GENERACION_ERROR]:   'CRITICA',

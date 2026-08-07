@@ -115,6 +115,42 @@ router.delete('/', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+// POST /logs/front — recibe errores capturados por el ErrorHandler global de
+// Angular (excepciones de JS/framework, NO respuestas HTTP: esas ya quedan
+// logueadas server-side por errorMiddleware cuando ocurren).
+// Flujo "background" documentado en AppError.ts: logueamos directo con
+// logger.error() en vez de lanzar un AppError + next(), porque esto no es un
+// error de ESTE request — es un ack de que se registró el error del cliente.
+// Devolver 500 acá confundiría al front (que llama a este mismo endpoint
+// para reportar errores).
+router.post('/front', (req: Request, res: Response) => {
+  const { message, context, stack } = req.body ?? {};
+
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ message: 'message es requerido' });
+    return;
+  }
+
+  // Trazabilidad: qué terminal/usuario disparó el error (mismos headers de
+  // auditoría que setea api.service.ts en el front, ver headersAuditoria()).
+  const puestoId  = req.header('X-Puesto-Id')  ?? undefined;
+  const usuarioId = req.header('X-Usuario-Id') ?? undefined;
+
+  // NO seteamos route/method con datos de ESTE request (POST /logs/front):
+  // esos campos son para la ruta del backend donde ocurrió el error, y acá
+  // siempre sería este mismo endpoint de reporte — dato inútil y engañoso.
+  // Si el front quiere indicar en qué pantalla ocurrió, va dentro de context.
+  logger.error({
+    type:    'FRONT_ERROR',
+    code:    CodigoError.FRONT_ERROR,
+    message,
+    context: { ...(context ?? {}), puestoId, usuarioId },
+    stack:   typeof stack === 'string' ? stack : undefined,
+  });
+
+  res.status(201).json({ ok: true });
+});
+
 
 // Export the router
 export default router; 
