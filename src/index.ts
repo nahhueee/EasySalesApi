@@ -88,6 +88,7 @@ import actualizacionRuta from './routes/actualizacionRoute';
 import backupRoute from './routes/backupRoute';
 import usuariosRuta from './routes/usuariosRoute';
 import clientesRuta from './routes/clientesRoute';
+import proveedoresRuta from './routes/proveedoresRoute';
 import rubrosRuta from './routes/rubrosRoute';
 import productosRuta from './routes/productosRoute';
 import ventasRuta from './routes/ventasRoute';
@@ -106,6 +107,7 @@ import registrosRuta from './routes/registrosRoute';
 app.use('/easysales/update', actualizacionRuta)
 app.use('/easysales/usuarios', usuariosRuta);
 app.use('/easysales/clientes', clientesRuta);
+app.use('/easysales/proveedores', proveedoresRuta);
 app.use('/easysales/rubros', rubrosRuta);
 app.use('/easysales/productos', productosRuta);
 app.use('/easysales/ventas', ventasRuta);

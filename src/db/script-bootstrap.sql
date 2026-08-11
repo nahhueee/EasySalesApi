@@ -66,6 +66,40 @@ CREATE TABLE clientes (
     nombre VARCHAR(100)
 );
 
+CREATE TABLE proveedores (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    razonSocial VARCHAR(150) NULL,
+    cuit VARCHAR(13) NULL,
+    telefono VARCHAR(30) NULL,
+    email VARCHAR(100) NULL,
+    direccion VARCHAR(200) NULL,
+    fechaBaja DATETIME NULL
+);
+
+-- Sin FOREIGN KEY a proveedores.id a propósito: ninguna tabla de este script usa FKs
+-- (ni siquiera cuenta_corriente_movimientos->clientes, que ni figura acá). Se mantiene
+-- la misma convención; el constraint real lo agrega la migración correspondiente.
+CREATE TABLE proveedor_cuenta_movimientos (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    idProveedor INT UNSIGNED NOT NULL,
+    fecha DATE NOT NULL,
+    hora VARCHAR(5) NOT NULL,
+    tipo VARCHAR(20) NOT NULL,
+    descripcion VARCHAR(200) NULL,
+    comprobante VARCHAR(30) NULL,
+    fechaVencimiento DATE NULL,
+    debe DECIMAL(10,2) NOT NULL DEFAULT 0,
+    haber DECIMAL(10,2) NOT NULL DEFAULT 0,
+    saldo DECIMAL(10,2) NOT NULL,
+    idTipoPago INT NULL,
+    idCaja INT NULL,
+    idReferencia INT UNSIGNED NULL,
+    idCompra INT NULL,
+    anulado TINYINT(1) NOT NULL DEFAULT 0,
+    INDEX idx_proveedor_movimientos (idProveedor, id)
+);
+
 CREATE TABLE registros (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     descripcion VARCHAR(80),
@@ -115,16 +149,24 @@ CREATE TABLE cajas (
     ventas DECIMAL(10,2),
     entradas DECIMAL(10,2),
     salidas DECIMAL(10,2),
-    finalizada BOOLEAN
+    finalizada BOOLEAN,
+    -- Etiqueta informativa sobre plata ya declarada en `inicial`, no entra en ningún cálculo
+    -- del arqueo (ver models/Caja.ts: total = inicial+ventas+entradas-salidas). NULL = el
+    -- comercio no usa el fondo de proveedores; 0 = lo usa y lo dejó en cero. No colapsar.
+    fondoProveedores DECIMAL(10,2) NULL
 )
 ENGINE=InnoDB;
 
+-- NOTA: idEntrega/idVentaPagoDetalle (cobro de fiado a caja) ya faltaban acá antes de este
+-- cambio — mismo drift script-bootstrap.sql vs migraciones que ya existía, fuera de alcance
+-- de Proveedores. Se agrega solo idProveedorMovimiento, que es lo que corresponde a este módulo.
 CREATE TABLE cajas_movimientos (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     idCaja INT,
     tipoMovimiento VARCHAR(10),
     monto DECIMAL(10,2),
-    descripcion VARCHAR(150)
+    descripcion VARCHAR(150),
+    idProveedorMovimiento INT UNSIGNED NULL
 );
 
 CREATE TABLE ventas (
@@ -252,7 +294,8 @@ VALUES
 ('dias', 'Lunes, Martes, Viernes'),
 ('hora', '20:30'),
 ('avisoNvaVersion', 'true'),
-('actualizado', 'false');
+('actualizado', 'false'),
+('proveedores', 'false');
 
 INSERT INTO parametros_facturacion(condicion, puntoVta, cuil, razon, direccion)
 VALUES ('monotributista', 0, 0, '', '');

@@ -32,10 +32,23 @@ const printer = new PdfPrinter(fonts);
 
 export class EtiquetaService {
 
-  /** Genera el Buffer del PDF de etiquetas térmicas (58mm/80mm) listo para imprimir. */
-  async generarEtiquetasPDF(etiqueta: Etiqueta, productos: ProductoImprimir[]): Promise<Buffer> {
-    const docDefinition = await this.armarArchivoTermico(etiqueta, productos);
-    return this.generarBufferPDF(docDefinition);
+  /**
+   * Genera el Buffer del PDF de etiquetas térmicas (58mm/80mm) listo para imprimir,
+   * junto con la orientación real de la página generada.
+   *
+   * orientation acá NO describe el tamaño del PDF: es una instrucción que pdf-to-printer
+   * (SumatraPDF) usa para ROTAR el contenido a la fuerza si no coincide con la forma real
+   * de la página. altoPagina es dinámico (depende de cantidad de etiquetas/campos) y puede
+   * terminar siendo MENOR que el ancho del papel (58/80mm) -> la página queda apaisada.
+   * Si en ese caso se manda 'portrait' fijo (como en tickets, que siempre son angostos y
+   * altos), SumatraPDF rota 90° el contenido para forzarlo a portrait -> sale vertical en
+   * vez de horizontal. Por eso acá se calcula según la forma real, no se copia el valor
+   * fijo que usan los tickets (filesRoute.ts).
+   */
+  async generarEtiquetasPDF(etiqueta: Etiqueta, productos: ProductoImprimir[]): Promise<{ buffer: Buffer, orientation: 'portrait' | 'landscape' }> {
+    const { docDefinition, orientation } = await this.armarArchivoTermico(etiqueta, productos);
+    const buffer = await this.generarBufferPDF(docDefinition);
+    return { buffer, orientation };
   }
 
   private generarBufferPDF(documentDefinition: object): Promise<Buffer> {
@@ -85,10 +98,17 @@ export class EtiquetaService {
     const altoCuadrito = this.estimarAltoCuadrito(etiqueta, tamanios);
     const altoPagina = Math.max(cuadritos.length * altoCuadrito + 10, 60);
 
+    //La orientación tiene que coincidir con la forma real de la página, no forzarse
+    //(ver comentario en generarEtiquetasPDF).
+    const orientation: 'portrait' | 'landscape' = altoPagina >= anchoPapel ? 'portrait' : 'landscape';
+
     return {
-      pageSize: { width: anchoPapel, height: altoPagina },
-      content: contenido,
-      pageMargins: [4, 6, 4, 0]
+      docDefinition: {
+        pageSize: { width: anchoPapel, height: altoPagina },
+        content: contenido,
+        pageMargins: [4, 6, 4, 0]
+      },
+      orientation
     };
   }
 
@@ -133,6 +153,14 @@ export class EtiquetaService {
     if (etiqueta.mNombre) alto += tamanios.nombreTamanio + 5;
     if (etiqueta.mVencimiento) alto += tamanios.vencimientoTamanio + 5;
 
+    //Colchón de seguridad: esto es una aproximación del alto real que ocupa una tarjeta
+    //al renderizarse (no modela el line-height/leading real de la fuente), así que
+    //subestima un poco. Con pocas etiquetas no se nota (hay un piso de altura mínima),
+    //pero con varias el error se acumula y puede terminar empujando el total por encima
+    //del alto de página calculado. Sumado a "unbreakable" en generarCuadrito(), en el peor
+    //caso la última tarjeta se corre entera a una página nueva en vez de cortarse a la mitad.
+    alto += 6;
+
     return alto;
   }
 
@@ -153,12 +181,16 @@ export class EtiquetaService {
         body: [[
           {
             stack: [
+              //Margen superior angostado (5->2) solo acá, en térmico: sumado al paddingTop:3
+              //de la tabla (ver layout más abajo) da 5pt arriba, igualando el margen de 5pt
+              //que ya tenía el precio abajo. El PDF A4 (impresion-etiqueta.service.ts) queda
+              //sin tocar a pedido explícito - decisión consciente, no un olvido.
               ...(plantilla.titulo != '' ? [{
                 text: plantilla.titulo,
                 color: plantilla.tituloColor,
                 alignment: plantilla.tituloAlineacion,
                 fontSize: tamanios.tituloTamanio,
-                margin: [0, 5, 0, 5]
+                margin: [0, 2, 0, 5]
               }] : []),
 
               ...(plantilla.mOferta ? [{
@@ -229,7 +261,10 @@ export class EtiquetaService {
         paddingTop: () => 3,
         paddingBottom: () => 0
       },
-      margin: [0, 0, 0, 5]
+      margin: [0, 0, 0, 5],
+      //Si la tarjeta no entra en lo que queda de página, pdfmake la manda entera a la
+      //siguiente en vez de partir el contenido a la mitad (ver estimarAltoCuadrito()).
+      unbreakable: true
     };
   }
 

@@ -12,6 +12,8 @@ export class Caja{
     salidas? : number;
     total? : number;
     finalizada? : boolean;
+    // Etiqueta informativa (no entra en `total`): NULL = no usa el fondo, 0 = lo usa en cero.
+    fondoProveedores? : number | null;
 
     constructor(data?: any) {
         if (data) {
@@ -27,6 +29,7 @@ export class Caja{
             this.salidas = parseFloat(data.salidas);
             this.total = this.inicial + this.ventas + this.entradas - this.salidas;
             this.finalizada = data.finalizada == 1 ? true : false;
+            this.fondoProveedores = data.fondoProveedores != null ? parseFloat(data.fondoProveedores) : null;
         }
     }
 }

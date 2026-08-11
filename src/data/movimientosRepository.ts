@@ -42,17 +42,20 @@ class MovimientosRepository{
             //Insertamos el movimiento
             // idEntrega / idVentaPagoDetalle: referencia opcional al cobro de fiado que originó
             // este movimiento (cobro parcial o pago completo respectivamente), para poder
-            // localizarlo y revertirlo con precisión. Nulos en los usos existentes (ABM manual
-            // de movimientos de caja).
-            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle) " +
-                             " VALUES(?, ?, ?, ?, ?, ?) ";
+            // localizarlo y revertirlo con precisión. idProveedorMovimiento: mismo criterio para
+            // pagos a proveedores (Fase 2 PR6) — apunta a la fila de proveedor_cuenta_movimientos
+            // (pago o su ajuste de anulación). Todos nulos en el uso existente (ABM manual de
+            // movimientos de caja).
+            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle,idProveedorMovimiento) " +
+                             " VALUES(?, ?, ?, ?, ?, ?, ?) ";
             const parametros = [
                 data.idCaja,
                 data.tipoMovimiento.toUpperCase(),
                 data.monto,
                 data.descripcion,
                 data.idEntrega ?? null,
-                data.idVentaPagoDetalle ?? null
+                data.idVentaPagoDetalle ?? null,
+                data.idProveedorMovimiento ?? null
             ];
             const [resultado] = await conn.query(consulta, parametros) as [ResultSetHeader, any];
 
@@ -83,6 +86,18 @@ class MovimientosRepository{
 
         try {
             if(!conexionExterna) await conn.beginTransaction();
+
+            // Blindaje: un movimiento de caja que vino de un pago a proveedor no se borra desde
+            // el ABM manual (eso desincroniza el ledger de proveedores con la caja). Se verifica
+            // contra la base, no contra lo que mande el front, porque el front puede tener bugs
+            // y la base no puede quedar inconsistente (handoff_proveedores_fase2.md, PR6).
+            const [movRows] = await conn.query(
+                "SELECT idProveedorMovimiento FROM cajas_movimientos WHERE id = ?", [data.id]
+            ) as [any[], any];
+            if (movRows[0]?.idProveedorMovimiento != null) {
+                if(!conexionExterna) await conn.rollback();
+                return "Este movimiento corresponde a un pago a proveedor. Anulalo desde la cuenta del proveedor.";
+            }
 
             //Eliminamos el movimiento
             await conn.query("DELETE FROM cajas_movimientos WHERE id = ?", [data.id]);

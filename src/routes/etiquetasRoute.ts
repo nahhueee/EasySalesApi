@@ -95,16 +95,18 @@ router.post('/imprimir-pdf', async (req: Request, res: Response) => {
       return;
     }
 
-    const pdfBuffer = await EtiquetaServ.generarEtiquetasPDF(etiqueta, productos);
+    const { buffer: pdfBuffer, orientation } = await EtiquetaServ.generarEtiquetasPDF(etiqueta, productos);
 
     const tempName = `etiquetas_${uuid()}.pdf`;
     const tempPath = path.join(__dirname, '..', 'temp', tempName);
 
     fs.writeFileSync(tempPath, pdfBuffer);
 
+    //orientation se calcula según la forma real de la página (ver etiquetaService.ts) -
+    //a diferencia de tickets, acá NO siempre es 'portrait'.
     await printer.print(tempPath, {
       printer: parametrosImpresion.impresora,
-      orientation: 'portrait',
+      orientation,
       scale: 'noscale'
     });
 

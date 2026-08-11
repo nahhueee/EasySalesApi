@@ -23,7 +23,7 @@ import { CodigoError } from '../logger/CodigosError';
 import config from '../conf/app.config';
 import { unlink, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { createWriteStream } from 'fs';
 
 const moment  = require('moment');
@@ -230,13 +230,68 @@ function extraerMensajeError(data: any): any {
     return match ? match[1].trim() : data.replace(/<[^>]+>/g, ' ').trim();
 }
 
+// Cache del proceso: evita re-resolver en cada backup (cron corre seguido).
+// Se revalida con existsSync antes de reusar, así que una reinstalación de
+// MySQL que mueva el binario no deja el cache pisado permanentemente.
+let mysqldumpPathCache: string | null = null;
+
+/**
+ * Resuelve la ruta de mysqldump.exe sin asumir que está en el PATH del
+ * proceso. Necesario porque el backend corre bajo PM2 (daemon persistente
+ * lanzado al login del usuario, ver Instalador/scripts/setup-pm2.ps1): el
+ * PATH que PM2 propaga a sus hijos queda fijado en ese momento y no se
+ * refresca solo si MySQL se instala/reinstala/repara después — de ahí
+ * "spawn mysqldump ENOENT" en terminales donde mysqldump sí está instalado.
+ *
+ * Mismo problema ya resuelto para mysql.exe en
+ * Instalador/scripts/setup-mysql-bootstrap.ps1 (Find-MysqlExe): PATH primero,
+ * fallback a la carpeta estándar de instalación de MySQL Server.
+ */
+function ResolverRutaMysqldump(): string {
+    if (mysqldumpPathCache && existsSync(mysqldumpPathCache)) {
+        return mysqldumpPathCache;
+    }
+
+    // 1. ¿Está en el PATH del proceso actual?
+    try {
+        const salida = execSync('where mysqldump.exe', { encoding: 'utf-8' });
+        const primeraLinea = salida.split(/\r?\n/).find((l: string) => l.trim() !== '');
+        if (primeraLinea) {
+            mysqldumpPathCache = primeraLinea.trim();
+            return mysqldumpPathCache;
+        }
+    } catch {
+        // No está en PATH — seguimos con el fallback antes de fallar.
+    }
+
+    // 2. Fallback: carpeta estándar de instalación de MySQL Server.
+    const baseMysql = 'C:\\Program Files\\MySQL';
+    if (existsSync(baseMysql)) {
+        const versiones = fs.readdirSync(baseMysql).sort().reverse();
+        for (const version of versiones) {
+            const candidato = path.join(baseMysql, version, 'bin', 'mysqldump.exe');
+            if (existsSync(candidato)) {
+                mysqldumpPathCache = candidato;
+                return candidato;
+            }
+        }
+    }
+
+    throw new Error(
+        'No se encontró mysqldump.exe ni en PATH ni en C:\\Program Files\\MySQL\\*\\bin\\. ' +
+        '¿MySQL Server está instalado en esta máquina?'
+    );
+}
+
 async function GenerarBackup(backupPath: string): Promise<void> {
+    const mysqldumpPath = ResolverRutaMysqldump();
+
     return new Promise((resolve, reject) => {
         const args = ['-u', config.db.user];
         args.push(`-p${config.db.password}`);
         args.push(config.db.database);
 
-        const dumpProcess = spawn('mysqldump', args);
+        const dumpProcess = spawn(mysqldumpPath, args);
         const output      = createWriteStream(backupPath);
 
         dumpProcess.stdout.pipe(output);

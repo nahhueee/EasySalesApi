@@ -36,8 +36,9 @@ class CajasRepository{
                         entradas: row['entradas'],
                         salidas: row['salidas'],
                         finalizada: row['finalizada'],
+                        fondoProveedores: row['fondoProveedores'],
                     });
-                    
+
 
                     cajas.push(caja);
                   }
@@ -84,8 +85,9 @@ class CajasRepository{
                 entradas: row['entradas'],
                 salidas: row['salidas'],
                 finalizada: row['finalizada'],
+                fondoProveedores: row['fondoProveedores'],
             });
-            
+
             return caja;
 
         } catch (error:any) {
@@ -129,10 +131,10 @@ class CajasRepository{
         const connection = await db.getConnection();
         
         try {
-            const consulta = " INSERT INTO cajas(idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada) " +
-                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?)";
+            const consulta = " INSERT INTO cajas(idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada, fondoProveedores) " +
+                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0];
+            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0, data.fondoProveedores ?? null];
 
             //id real de AUTO_INCREMENT (antes se "adivinaba" con ObtenerUltimaCaja, sin
             //transacción ni lock — dos cajeros abriendo caja al mismo tiempo podían chocar)
@@ -157,13 +159,18 @@ class CajasRepository{
         
         try {
                        
+            // fondoProveedores siempre viaja en el payload (con el valor anterior si el flag
+            // está apagado o no se tocó): igual que idLista en clientesRepository.Modificar,
+            // sin este fallback en el front, modificar cualquier otro campo de la caja le
+            // borraría silenciosamente el fondo que ya tenía asignado.
             const consulta = " UPDATE cajas " +
                              " SET idResponsable = ?, " +
                              "     fecha = ?, " +
-                             "     inicial = ? " +
+                             "     inicial = ?, " +
+                             "     fondoProveedores = ? " +
                              " WHERE id = ? ";
-            
-            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.inicial, data.id];
+
+            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.inicial, data.fondoProveedores ?? null, data.id];
             await connection.query(consulta, parametros);
 
             //Registramos el Movimiento
