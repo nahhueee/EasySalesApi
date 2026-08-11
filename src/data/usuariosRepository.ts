@@ -150,8 +150,21 @@ class UsuariosRepository{
         const connection = await db.getConnection();
 
         try {
+            // Guarda defensiva: varios call sites arman `accion` concatenando texto fijo +
+            // datos de negocio sin largo acotado (nombre de cliente, proveedor, usuario,
+            // descripción de registro, etc.). Si el resultado supera el ancho de la columna,
+            // el INSERT explota y aborta la transacción del caller entera (ver bug 2026-08-05:
+            // venta rechazada por "Data too long for column 'accion'" con cliente de nombre largo).
+            // Truncamos acá, en el único choke point de escritura, en vez de validar en cada
+            // uno de los ~15 call sites — usuarios_movimientos.accion es un log de auditoría,
+            // preferimos guardar el mensaje cortado a perder la operación de negocio completa.
+            const ACCION_MAX_LEN = 255; // debe coincidir con usuarios_movimientos.accion (ver migración 20260811160000)
+            const accionSegura = typeof accion === 'string' && accion.length > ACCION_MAX_LEN
+                ? accion.slice(0, ACCION_MAX_LEN)
+                : accion;
+
             const consulta = "INSERT INTO usuarios_movimientos(fecha, accion, idUsuario, idPuesto) VALUES (?, ?, ?, ?)";
-            const parametros = [moment().format('YYYY-MM-DD HH:mm:ss'), accion, idUsuario, idPuesto];
+            const parametros = [moment().format('YYYY-MM-DD HH:mm:ss'), accionSegura, idUsuario, idPuesto];
 
             await connection.query(consulta, parametros);
             return "OK";
