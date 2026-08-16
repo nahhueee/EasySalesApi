@@ -157,6 +157,100 @@ router.put('/anular-pago', async (req:Request, res:Response) => {
 });
 //#endregion
 
+//#region CUENTA / LIBRETA (Fase 3, PR7 — no mueve plata, solo visibilidad sobre el ledger)
+// Mismo patrón que cuentasCorsRoute.ts POST /movimientos: filtro paginado por body, no por
+// querystring, para no tener que serializar los chips de filtro a mano.
+router.post('/cuenta/movimientos', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProveedorCuentaRepo.ObtenerMovimientos(req.body));
+
+    } catch(error:any){
+        let msg = "Error al obtener los movimientos de la cuenta del proveedor.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.get('/cuenta/proximo-vencimiento/:idProveedor', async (req:Request, res:Response) => {
+    try{
+        const fechaVencimiento = await ProveedorCuentaRepo.ObtenerProximoVencimiento(Number(req.params.idProveedor));
+        res.json({ fechaVencimiento });
+
+    } catch(error:any){
+        let msg = "Error al obtener el próximo vencimiento del proveedor nro " + req.params.idProveedor + ".";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.post('/factura', async (req:Request, res:Response) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await ProveedorCuentaRepo.RegistrarFactura(req.body, usuarioId, puestoId));
+
+    } catch(error:any){
+        let msg = "Error al intentar registrar la factura de proveedor.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+// Cuántos pagos no anulados quedaron imputados a esta factura. El front lo consulta antes de
+// abrir el modal de confirmación de anular-factura, para mostrar el aviso correspondiente.
+router.get('/factura-pagos-imputados/:idMovimiento', async (req:Request, res:Response) => {
+    try{
+        const cantidad = await ProveedorCuentaRepo.ContarPagosImputados(Number(req.params.idMovimiento));
+        res.json({ cantidad });
+
+    } catch(error:any){
+        let msg = "Error al verificar los pagos imputados a la factura nro " + req.params.idMovimiento + ".";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.put('/anular-factura', async (req:Request, res:Response) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+
+        const tienePermiso = await TienePermisoBackend(usuarioId, ROLES_PAGOS_PROVEEDOR);
+        if (!tienePermiso) {
+            res.status(403).send("No tenés permiso para anular facturas de proveedores.");
+            return;
+        }
+
+        res.json(await ProveedorCuentaRepo.AnularFactura(req.body, usuarioId, puestoId));
+
+    } catch(error:any){
+        let msg = "Error al intentar anular la factura de proveedor.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+// Ajuste manual del saldo (documentos/plan_proveedores.md §5): corrige una deuda inicial mal
+// cargada, una diferencia de redondeo o una NC informal del proveedor. Mismo rol que
+// anular-pago/anular-factura: quien puede corregir el ledger a mano, no cualquiera.
+router.post('/ajuste', async (req:Request, res:Response) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+
+        const tienePermiso = await TienePermisoBackend(usuarioId, ROLES_PAGOS_PROVEEDOR);
+        if (!tienePermiso) {
+            res.status(403).send("No tenés permiso para registrar ajustes de proveedores.");
+            return;
+        }
+
+        res.json(await ProveedorCuentaRepo.RegistrarAjuste(req.body, usuarioId, puestoId));
+
+    } catch(error:any){
+        let msg = "Error al intentar registrar el ajuste de proveedor.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+//#endregion
+
 //#region PADRON AFIP
 // Mismo endpoint que usa Clientes (PadronServ.ConsultarContribuyente): la consulta es al
 // padrón de ARCA por CUIT, no depende de si el sujeto consultado es cliente o proveedor.

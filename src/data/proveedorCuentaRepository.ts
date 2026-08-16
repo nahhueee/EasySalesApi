@@ -271,6 +271,224 @@ class ProveedorCuentaRepository {
         }
     }
 
+    // Registra una compra a plazo (PR7 — Fase 3). A diferencia de RegistrarPago, no toca la
+    // caja ni MovimientosRepo: cargar una factura es solo un `debe` en el ledger, la plata no
+    // se mueve hasta que se paga. Abre su propia transacción porque no tiene un caller que
+    // ya la abra (a diferencia de RegistrarMovimiento).
+    async RegistrarFactura(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
+        const connection = await db.getConnection();
+
+        try {
+            await connection.beginTransaction();
+
+            const monto = Number(data.monto);
+            if (!(monto > 0)) {
+                await connection.rollback();
+                return "El monto debe ser mayor a 0.";
+            }
+
+            const [provRows] = await connection.query(
+                'SELECT id, nombre, fechaBaja FROM proveedores WHERE id = ?', [data.idProveedor]
+            ) as [any[], any];
+            const proveedor = provRows[0];
+
+            if (!proveedor || proveedor.fechaBaja) {
+                await connection.rollback();
+                return "El proveedor no existe o está dado de baja.";
+            }
+
+            let descripcion = `Factura de compra a proveedor ${proveedor.nombre}`;
+            if (data.observacion) descripcion += ` - ${data.observacion}`;
+
+            await this.RegistrarMovimiento(connection, {
+                idProveedor: data.idProveedor,
+                tipo: 'factura',
+                descripcion,
+                comprobante: data.comprobante ?? null,
+                fechaVencimiento: data.fechaVencimiento ?? null,
+                debe: monto
+            });
+
+            await connection.commit();
+
+            await SesionServ.RegistrarMovimiento(
+                `Se registró una factura de proveedor ${proveedor.nombre} por $${monto}`, usuarioId, puestoId
+            );
+
+            return "OK";
+
+        } catch (error:any) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Cuántos pagos no anulados quedaron imputados a una factura puntual (idReferencia). Lo usa
+    // el front ANTES de abrir el modal de confirmación de AnularFactura, para mostrar el aviso
+    // "esta factura tiene pagos asociados" (documentos/handoff_proveedores_fase3_4.md, PR7) sin
+    // tener que traer y filtrar toda la página de movimientos a mano.
+    async ContarPagosImputados(idMovimientoFactura:number): Promise<number> {
+        const connection = await db.getConnection();
+
+        try {
+            const [rows] = await connection.query(
+                `SELECT COUNT(*) AS cantidad FROM proveedor_cuenta_movimientos
+                 WHERE idReferencia = ? AND tipo = 'pago' AND anulado = 0`,
+                [idMovimientoFactura]
+            ) as [any[], any];
+
+            return Number(rows[0]?.cantidad ?? 0);
+
+        } catch (error) {
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Anula una factura. Mismo patrón que AnularPago: nunca DELETE, nunca se recalculan saldos
+    // históricos. Compensa con un 'ajuste' (haber = monto de la factura) e idReferencia apunta
+    // a la factura original, que queda marcada anulado=1 solo como flag de estado.
+    //
+    // No bloquea si tiene pagos imputados (idReferencia apuntando a ella): esos pagos quedan
+    // como pago a cuenta, es una decisión de producto documentada en el plan, no un error. El
+    // aviso previo lo maneja el front con ContarPagosImputados.
+    async AnularFactura(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
+        const connection = await db.getConnection();
+
+        try {
+            await connection.beginTransaction();
+
+            const [movRows] = await connection.query(
+                'SELECT id, idProveedor, debe, anulado FROM proveedor_cuenta_movimientos WHERE id = ? AND tipo = ?',
+                [data.idMovimiento, 'factura']
+            ) as [any[], any];
+            const movimiento = movRows[0];
+
+            if (!movimiento) {
+                await connection.rollback();
+                return "La factura no existe.";
+            }
+            if (Number(movimiento.anulado) === 1) {
+                await connection.rollback();
+                return "Esta factura ya fue anulada.";
+            }
+
+            await this.RegistrarMovimiento(connection, {
+                idProveedor: movimiento.idProveedor,
+                tipo: 'ajuste',
+                descripcion: `Anulación de factura #${movimiento.id}`,
+                haber: parseFloat(movimiento.debe),
+                idReferencia: movimiento.id
+            });
+
+            await connection.query(
+                'UPDATE proveedor_cuenta_movimientos SET anulado = 1 WHERE id = ?', [movimiento.id]
+            );
+
+            await connection.commit();
+
+            await SesionServ.RegistrarMovimiento(
+                `Se anuló una factura de proveedor nro ${movimiento.id}`, usuarioId, puestoId
+            );
+
+            return "OK";
+
+        } catch (error:any) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Ajuste manual en cualquiera de los dos sentidos (aumenta o disminuye la deuda). Vía para
+    // corregir una deuda inicial mal cargada, una diferencia de redondeo o una nota de crédito
+    // informal del proveedor (documentos/plan_proveedores.md §5, PR7). Requiere ADMINISTRADOR
+    // o ENCARGADO — el guard de rol lo hace el caller (proveedoresRoute), igual que anular-pago.
+    async RegistrarAjuste(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
+        const connection = await db.getConnection();
+
+        try {
+            await connection.beginTransaction();
+
+            const monto = Number(data.monto);
+            if (!(monto > 0)) {
+                await connection.rollback();
+                return "El monto debe ser mayor a 0.";
+            }
+            if (data.sentido !== 'debe' && data.sentido !== 'haber') {
+                await connection.rollback();
+                return "El sentido del ajuste no es válido.";
+            }
+            if (!data.observacion) {
+                await connection.rollback();
+                return "El ajuste requiere una observación.";
+            }
+
+            const [provRows] = await connection.query(
+                'SELECT id, nombre, fechaBaja FROM proveedores WHERE id = ?', [data.idProveedor]
+            ) as [any[], any];
+            const proveedor = provRows[0];
+
+            if (!proveedor || proveedor.fechaBaja) {
+                await connection.rollback();
+                return "El proveedor no existe o está dado de baja.";
+            }
+
+            await this.RegistrarMovimiento(connection, {
+                idProveedor: data.idProveedor,
+                tipo: 'ajuste',
+                descripcion: `Ajuste manual - ${data.observacion}`,
+                debe: data.sentido === 'debe' ? monto : undefined,
+                haber: data.sentido === 'haber' ? monto : undefined
+            });
+
+            await connection.commit();
+
+            await SesionServ.RegistrarMovimiento(
+                `Se registró un ajuste manual para el proveedor ${proveedor.nombre} por $${monto}`, usuarioId, puestoId
+            );
+
+            return "OK";
+
+        } catch (error:any) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Próxima fecha de vencimiento sin saldar, para el encabezado de la libreta. Si el saldo
+    // global ya está en 0 o a favor, no tiene sentido mostrar vencimientos: el ledger no imputa
+    // pago-a-factura (documentos/handoff_proveedores_fase3_4.md, §Límite conocido), así que un
+    // saldo <= 0 es la única señal confiable de "está al día" sin armar imputación real.
+    async ObtenerProximoVencimiento(idProveedor:number): Promise<string | null> {
+        const saldo = await this.ObtenerSaldo(idProveedor);
+        if (saldo <= 0) return null;
+
+        const connection = await db.getConnection();
+
+        try {
+            const [rows] = await connection.query(
+                `SELECT fechaVencimiento FROM proveedor_cuenta_movimientos
+                 WHERE idProveedor = ? AND tipo = 'factura' AND anulado = 0 AND fechaVencimiento IS NOT NULL
+                 ORDER BY fechaVencimiento ASC LIMIT 1`,
+                [idProveedor]
+            ) as [any[], any];
+
+            return rows[0]?.fechaVencimiento ?? null;
+
+        } catch (error) {
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
     // Anula un pago. Espejo de CuentasCorsRepository.RevertirEstadoPago: nunca borra el
     // movimiento original, lo compensa con un 'ajuste' y marca el original con anulado=1 solo
     // como flag de estado (el saldo de filas históricas no se recalcula nunca — se corrige
@@ -369,6 +587,18 @@ function ObtenerQueryMovimientos(filtros:any, esTotal:boolean):{query:string, pa
     let endCount:string = "";
     let params:any[] = [filtros.idProveedor];
 
+    // Chips "todos" / "facturas" / "pagos" de la libreta (documentos/handoff_proveedores_fase3_4.md,
+    // PR7). "todos" no filtra: siguen viéndose apertura/nota_credito/ajuste, que no tienen chip
+    // propio. Bindeado, no concatenado, mismo criterio que el resto del archivo.
+    let filtroTipo = "";
+    if (filtros.tipo === 'facturas') {
+        filtroTipo = " AND tipo = ? ";
+        params.push('factura');
+    } else if (filtros.tipo === 'pagos') {
+        filtroTipo = " AND tipo = ? ";
+        params.push('pago');
+    }
+
     if (esTotal){
         count = "SELECT COUNT(*) AS total FROM ( ";
         endCount = " ) as subquery";
@@ -383,6 +613,7 @@ function ObtenerQueryMovimientos(filtros:any, esTotal:boolean):{query:string, pa
         " SELECT id, fecha, hora, tipo, descripcion, comprobante, fechaVencimiento, debe, haber, saldo, idTipoPago, idCaja, idReferencia, anulado " +
         " FROM proveedor_cuenta_movimientos " +
         " WHERE idProveedor = ? " +
+        filtroTipo +
         " ORDER BY id DESC " +
         paginado +
         endCount;
