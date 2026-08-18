@@ -56,12 +56,15 @@ class ProductosRepository{
             imagen: row['imagen'],
             idCategoria: row['idCategoria'],
             soloPrecio: row['soloPrecio'],
+            idProveedor: row['idProveedor'],
         });
 
-        // No forman parte del modelo Producto (son del JOIN a categorias, ver ObtenerQuery) —
-        // se agregan sueltas para no ensuciar el constructor con campos que no le pertenecen.
+        // No forman parte del modelo Producto (son de los JOIN a categorias/proveedores, ver
+        // ObtenerQuery) — se agregan sueltas para no ensuciar el constructor con campos que no
+        // le pertenecen.
         (producto as any).categoriaNombre = row['categoriaNombre'];
         (producto as any).categoriaColor = row['categoriaColor'];
+        (producto as any).proveedorNombre = row['proveedorNombre'];
 
         return producto;
     }
@@ -355,8 +358,8 @@ class ProductosRepository{
             // Si vienen precios[], usamos los de la lista default; si no, usamos los campos top-level
             const precioBase = ResolverPrecioBase(data);
 
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio,idCategoria)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio,idCategoria,idProveedor)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -372,7 +375,8 @@ class ProductosRepository{
                                 data.unidad,
                                 data.imagen,
                                 data.soloPrecio ? 1 : 0,
-                                data.idCategoria || 0];
+                                data.idCategoria || 0,
+                                data.idProveedor || null];
 
             const [result]: any = await connection.query(consulta, parametros);
             const idProducto = result.insertId;
@@ -424,7 +428,8 @@ class ProductosRepository{
                                 unidad = ?,
                                 imagen = ?,
                                 soloPrecio = ?,
-                                idCategoria = ?
+                                idCategoria = ?,
+                                idProveedor = ?
                                 WHERE id = ?`;
 
             const parametros = [data.codigo.toUpperCase(),
@@ -442,6 +447,7 @@ class ProductosRepository{
                                 data.imagen,
                                 data.soloPrecio ? 1 : 0,
                                 data.idCategoria || 0,
+                                data.idProveedor || null,
                                 data.id];
 
             await connection.query(consulta, parametros);
@@ -554,6 +560,30 @@ class ProductosRepository{
                               WHERE id = ?`;
 
             const parametros = [data.idCategoria || 0, data.idProducto];
+
+            await connection.query(consulta, parametros);
+            return "OK";
+
+        } catch (error:any) {
+            throw error;
+        } finally{
+            connection.release();
+        }
+    }
+
+    // Relacionar un producto a un proveedor desde el modal de proveedores (Fase 4, PR 8) —
+    // espejo de AsignarCategoria, con la diferencia de NULL en vez de 0: productos.idCategoria
+    // usa 0 + fila sintética "Sin asignar" porque no hay FK real; idProveedor SÍ tiene FK
+    // (ver migración 20260817120000_productos_id_proveedor.js), así que "sin asignar" es NULL.
+    async AsignarProveedor(data:any): Promise<string>{
+        const connection = await db.getConnection();
+
+        try {
+            const consulta = `UPDATE productos SET
+                              idProveedor = ?
+                              WHERE id = ?`;
+
+            const parametros = [data.idProveedor || null, data.idProducto];
 
             await connection.query(consulta, parametros);
             return "OK";
@@ -876,6 +906,13 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         if (filtros.vencimientos != null && filtros.vencimientos == true)
             filtro += " AND p.vencimiento IS NOT NULL";
 
+        // Filtro por proveedor (Fase 4, PR 8): Faltantes y la pantalla de relacionar
+        // productos de Proveedores. Bindeado, no concatenado.
+        if (filtros.idProveedor != null && filtros.idProveedor != 0){
+            filtro += " AND p.idProveedor = ?";
+            params.push(filtros.idProveedor);
+        }
+
         // #endregion
 
         // #region ORDENAMIENTO
@@ -905,9 +942,10 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-                " SELECT p.*, c.nombre AS categoriaNombre, c.color AS categoriaColor " +
+                " SELECT p.*, c.nombre AS categoriaNombre, c.color AS categoriaColor, pr.nombre AS proveedorNombre " +
                 " FROM productos p " +
                 " LEFT JOIN categorias c ON c.id = p.idCategoria AND c.id <> 1 " +
+                " LEFT JOIN proveedores pr ON pr.id = p.idProveedor " +
                 " WHERE p.id <> 1 AND p.fechaBaja IS NULL " +
                 filtro +
                 orden +

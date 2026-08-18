@@ -6,6 +6,7 @@ export class Cliente {
     condicionIva?:number;
     razonSocial?:string;
     direccion?:string;
+    telefono?:string;
     idLista?:number;
 
     constructor(data?: any) {
@@ -17,6 +18,7 @@ export class Cliente {
           this.condicionIva = data.condicionIva;
           this.razonSocial = data.razonSocial;
           this.direccion = data.direccion;
+          this.telefono = data.telefono;
           this.idLista = data.idLista;
         }
     }

@@ -99,7 +99,7 @@ class PresupuestosRepository {
             const offset = ((filtros.pagina ?? 1) - 1) * limit;
 
             const queryRegistros = `
-                SELECT p.*, COALESCE(c.nombre, 'ELIMINADO') AS cliente
+                SELECT p.*, COALESCE(c.nombre, 'ELIMINADO') AS cliente, c.telefono AS clienteTelefono
                 FROM presupuestos p
                 LEFT JOIN clientes c ON c.id = p.idCliente
                 WHERE 1 = 1 ${filtro}
@@ -131,7 +131,7 @@ class PresupuestosRepository {
                     p.total       = parseFloat(row['total']);
                     p.estado      = row['estado'];
                     p.idVentaGenerada = row['idVentaGenerada'];
-                    p.cliente     = new Cliente({ id: row['idCliente'], nombre: row['cliente'] });
+                    p.cliente     = new Cliente({ id: row['idCliente'], nombre: row['cliente'], telefono: row['clienteTelefono'] });
                     presupuestos.push(p);
                 }
             }

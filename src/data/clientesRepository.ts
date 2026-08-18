@@ -47,7 +47,7 @@ class ClientesRepository{
         const connection = await db.getConnection();
 
         try {
-            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva, direccion, idLista FROM clientes WHERE fechaBaja IS NULL');
+            const [rows] = await connection.query('SELECT id, nombre, razonSocial, tipoDocumento, nroDocumento, condicionIva, direccion, telefono, idLista FROM clientes WHERE fechaBaja IS NULL');
             return [rows][0];
 
         } catch (error:any) {
@@ -76,7 +76,7 @@ class ClientesRepository{
                     return "Ya existe un cliente con el mismo documento.";
             }
 
-            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial, direccion, idLista) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            const consulta = "INSERT INTO clientes(nombre, tipoDocumento, nroDocumento, condicionIva, razonSocial, direccion, telefono, idLista) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
             const parametros = [
                 data.nombre.toUpperCase(),
                 data.tipoDocumento ?? null,
@@ -84,6 +84,7 @@ class ClientesRepository{
                 data.condicionIva ?? null,
                 data.razonSocial ? data.razonSocial.toUpperCase() : null,
                 data.direccion ? data.direccion.toUpperCase() : null,
+                data.telefono ?? null,
                 data.idLista ?? null
             ];
 
@@ -119,7 +120,7 @@ class ClientesRepository{
             }
 
                 const consulta = `UPDATE clientes
-                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?, direccion = ?, idLista = ?
+                SET nombre = ?, tipoDocumento = ?, nroDocumento = ?, condicionIva = ?, razonSocial = ?, direccion = ?, telefono = ?, idLista = ?
                 WHERE id = ? `;
 
             const parametros = [
@@ -129,6 +130,7 @@ class ClientesRepository{
                 data.condicionIva ?? null,
                 data.razonSocial ? data.razonSocial.toUpperCase() : null,
                 data.direccion ? data.direccion.toUpperCase() : null,
+                data.telefono ?? null,
                 data.idLista ?? null,
                 data.id
             ];

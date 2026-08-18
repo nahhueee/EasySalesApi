@@ -220,6 +220,18 @@ router.put('/asignar-categoria', async (req:Request, res:Response) => {
     }
 });
 
+// Fase 4, PR 8 — reposición por proveedor. Espejo de /asignar-categoria.
+router.put('/asignar-proveedor', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosRepo.AsignarProveedor(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar asignar el proveedor del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.put('/actualizar-vencimiento', async (req:Request, res:Response) => {
     try{ 
         res.json(await ProductosRepo.ActualizarVencimiento(req.body));

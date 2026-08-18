@@ -17,6 +17,10 @@ export class Producto {
     imagen? : string;
     activo? : boolean;
     soloPrecio? : boolean;
+    idCategoria? : number;
+    // NULL = sin proveedor asignado (FK real, a diferencia de idCategoria que usa 0 + fila
+    // sintética "Sin asignar" — ver migración 20260817120000_productos_id_proveedor.js).
+    idProveedor? : number | null;
 
     constructor(data?: any) {
         if (data) {
@@ -35,6 +39,8 @@ export class Producto {
             this.unidad = data.unidad;
             this.imagen = data.imagen;
             this.soloPrecio = data.soloPrecio;
+            this.idCategoria = data.idCategoria;
+            this.idProveedor = data.idProveedor;
         }
     }
 }

@@ -51,7 +51,7 @@ class VentasRepository{
                     //Obtiene la lista de detalles de la venta
                     venta.detalles = await ObtenerDetalleVenta(connection, row['id']); 
 
-                    venta.cliente = new Cliente({id: row['idCliente'], nombre: row['cliente'], razonSocial: row['clienteRazonSocial'], direccion: row['clienteDireccion']});
+                    venta.cliente = new Cliente({id: row['idCliente'], nombre: row['cliente'], razonSocial: row['clienteRazonSocial'], direccion: row['clienteDireccion'], telefono: row['clienteTelefono']});
                     venta.pago = new pagoVenta({
                         recargo: parseFloat(row['recargo']), 
                         descuento: parseFloat(row['descuento']), 
@@ -546,7 +546,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
                 " vpag.monto, vpag.recargo, vpag.descuento, vpag.entrega, vpag.tipoModificador, vpag.realizado, " + //Pago
                 " vfac.cae, vfac.caeVto, vfac.ticket, vfac.tipoFactura, vfac.neto, vfac.iva, vfac.dni, vfac.tipoDni, vfac.ptoVenta, vfac.condReceptor, " + //Factura
                 " vfac.receptorNombre, vfac.receptorDireccion, " + //Receptor congelado al emitir (ver migracion 20260728100000)
-                " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial, cli.direccion clienteDireccion, " +
+                " COALESCE(cli.nombre, 'ELIMINADO') cliente, cli.razonSocial clienteRazonSocial, cli.direccion clienteDireccion, cli.telefono clienteTelefono, " +
                 " lp.nombre nombreLista " + //Lista de precios aplicada (handoff_multiprecio_venta_sonnet Fase 4); null si la venta no usó lista (flag off)
                 selectAcreditado +
                 " FROM ventas v " +

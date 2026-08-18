@@ -194,8 +194,15 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             }
         }
 
+        // Mismo patrón que clientesRepository.ObtenerQuery: subquery correlacionada por el
+        // último movimiento del ledger. saldo > 0 = le debo al proveedor (convención invertida,
+        // ver proveedorCuentaRepository.ts) — el front interpreta el signo, acá solo se expone.
+        const saldoSelect = !esTotal
+            ? `, (SELECT saldo FROM proveedor_cuenta_movimientos WHERE idProveedor = p.id ORDER BY id DESC LIMIT 1) AS saldo`
+            : '';
+
         query = count +
-            " SELECT p.* " +
+            " SELECT p.* " + saldoSelect +
             " FROM proveedores p" +
             filtro +
             " ORDER BY p.id DESC" +
