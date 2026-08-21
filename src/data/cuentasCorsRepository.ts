@@ -563,12 +563,23 @@ class CuentasCorsRepository{
 
 async function ObtenerVentasImpagas(connection, idCliente:number){
     try {
+        // v.fechaBaja IS NULL: mismo filtro que ya tienen ObtenerDeudaTotalCliente (Bug 3) y
+        // el resto de las queries de "pendientes" — acá faltaba, una venta dada de baja no
+        // debe competir por el reparto FIFO de una entrega de dinero.
+        //
+        // HAVING ... > NC acreditada: una venta con Nota de Crédito total sigue con
+        // realizado=0 (emitir una NC no toca ventas_pago), así que sin este filtro entraba
+        // igual al pool de "deuda pendiente" y podía absorber plata de una entrega genérica
+        // que en realidad correspondía a otra venta más vieja sin NC. Caso real detectado:
+        // cliente ZAZU VIVIANA OLGA (2026-08-21), $169.800 de una entrega de $268.160
+        // aplicados a una venta ya saldada por NC — ver auditoriaNcFifo.ts.
         const consulta = " SELECT v.id, SUM(d.cantidad * d.precio) AS total, p.entrega " +
                          " FROM ventas v " +
                          " INNER JOIN ventas_pago p ON v.id = p.idVenta " +
                          " INNER JOIN ventas_detalle d ON v.id = d.idVenta " +
-                         " WHERE v.idCliente = ? AND p.realizado = 0 " +
+                         " WHERE v.idCliente = ? AND p.realizado = 0 AND v.fechaBaja IS NULL " +
                          " GROUP BY v.id, v.fecha " +
+                         " HAVING SUM(d.cantidad * d.precio) > COALESCE((SELECT SUM(nc.total) FROM notas_credito nc WHERE nc.idVenta = v.id), 0) " +
                          " ORDER BY v.fecha ASC ";
 
         const [rows] = await connection.query(consulta, [idCliente])
