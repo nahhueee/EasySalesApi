@@ -71,10 +71,14 @@ export class EtiquetaService {
   private async armarArchivoTermico(etiqueta: Etiqueta, productos: ProductoImprimir[]) {
     const papel = etiqueta.papel === '80mm' ? '80mm' : '58mm';
 
-    //Rollo continuo: siempre 1 columna, tamaño fijo por ancho de papel. El "tamanio"
-    //(GRANDE/MEDIANA/...) de la plantilla no aplica en térmico (ver impresion-etiqueta.service.ts).
-    const tarjetasFila = 1;
-    const tamanios = this.obtenerTamaniosTermico(papel);
+    //Rollo continuo: por defecto 1 columna, tamaño fijo por ancho de papel. El "tamanio"
+    //GRANDE/MEDIANA/... de A4 no aplica acá. En 80mm sí se admiten perfiles propios
+    //(NORMAL/DOBLE) - este bloque tiene que mantenerse en espejo exacto con
+    //impresion-etiqueta.service.ts (front). Esto vive duplicado porque el botón
+    //"Imprimir" (silencioso, server-side) pasa por acá, mientras que "Generar PDF" pasa
+    //por el front - ver comentario al inicio del archivo.
+    const tarjetasFila = (papel === '80mm' && etiqueta.tamanio === 'DOBLE') ? 2 : 1;
+    const tamanios = this.obtenerTamaniosTermico(papel, etiqueta.tamanio);
 
     const cuadritos: any[] = [];
 
@@ -112,7 +116,11 @@ export class EtiquetaService {
     };
   }
 
-  private obtenerTamaniosTermico(papel: string): TamaniosEtiqueta {
+  //Espejo exacto de ObtenerTamaniosTermico en impresion-etiqueta.service.ts (front).
+  //Cualquier cambio de tamaños/perfiles ahí tiene que replicarse acá - no hay una única
+  //fuente de verdad porque pdfMake corre distinto en browser (front, canvas de JsBarcode)
+  //y en Node (acá, bwip-js). Ver nota de "Imprimir" vs "Generar PDF" al inicio del archivo.
+  private obtenerTamaniosTermico(papel: string, tamanio?: string): TamaniosEtiqueta {
     const tamanios = new TamaniosEtiqueta();
 
     switch (papel) {
@@ -125,22 +133,47 @@ export class EtiquetaService {
         tamanios.vencimientoTamanio = 7;
         tamanios.codigoTamanio = 100;
         tamanios.codigoTextTamanio = 7;
-        tamanios.caracteresNombre = 28;
+        tamanios.altoCodigoBarra = 26;
+        tamanios.caracteresNombre = this.calcularCaracteresMaximos(tamanios.tarjetaTamanio, tamanios.nombreTamanio);
         break;
       case '80mm':
-        tamanios.tarjetaTamanio = 184;
-        tamanios.tituloTamanio = 11;
-        tamanios.ofertaTamanio = 17;
-        tamanios.precioTamanio = 22;
-        tamanios.nombreTamanio = 9;
-        tamanios.vencimientoTamanio = 8;
-        tamanios.codigoTamanio = 145;
-        tamanios.codigoTextTamanio = 8;
-        tamanios.caracteresNombre = 40;
+        if (tamanio === 'DOBLE') {
+          tamanios.tarjetaTamanio = 94;
+          tamanios.tituloTamanio = 8;
+          tamanios.ofertaTamanio = 12;
+          tamanios.precioTamanio = 15;
+          tamanios.nombreTamanio = 7;
+          tamanios.vencimientoTamanio = 6;
+          tamanios.codigoTamanio = 82;
+          tamanios.codigoTextTamanio = 6;
+          tamanios.altoCodigoBarra = 24;
+        } else {
+          tamanios.tarjetaTamanio = 184;
+          tamanios.tituloTamanio = 11;
+          tamanios.ofertaTamanio = 17;
+          tamanios.precioTamanio = 22;
+          tamanios.nombreTamanio = 9;
+          tamanios.vencimientoTamanio = 8;
+          tamanios.codigoTamanio = 145;
+          tamanios.codigoTextTamanio = 8;
+          tamanios.altoCodigoBarra = 30;
+        }
+
+        tamanios.caracteresNombre = this.calcularCaracteresMaximos(tamanios.tarjetaTamanio, tamanios.nombreTamanio);
         break;
     }
 
     return tamanios;
+  }
+
+  //Espejo de CalcularCaracteresMaximos en impresion-etiqueta.service.ts (front). Antes
+  //acá el límite era un número fijo (28/40) calibrado a ojo, sin relación con el ancho
+  //real de la tarjeta - no escalaba para COMPACTA/DOBLE y tenía el mismo riesgo de
+  //wrap a 2 líneas que se corrigió en el front.
+  private calcularCaracteresMaximos(anchoTarjeta: number, fontSize: number): number {
+    const anchoDisponible = anchoTarjeta - 6;
+    const anchoPromedioCaracter = fontSize * 0.62;
+    return Math.max(1, Math.floor(anchoDisponible / anchoPromedioCaracter));
   }
 
   private estimarAltoCuadrito(etiqueta: Etiqueta, tamanios: TamaniosEtiqueta): number {
@@ -148,7 +181,7 @@ export class EtiquetaService {
 
     if (etiqueta.titulo && etiqueta.titulo !== '') alto += tamanios.tituloTamanio + 10;
     if (etiqueta.mOferta) alto += tamanios.ofertaTamanio + 9;
-    if (etiqueta.mCodigo) alto += 40 + tamanios.codigoTextTamanio;
+    if (etiqueta.mCodigo) alto += tamanios.altoCodigoBarra + tamanios.codigoTextTamanio;
     if (etiqueta.mPrecio) alto += tamanios.precioTamanio + 5;
     if (etiqueta.mNombre) alto += tamanios.nombreTamanio + 5;
     if (etiqueta.mVencimiento) alto += tamanios.vencimientoTamanio + 5;
@@ -211,12 +244,20 @@ export class EtiquetaService {
                 margin: [0, 0, 0, 5]
               }] : []),
 
+              //Antes este margen era negativo ([0,-2,0,-3]), compensando un whitespace
+              //implícito de bwip-js que nunca se controló explícitamente (arrastrado de
+              //cuando el barcode era CODE39). Al pasar a CODE128 el barcode cambia de
+              //proporciones y ese negativo terminaba metiendo la imagen encima del texto
+              //del código de abajo. Ahora fijamos paddingwidth/paddingheight en 0 en
+              //generarCodigoBarras() (sin whitespace implícito) y usamos acá el mismo
+              //margen positivo y explícito que ya usa el front (impresion-etiqueta.
+              //service.ts, GenerarCuadrito).
               ...(plantilla.mCodigo && codigoBarra ? [{
                 image: codigoBarra,
-                height: 40,
+                height: tamanios.altoCodigoBarra,
                 width: tamanios.codigoTamanio,
                 alignment: 'center',
-                margin: [0, -2, 0, -3]
+                margin: [0, 2, 0, 2]
               }] : []),
               ...(plantilla.mCodigo ? [{
                 text: producto.codigo,
@@ -268,8 +309,14 @@ export class EtiquetaService {
     };
   }
 
+  //Espejo del fix de CortarNombreProducto en impresion-etiqueta.service.ts (front):
+  //reserva 3 caracteres para el "..." dentro del mismo presupuesto de "tamanio", en vez
+  //de agregarlos por encima (eso rompía la garantía de 1 sola línea y generaba una
+  //página extra en blanco al final del rollo).
   private cortarNombreProducto(nombreProd: string, tamanio: number) {
-    return nombreProd.length > tamanio ? nombreProd.substring(0, tamanio) + '...' : nombreProd;
+    if (nombreProd.length <= tamanio) return nombreProd;
+    const largoCorte = Math.max(1, tamanio - 3);
+    return nombreProd.substring(0, largoCorte) + '...';
   }
 
   private formatearPrecio(precio: any) {
@@ -277,15 +324,23 @@ export class EtiquetaService {
     return pNumero.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   }
 
-  //Código de barras CODE39 generado server-side con bwip-js (pura JS, sin canvas nativo -
-  //JsBarcode del front depende del <canvas> del DOM, que no existe en Node).
+  //Código de barras generado server-side con bwip-js (pura JS, sin canvas nativo -
+  //JsBarcode del front depende del <canvas> del DOM, que no existe en Node). Pasó de
+  //CODE39 a CODE128 en espejo del front (GenerarCodigoBarras en
+  //impresion-etiqueta.service.ts): mucho más denso para dígitos, es lo que habilita el
+  //tamaño DOBLE (2 columnas) sin perder legibilidad.
   private async generarCodigoBarras(texto: string): Promise<string> {
     const png: Buffer = await bwipjs.toBuffer({
-      bcid: 'code39',
+      bcid: 'code128',
       text: texto,
       scale: 2,
       height: 12,
       includetext: false,
+      //Sin padding extra más allá del quiet zone mínimo que exige la norma - el margen
+      //real hacia el resto del cuadrito lo controlamos explícitamente arriba, en
+      //generarCuadrito(), no acá adentro.
+      paddingwidth: 0,
+      paddingheight: 0,
     });
 
     return `data:image/png;base64,${png.toString('base64')}`;

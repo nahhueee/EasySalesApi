@@ -8,6 +8,7 @@ export class TamaniosEtiqueta{
   codigoTamanio!: number;
   codigoTextTamanio!: number;
   vencimientoTamanio!: number;
+  altoCodigoBarra!: number;
 
   caracteresNombre!: number;
 }
