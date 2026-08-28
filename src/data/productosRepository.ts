@@ -65,6 +65,10 @@ class ProductosRepository{
         (producto as any).categoriaNombre = row['categoriaNombre'];
         (producto as any).categoriaColor = row['categoriaColor'];
         (producto as any).proveedorNombre = row['proveedorNombre'];
+        // PR C1 (handoff_faltantes_pedido_proveedor.md): telefono del proveedor para el
+        // subtitulo de grupo del PDF de pedido. Mismo criterio que las anteriores: no forma
+        // parte del modelo Producto, se agrega suelta.
+        (producto as any).proveedorTelefono = row['proveedorTelefono'];
 
         return producto;
     }
@@ -901,7 +905,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         }
 
         if (filtros.faltantes != null && filtros.faltantes == true)
-            filtro += " AND p.cantidad <= p.faltante + 1";
+            filtro += " AND p.cantidad <= p.faltante + 1 AND p.soloPrecio = 0";
 
         if (filtros.vencimientos != null && filtros.vencimientos == true)
             filtro += " AND p.vencimiento IS NOT NULL";
@@ -912,6 +916,18 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             filtro += " AND p.idProveedor = ?";
             params.push(filtros.idProveedor);
         }
+
+        // estadoStock (PR A0, handoff_faltantes_pedido_proveedor.md): compone por AND
+        // con `faltantes` — 'sin' = crítico (sin stock), 'con' = alerta (queda algo pero
+        // está en o por debajo del punto de pedido). 'todos' o ausente no agrega nada.
+        if (filtros.estadoStock === 'con')
+            filtro += " AND p.cantidad > 0";
+        else if (filtros.estadoStock === 'sin')
+            filtro += " AND p.cantidad <= 0";
+
+        // sinProveedor (PR A0): productos sin proveedor asignado.
+        if (filtros.sinProveedor === true)
+            filtro += " AND p.idProveedor IS NULL";
 
         // #endregion
 
@@ -934,7 +950,11 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         }
         else
         {//De lo contrario paginamos
-            if (filtros.tamanioPagina != null){
+            if (filtros.sinPaginacion === true) {
+                // Sin LIMIT/OFFSET (PR A0). Hoy solo lo consume el export (PR C1), que
+                // fuerza este flag server-side. No exponerlo desde la UI de la tabla:
+                // un usuario pidiendo "todos" en el paginador trae miles de filas al front.
+            } else if (filtros.tamanioPagina != null){
                 paginado = " LIMIT ? OFFSET ? ";
                 params.push(Number(filtros.tamanioPagina), (Number(filtros.pagina) - 1) * Number(filtros.tamanioPagina));
             }
@@ -942,7 +962,7 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 
         //Arma la Query con el paginado y los filtros correspondientes
         query = count +
-                " SELECT p.*, c.nombre AS categoriaNombre, c.color AS categoriaColor, pr.nombre AS proveedorNombre " +
+                " SELECT p.*, c.nombre AS categoriaNombre, c.color AS categoriaColor, pr.nombre AS proveedorNombre, pr.telefono AS proveedorTelefono " +
                 " FROM productos p " +
                 " LEFT JOIN categorias c ON c.id = p.idCategoria AND c.id <> 1 " +
                 " LEFT JOIN proveedores pr ON pr.id = p.idProveedor " +

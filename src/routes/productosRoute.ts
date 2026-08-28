@@ -1,6 +1,9 @@
 import { ProductosRepo } from '../data/productosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
+import { ExportProductosServ, ExportLimiteExcedidoError } from '../services/exportProductosService';
+import { datosAuditoria } from '../utils/auditoria';
+import { SesionServ } from '../services/sesionService';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -66,6 +69,49 @@ router.post('/buscar-productos', async (req:Request, res:Response) => {
 
     } catch(error:any){
         let msg = "Error intentando buscar productos.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+// PR C1 (handoff_faltantes_pedido_proveedor.md). Contrato genérico desde el día 1:
+// {filtro, formato, plantilla} aunque hoy solo exista un valor válido de cada uno —
+// ver PLANTILLAS_VALIDAS/FORMATOS_VALIDOS en ExportProductosService. El endpoint
+// fuerza sinPaginacion server-side, no confía en pagina/tamanioPagina del front.
+router.post('/exportar', async (req:Request, res:Response) => {
+    try{
+        const { filtro, formato, plantilla } = req.body;
+
+        const resultado = await ExportProductosServ.exportar(plantilla, formato, filtro);
+
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        await SesionServ.RegistrarMovimiento(
+            `Exportó pedido a proveedor (${resultado.filas} productos, plantilla ${plantilla})`,
+            usuarioId,
+            puestoId
+        );
+
+        logger.info(`Export de productos: plantilla=${plantilla} formato=${formato} filas=${resultado.filas} duracionMs=${resultado.duracionMs}`);
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="pedido_${new Date().toISOString().slice(0, 10)}.pdf"`);
+        res.send(resultado.buffer);
+
+    } catch(error:any){
+        if (error instanceof ExportLimiteExcedidoError) {
+            res.status(400).send(error.message);
+            return;
+        }
+        if (typeof error?.message === 'string' && error.message.startsWith('Plantilla de exportación inválida')) {
+            res.status(400).send(error.message);
+            return;
+        }
+        if (typeof error?.message === 'string' && error.message.startsWith('Formato de exportación inválido')) {
+            res.status(400).send(error.message);
+            return;
+        }
+
+        let msg = "Error al exportar el listado de productos.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }
