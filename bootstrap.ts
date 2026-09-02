@@ -68,7 +68,13 @@ const estado = {
  */
 const statusServer = http.createServer((req, res) => {
   if (req.url === '/status') {
-    res.writeHead(503, { 'Content-Type': 'application/json' });
+    // 200, no 503: este servidor SÍ está disponible y respondiendo —
+    // lo que puede no estar listo es la app de negocio, y ese dato va
+    // en el body (`estado.fase` / `estado.mensaje`), no en el código HTTP.
+    // El front (`startup.service.ts` → isUp()) solo considera "arriba" un
+    // 2xx; con 503 acá nunca detectaba este servidor como vivo y el
+    // usuario nunca veía el mensaje real de progreso de la actualización.
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(estado));
     return;
   }
