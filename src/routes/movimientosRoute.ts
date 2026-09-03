@@ -38,6 +38,19 @@ router.put('/eliminar', async (req:Request, res:Response) => {
         res.status(500).send(msg);
     }
 });
+
+// Reemplaza a /eliminar como accion expuesta desde el front (main-movimientos.component.ts):
+// no borra, compensa con el inverso. Ver MovimientosRepo.Anular.
+router.put('/anular', async (req:Request, res:Response) => {
+    try{ 
+        res.json(await MovimientosRepo.Anular(req.body));
+
+    } catch(error:any){
+        let msg = "Error al intentar anular el movimiento.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
 //#endregion
 
 // Export the router
