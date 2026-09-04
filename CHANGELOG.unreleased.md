@@ -28,5 +28,3 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
-
-- [mejora] Pruebas de mensajes 
