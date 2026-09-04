@@ -10,7 +10,10 @@
  *
  * Características:
  * - Retención local máxima: 5 días (entradas más viejas se descartan)
- * - Cap por código: 500 ocurrencias máximas antes de descartar y registrar OVERFLOW
+ * - Agrupación por HUELLA (código + mensaje normalizado + módulo), no por código:
+ *   INTERNAL_ERROR se usa en decenas de rutas distintas, agrupar solo por código
+ *   mezclaba errores no relacionados y pisaba el mensaje con el último que entrara.
+ * - Cap por huella: 500 ocurrencias máximas antes de descartar y registrar OVERFLOW
  * - Backoff exponencial: 15 → 30 → 60 → 120 → 240 min ante fallos consecutivos
  * - Idempotencia: cada envío lleva un batch_id UUID que AdminServer verifica
  *
@@ -27,7 +30,7 @@ import axios from 'axios';
 import config from '../conf/app.config';
 import path from 'path';
 import fs from 'fs';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { logger } from '../logger/logger';
 import { CodigoError } from '../logger/CodigosError';
 import moment from 'moment';
@@ -40,12 +43,41 @@ const ERRORES_PENDIENTES_PATH = path.join(ROOT_DIR, 'src', 'log', 'errores-pendi
 const MAX_ANTIGUEDAD_DIAS     = 5;
 const MAX_CANTIDAD_POR_CODIGO = 500;
 
+// Techo de huellas distintas en el archivo. Sin esto, un mensaje con un dato
+// variable que la normalización no alcance a limpiar podría generar una entrada
+// nueva por ocurrencia y hacer crecer el archivo sin control.
+const MAX_HUELLAS_DISTINTAS = 100;
+
+// Recortes del detalle: el batch es telemetría, no el log completo. El detalle
+// entero sigue estando en src/log/error.log de la terminal.
+const MAX_LEN_MENSAJE = 500;
+const MAX_LEN_CAUSA   = 300;
+const MAX_LEN_RUTA    = 200;
+const FRAMES_STACK    = 3;
+
 // Tiempo de espera en minutos según número de fallos consecutivos.
 // Índice 0 = sin fallos (operación normal), índice 5+ = cap máximo.
 const BACKOFF_MINUTOS = [0, 15, 30, 60, 120, 240];
 
-interface ErrorPendiente {
+/**
+ * Detalle del último evento de una huella. Todo opcional: los errores de
+ * background no tienen contexto HTTP, y los del front no tienen módulo.
+ * Se pisa en cada ocurrencia — interesa el más reciente, no el primero.
+ */
+export interface DetalleError {
+    route?:      string;  // ruta del backend donde ocurrió (errorMiddleware)
+    metodoHttp?: string;  // GET/POST/...
+    modulo?:     string;  // AppError.context.modulo
+    metodo?:     string;  // AppError.context.metodo
+    pantalla?:   string;  // ruta del front (la manda GlobalErrorHandler del App)
+    causa?:      string;  // AppError.cause.message
+    stack?:      string;  // primeras FRAMES_STACK frames
+}
+
+interface ErrorPendiente extends DetalleError {
     codigo:       string;
+    // Clave real de agrupación. Ver _calcularHuella().
+    huella:       string;
     mensaje:      string;
     cantidad:     number;
     fechaPrimero: string; // ISO 8601
@@ -68,13 +100,14 @@ class ErrorBatchService {
      * Registra un error en el buffer local.
      *
      * - Purga entradas más viejas de MAX_ANTIGUEDAD_DIAS antes de escribir.
-     * - Si el código ya alcanzó MAX_CANTIDAD_POR_CODIGO, descarta y loguea overflow.
-     * - Si el código ya existe, incrementa cantidad y actualiza fechaUltimo.
-     * - Si no existe, agrega nueva entrada.
+     * - Agrupa por huella (codigo + mensaje normalizado + módulo/ruta), no por código.
+     * - Si la huella ya alcanzó MAX_CANTIDAD_POR_CODIGO, descarta y loguea overflow.
+     * - Si la huella ya existe, incrementa cantidad, actualiza fechaUltimo y pisa el detalle.
+     * - Si no existe, agrega nueva entrada (salvo que se haya llegado a MAX_HUELLAS_DISTINTAS).
      *
      * Nota: el catch usa console.error para evitar re-entrada al transport de logging.
      */
-    registrar(codigo: string, mensaje: string): void {
+    registrar(codigo: string, mensaje: string, detalle?: DetalleError): void {
         try {
             const ahora  = new Date();
             let errores  = this._leerArchivo();
@@ -82,28 +115,48 @@ class ErrorBatchService {
             // Purgar entradas viejas
             errores = this._purgarViejos(errores, ahora);
 
-            const existente = errores.find(e => e.codigo === codigo);
+            const mensajeCorto = _recortar(mensaje, MAX_LEN_MENSAJE);
+            const detalleCorto = _recortarDetalle(detalle);
+            const huella       = this._calcularHuella(codigo, mensajeCorto, detalleCorto);
+
+            const existente = errores.find(e => e.codigo === codigo && e.huella === huella);
 
             if (existente) {
                 if (existente.cantidad >= MAX_CANTIDAD_POR_CODIGO) {
                     // Cap alcanzado: descartar y registrar solo en log local (IGNORAR_REMOTO)
                     logger.warn({
                         code:    CodigoError.ERROR_BATCH_OVERFLOW,
-                        message: `Cap de ${MAX_CANTIDAD_POR_CODIGO} alcanzado para código: ${codigo}`,
+                        message: `Cap de ${MAX_CANTIDAD_POR_CODIGO} alcanzado para código: ${codigo} (huella ${huella})`,
                         modulo:  'errorBatchService'
                     });
                     return;
                 }
                 existente.cantidad++;
-                existente.mensaje    = mensaje;
+                existente.mensaje     = mensajeCorto;
                 existente.fechaUltimo = moment(ahora).format('YYYY-MM-DD HH:mm:ss');
+                // El detalle refleja la ocurrencia más reciente
+                Object.assign(existente, detalleCorto);
             } else {
+                // Techo de huellas: por encima del límite dejamos de abrir entradas nuevas
+                // en vez de dejar crecer el archivo. Las huellas ya presentes siguen
+                // contando ocurrencias normalmente.
+                if (errores.length >= MAX_HUELLAS_DISTINTAS) {
+                    logger.warn({
+                        code:    CodigoError.ERROR_BATCH_OVERFLOW,
+                        message: `Cap de ${MAX_HUELLAS_DISTINTAS} huellas distintas alcanzado — se descarta: ${codigo} / ${mensajeCorto}`,
+                        modulo:  'errorBatchService'
+                    });
+                    return;
+                }
+
                 errores.push({
                     codigo,
-                    mensaje,
+                    huella,
+                    mensaje:      mensajeCorto,
                     cantidad:     1,
                     fechaPrimero: moment(ahora).format('YYYY-MM-DD HH:mm:ss'),
                     fechaUltimo:  moment(ahora).format('YYYY-MM-DD HH:mm:ss'),
+                    ...detalleCorto,
                 });
             }
 
@@ -141,6 +194,9 @@ class ErrorBatchService {
                 terminal,
                 idApp:   config.idApp,
                 batch_id,
+                // schema 2: cada error trae huella + detalle (route/modulo/causa/stack).
+                // Un AdminServer viejo ignora los campos extra y sigue funcionando.
+                schema:  2,
                 errores,
             }, {
                 timeout: 8000
@@ -181,16 +237,62 @@ class ErrorBatchService {
             const raw: any[] = JSON.parse(fs.readFileSync(ERRORES_PENDIENTES_PATH, 'utf-8'));
             const ahora = new Date().toISOString();
 
-            return raw.map(e => ({
-                codigo:       e.codigo       ?? '',
-                mensaje:      e.mensaje      ?? '',
-                cantidad:     e.cantidad     ?? 1,
-                fechaPrimero: e.fechaPrimero ?? ahora,
-                fechaUltimo:  e.fechaUltimo  ?? ahora,
-            }));
+            return raw.map(e => {
+                const codigo  = e.codigo  ?? '';
+                const mensaje = e.mensaje ?? '';
+
+                const detalle: DetalleError = {
+                    route:      e.route,
+                    metodoHttp: e.metodoHttp,
+                    modulo:     e.modulo,
+                    metodo:     e.metodo,
+                    pantalla:   e.pantalla,
+                    causa:      e.causa,
+                    stack:      e.stack,
+                };
+
+                return {
+                    codigo,
+                    // Entradas del formato viejo (sin huella) reciben la suya calculada:
+                    // así se fusionan con las nuevas del mismo error en vez de duplicarse.
+                    huella:       e.huella ?? this._calcularHuella(codigo, mensaje, detalle),
+                    mensaje,
+                    cantidad:     e.cantidad     ?? 1,
+                    fechaPrimero: e.fechaPrimero ?? ahora,
+                    fechaUltimo:  e.fechaUltimo  ?? ahora,
+                    ...detalle,
+                };
+            });
         } catch {
             return [];
         }
+    }
+
+    /**
+     * Clave de agrupación de una ocurrencia.
+     *
+     * Se calcula sobre el mensaje NORMALIZADO (números, UUIDs y comillas reemplazados)
+     * más el origen (módulo o ruta): "Producto 45 inexistente" y "Producto 78 inexistente"
+     * tienen que contar como el mismo problema, y dos INTERNAL_ERROR de rutas distintas
+     * NO tienen que contar como el mismo.
+     *
+     * Hash corto y no criptográfico a propósito: solo necesita ser estable y comparable.
+     */
+    private _calcularHuella(codigo: string, mensaje: string, detalle?: DetalleError): string {
+        const origen = detalle?.modulo ?? detalle?.pantalla ?? detalle?.route ?? '';
+
+        const normalizado = (mensaje || '')
+            .toLowerCase()
+            .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '#uuid')
+            .replace(/\d+/g, '#')
+            .replace(/['"`]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        return createHash('sha1')
+            .update(`${codigo}|${normalizado}|${origen}`)
+            .digest('hex')
+            .slice(0, 10);
     }
 
     /** Descarta entradas cuya fechaPrimero sea anterior a MAX_ANTIGUEDAD_DIAS días. */
@@ -199,6 +301,42 @@ class ErrorBatchService {
         limite.setDate(limite.getDate() - MAX_ANTIGUEDAD_DIAS);
         return errores.filter(e => new Date(e.fechaPrimero) >= limite);
     }
+}
+
+/** Recorta un texto a `max` caracteres, marcando el corte. */
+function _recortar(texto: string | undefined, max: number): string {
+    if (!texto) return '';
+    return texto.length <= max ? texto : `${texto.slice(0, max)}…`;
+}
+
+/**
+ * Deja el detalle en un tamaño apto para telemetría.
+ * Del stack se guardan solo las primeras FRAMES_STACK frames: alcanzan para
+ * ubicar el punto de falla, y el stack completo queda igual en error.log local.
+ */
+function _recortarDetalle(detalle?: DetalleError): DetalleError {
+    if (!detalle) return {};
+
+    const stackCorto = detalle.stack
+        ? detalle.stack.split('\n').slice(0, FRAMES_STACK + 1).join('\n')
+        : undefined;
+
+    const limpio: DetalleError = {
+        route:      detalle.route      ? _recortar(detalle.route, MAX_LEN_RUTA) : undefined,
+        metodoHttp: detalle.metodoHttp,
+        modulo:     detalle.modulo,
+        metodo:     detalle.metodo,
+        pantalla:   detalle.pantalla   ? _recortar(detalle.pantalla, MAX_LEN_RUTA) : undefined,
+        causa:      detalle.causa      ? _recortar(detalle.causa, MAX_LEN_CAUSA)   : undefined,
+        stack:      stackCorto,
+    };
+
+    // Sacamos las claves vacías para no ensuciar el JSON ni el payload
+    (Object.keys(limpio) as (keyof DetalleError)[]).forEach(k => {
+        if (limpio[k] === undefined || limpio[k] === '') delete limpio[k];
+    });
+
+    return limpio;
 }
 
 function ObtenerTerminal(): string | null {

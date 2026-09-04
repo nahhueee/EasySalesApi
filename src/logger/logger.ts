@@ -73,9 +73,23 @@ class ErrorBatchTransport extends Transport {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { ErrorBatchServ } = require('../services/errorBatchService');
 
+        // Además de code+message mandamos el detalle que errorMiddleware ya
+        // arma: sin esto, en AdminServer se ve un mensaje suelto sin ruta ni
+        // causa y el error no se puede replicar sin entrar a la terminal.
+        // `modulo` viene en context (errores HTTP vía AppError) o al nivel
+        // raíz (errores de background, que loguean con logger.error directo).
         ErrorBatchServ.registrar(
           info.code,
-          info.message ?? ''
+          info.message ?? '',
+          {
+            route:      info.route,
+            metodoHttp: info.method,
+            modulo:     info.context?.modulo ?? info.modulo,
+            metodo:     info.context?.metodo,
+            pantalla:   info.context?.ruta,
+            causa:      info.cause,
+            stack:      info.stack,
+          }
         );
 
       } catch {
