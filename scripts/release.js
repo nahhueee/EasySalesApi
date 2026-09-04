@@ -1,6 +1,7 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { buildChangelog, archivarChangelog } = require("./build-changelog");
 
 function run(cmd, silent = false) {
   if (!silent) console.log(`\n>> ${cmd}`);
@@ -66,10 +67,20 @@ fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
 console.log(`📦 Version: ${pkg.version} → ${newVersion}`);
 
 // =========================
+// 2.5 Changelog (mejoras/correcciones)
+// =========================
+
+const changelog = buildChangelog();
+archivarChangelog(newVersion, changelog);
+
+console.log(`📝 mejoras: ${changelog.mejoras || "(vacío)"}`);
+console.log(`📝 correcciones: ${changelog.correcciones || "(vacío)"}`);
+
+// =========================
 // 3. Commit version
 // =========================
 
-run("git add package.json");
+run("git add package.json CHANGELOG.md CHANGELOG.unreleased.md .release");
 run(`git commit -m "release: v${newVersion}"`);
 run("git push");
 

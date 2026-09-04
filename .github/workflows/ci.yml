@@ -34,6 +34,13 @@ jobs:
             echo "❌ No se encontró update.zip"
             exit 1
           fi
+      - name: Leer changelog de la release
+        run: |
+          MEJORAS=$(cat .release/mejoras.txt 2>/dev/null || echo "")
+          CORRECCIONES=$(cat .release/correcciones.txt 2>/dev/null || echo "")
+          echo "MEJORAS=$MEJORAS" >> $GITHUB_ENV
+          echo "CORRECCIONES=$CORRECCIONES" >> $GITHUB_ENV
+
       - name: Subir archivos al servidor
         run: |
           curl -X POST ${{ secrets.UPLOAD_URL }} \
@@ -42,4 +49,6 @@ jobs:
             -F "version=$VERSION" \
             -F "app=easysales" \
             -F "idApp=1" \
-            -F "tipo=backend"
+            -F "tipo=backend" \
+            -F "mejoras=$MEJORAS" \
+            -F "correcciones=$CORRECCIONES"
