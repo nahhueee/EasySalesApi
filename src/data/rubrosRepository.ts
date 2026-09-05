@@ -40,6 +40,58 @@ class RubrosRepository{
     //#endregion
 
     //#region ABM
+    // Resuelve una lista de nombres de categoria a sus ids, creando las que no existan.
+    // Uso: importacion masiva desde Excel (handoff_repuestos_fases1_2_3.md, Fase 1 PR 1.3) —
+    // resuelve todo el set en una sola pasada en vez de un round-trip por fila.
+    // Normaliza (trim + colapso de espacios + uppercase) antes de comparar/crear: sin esto
+    // "CAZOLETA" y "CAZOLETA " (con espacio final, frecuente en planillas) se cargarian como
+    // dos categorias distintas. Nunca toca ni devuelve el id 1 ("SIN CATEGORIZAR"): es la fila
+    // sintetica excluida en todo el resto del ABM (WHERE c.id <> 1).
+    // Transaccional en si misma: si la creacion de alguna categoria falla a mitad de lote, se
+    // revierte todo el lote (no deja categorias huerfanas de una corrida abortada).
+    async ResolverPorNombre(nombres: string[]): Promise<Map<string, number>> {
+        const resultado = new Map<string, number>();
+
+        const normalizados = Array.from(new Set(
+            nombres
+                .map(n => (n ?? '').replace(/\s+/g, ' ').trim().toUpperCase())
+                .filter(n => n.length > 0)
+        ));
+
+        if (normalizados.length === 0) return resultado;
+
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const placeholders = normalizados.map(() => '?').join(',');
+            const [existentes] = await connection.query(
+                `SELECT id, nombre FROM categorias WHERE id <> 1 AND nombre IN (${placeholders})`,
+                normalizados
+            );
+            for (const fila of existentes as any[]) {
+                resultado.set(fila.nombre, fila.id);
+            }
+
+            const faltantes = normalizados.filter(n => !resultado.has(n));
+            for (const nombre of faltantes) {
+                const [insertado]: any = await connection.query(
+                    "INSERT INTO categorias(nombre) VALUES (?)", [nombre]
+                );
+                resultado.set(nombre, insertado.insertId);
+            }
+
+            await connection.commit();
+            return resultado;
+
+        } catch (error: any) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
         

@@ -7,6 +7,7 @@ const path = require('path');
 
 import { procesarExcel } from '../services/excelService';
 import { ParametrosRepo } from '../data/parametrosRepository';
+import { ProductosRepo } from '../data/productosRepository';
 import { ComprobanteService } from '../services/comprobanteService';
 const ComprobanteServ = new ComprobanteService();
 
@@ -122,7 +123,24 @@ router.post('/ver-comprobante-nota-credito', async (req: Request, res: Response)
 router.post('/importar-excel', upload.single('excel'), async (req, res) => {
   try {
     const tipoPrecio = req.body.tipoPrecio;
-    res.json(await procesarExcel(fullPath, tipoPrecio));
+    const resultado = await procesarExcel(fullPath, tipoPrecio);
+
+    // PR 1.2b (handoff_repuestos_fases1_2_3.md) — codigos que ya existen en la base.
+    // No son errores: el usuario decide en el preview si actualiza o suma stock. Se resuelven
+    // en una sola consulta por lotes (ObtenerCodigosExistentes), no una por fila.
+    const codigosExistentes = await ProductosRepo.ObtenerCodigosExistentes(
+      resultado.datosValidos.map((fila: any) => fila.codigo)
+    );
+    const setCodigosExistentes = new Set(codigosExistentes);
+    const advertencias = resultado.datosValidos
+      .filter((fila: any) => setCodigosExistentes.has(fila.codigo.toString().trim().toUpperCase()))
+      .map((fila: any) => ({
+        fila: fila.filaExcel,
+        codigo: fila.codigo,
+        mensaje: `El código ${fila.codigo} ya existe en la base. Se va a actualizar según la acción elegida.`
+      }));
+
+    res.json({ ...resultado, advertencias });
 
   } catch(error:any){
         let msg = "Error al intentar importar el excel.";

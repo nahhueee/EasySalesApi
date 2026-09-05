@@ -1,4 +1,6 @@
 import { ProductosRepo } from '../data/productosRepository';
+import { RubrosRepo } from '../data/rubrosRepository';
+import { ProveedoresRepo } from '../data/proveedoresRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { ExportProductosServ, ExportLimiteExcedidoError } from '../services/exportProductosService';
@@ -174,6 +176,28 @@ router.post('/actualizar-varios', async (req:Request, res:Response) => {
         const accionActualizar = req.body.accion;
         if (!productos || !Array.isArray(productos)) {
             return res.status(400).json({ mensaje: "Formato inválido de productos." });
+        }
+
+        // PR 1.3 (handoff_repuestos_fases1_2_3.md) — categoria/proveedor vienen como texto desde
+        // el Excel (columnas opcionales). Se resuelven a ids de una sola vez para todo el lote,
+        // no una consulta por fila. Si un producto no trae la columna, sigue el comportamiento
+        // de hoy (idCategoria = 0 / idProveedor = null vía "|| 0" / "|| null" en el repo).
+        // categoriaExcel/proveedorExcel: nombre en texto tal como vino de la columna del Excel
+        // (ver Producto.ts). No confundir con `categoria`/`categoriaNombre` del modelo, que son
+        // el objeto/nombre de solo lectura que viene del JOIN al leer productos existentes.
+        const nombresCategoria = productos.map((p: any) => p.categoriaExcel).filter((n: any) => n);
+        const nombresProveedor = productos.map((p: any) => p.proveedorExcel).filter((n: any) => n);
+        const mapaCategorias = nombresCategoria.length > 0
+            ? await RubrosRepo.ResolverPorNombre(nombresCategoria)
+            : new Map<string, number>();
+        const mapaProveedores = nombresProveedor.length > 0
+            ? await ProveedoresRepo.ResolverPorNombre(nombresProveedor)
+            : new Map<string, number>();
+
+        const normalizar = (n: string) => n.replace(/\s+/g, ' ').trim().toUpperCase();
+        for (const prod of productos) {
+            if (prod.categoriaExcel) prod.idCategoria = mapaCategorias.get(normalizar(prod.categoriaExcel));
+            if (prod.proveedorExcel) prod.idProveedor = mapaProveedores.get(normalizar(prod.proveedorExcel));
         }
 
         for (const [i, prod] of productos.entries()) {

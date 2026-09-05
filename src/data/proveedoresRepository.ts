@@ -66,6 +66,58 @@ class ProveedoresRepository{
     //#endregion
 
     //#region ABM
+    // Resuelve una lista de nombres de proveedor a sus ids, creando los que no existan.
+    // Uso: importacion masiva desde Excel (handoff_repuestos_fases1_2_3.md, Fase 1 PR 1.3).
+    // Normaliza (trim + colapso de espacios + uppercase) antes de comparar/crear, mismo motivo
+    // que RubrosRepo.ResolverPorNombre. Nota: proveedores no tiene unicidad de nombre en el
+    // resto del ABM (a proposito, ver comentario de cabecera del archivo) — si ya existieran
+    // dos proveedores con el mismo nombre normalizado, esta resolucion toma uno de los dos de
+    // forma no determinista; no introduce el problema, pero tampoco lo corrige.
+    // Transaccional en si misma: si la creacion de algun proveedor falla a mitad de lote, se
+    // revierte todo el lote.
+    async ResolverPorNombre(nombres: string[]): Promise<Map<string, number>> {
+        const resultado = new Map<string, number>();
+
+        const normalizados = Array.from(new Set(
+            nombres
+                .map(n => (n ?? '').replace(/\s+/g, ' ').trim().toUpperCase())
+                .filter(n => n.length > 0)
+        ));
+
+        if (normalizados.length === 0) return resultado;
+
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const placeholders = normalizados.map(() => '?').join(',');
+            const [existentes] = await connection.query(
+                `SELECT id, nombre FROM proveedores WHERE fechaBaja IS NULL AND nombre IN (${placeholders})`,
+                normalizados
+            );
+            for (const fila of existentes as any[]) {
+                resultado.set(fila.nombre, fila.id);
+            }
+
+            const faltantes = normalizados.filter(n => !resultado.has(n));
+            for (const nombre of faltantes) {
+                const [insertado]: any = await connection.query(
+                    "INSERT INTO proveedores(nombre) VALUES (?)", [nombre]
+                );
+                resultado.set(nombre, insertado.insertId);
+            }
+
+            await connection.commit();
+            return resultado;
+
+        } catch (error: any) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
     // Con deudaInicial (> 0) inserta también el movimiento de apertura del ledger, en la misma
     // transacción: si el movimiento fallara, no puede quedar un proveedor sin su ledger acorde.
     // Sin deudaInicial (o = 0) el proveedor arranca sin movimientos y con saldo 0 — no se agrega

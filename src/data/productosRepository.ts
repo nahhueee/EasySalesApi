@@ -350,6 +350,38 @@ class ProductosRepository{
         }
     }
 
+    // Chequeo previo (no bloqueante) para el preview de importacion Excel: que codigos del
+    // archivo ya existen en la base, en una sola pasada por lotes en vez de un SELECT por fila
+    // (handoff_repuestos_fases1_2_3.md, Fase 1 PR 1.2). Devuelve los codigos (uppercase) que
+    // ya existen; el llamador decide que hacer (advertencia, no error).
+    async ObtenerCodigosExistentes(codigos: string[]): Promise<string[]> {
+        const normalizados = Array.from(new Set(
+            codigos.map(c => (c ?? '').toString().trim().toUpperCase()).filter(c => c.length > 0)
+        ));
+        if (normalizados.length === 0) return [];
+
+        const connection = await db.getConnection();
+        try {
+            const existentes: string[] = [];
+            const tamanioLote = 500;
+            for (let i = 0; i < normalizados.length; i += tamanioLote) {
+                const lote = normalizados.slice(i, i + tamanioLote);
+                const placeholders = lote.map(() => '?').join(',');
+                const [rows] = await connection.query(
+                    `SELECT codigo FROM productos WHERE codigo IN (${placeholders})`,
+                    lote
+                );
+                for (const fila of rows as any[]) existentes.push(fila.codigo);
+            }
+            return existentes;
+
+        } catch (error: any) {
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
     async Agregar(data:any): Promise<string>{
         const connection = await db.getConnection();
 
