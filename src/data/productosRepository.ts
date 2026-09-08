@@ -4,6 +4,14 @@ import { Producto } from '../models/Producto';
 import { ProductoPrecio } from '../models/ProductoPrecio';
 import { SesionServ } from '../services/sesionService';
 
+// Rubro repuestos (handoff_repuestos_fases1_2_3.md, Fase 2 PR 2.2): campos permitidos para
+// GET /valores-distintos/:campo. Whitelist explicita, nunca interpolar el parametro de ruta
+// directo en el SQL (columna dinamica = riesgo de inyeccion via nombre de columna).
+const CAMPOS_VALORES_DISTINTOS: Record<string, string> = {
+    marca: 'marca',
+    vehiculo: 'vehiculo',
+};
+
 class ProductosRepository{
 
     //#region OBTENER
@@ -57,6 +65,9 @@ class ProductosRepository{
             idCategoria: row['idCategoria'],
             soloPrecio: row['soloPrecio'],
             idProveedor: row['idProveedor'],
+            marca: row['marca'],
+            vehiculo: row['vehiculo'],
+            aplicacion: row['aplicacion'],
         });
 
         // No forman parte del modelo Producto (son de los JOIN a categorias/proveedores, ver
@@ -336,6 +347,26 @@ class ProductosRepository{
     }
     //#endregion
 
+    // Alimenta el autocomplete de marca/vehiculo en el modal de repuestos (PR 2.2). El campo
+    // ya viene whitelisteado desde la ruta, pero se revalida acá tambien por las dudas de que
+    // este metodo se llame desde otro lado el dia de mañana.
+    async ObtenerValoresDistintos(campo: string): Promise<string[]> {
+        const columna = CAMPOS_VALORES_DISTINTOS[campo];
+        if (!columna) throw new Error(`Campo no permitido: ${campo}`);
+
+        const connection = await db.getConnection();
+        try {
+            const [rows] = await connection.query(
+                `SELECT DISTINCT ${columna} AS valor FROM productos WHERE ${columna} IS NOT NULL AND ${columna} <> '' AND fechaBaja IS NULL ORDER BY ${columna}`
+            );
+            return (rows as any[]).map(r => r.valor);
+        } catch (error: any) {
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
     //#region ABM
     async ValidarCodigo(data:any){
         const connection = await db.getConnection();
@@ -394,8 +425,8 @@ class ProductosRepository{
             // Si vienen precios[], usamos los de la lista default; si no, usamos los campos top-level
             const precioBase = ResolverPrecioBase(data);
 
-            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio,idCategoria,idProveedor)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+            const consulta = `INSERT INTO productos(codigo,nombre,cantidad,tipoPrecio,sumarIva,costo,precio,redondeo,porcentaje,faltante,vencimiento,unidad,imagen,soloPrecio,idCategoria,idProveedor,marca,vehiculo,aplicacion)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
@@ -412,7 +443,11 @@ class ProductosRepository{
                                 data.imagen,
                                 data.soloPrecio ? 1 : 0,
                                 data.idCategoria || 0,
-                                data.idProveedor || null];
+                                data.idProveedor || null,
+                                // Rubro repuestos (Fase 2 PR 2.1) - texto libre, null cuando no aplica.
+                                data.marca || null,
+                                data.vehiculo || null,
+                                data.aplicacion || null];
 
             const [result]: any = await connection.query(consulta, parametros);
             const idProducto = result.insertId;
@@ -465,7 +500,10 @@ class ProductosRepository{
                                 imagen = ?,
                                 soloPrecio = ?,
                                 idCategoria = ?,
-                                idProveedor = ?
+                                idProveedor = ?,
+                                marca = ?,
+                                vehiculo = ?,
+                                aplicacion = ?
                                 WHERE id = ?`;
 
             const parametros = [data.codigo.toUpperCase(),
@@ -484,6 +522,10 @@ class ProductosRepository{
                                 data.soloPrecio ? 1 : 0,
                                 data.idCategoria || 0,
                                 data.idProveedor || null,
+                                // Rubro repuestos (Fase 2 PR 2.1) - texto libre, null cuando no aplica.
+                                data.marca || null,
+                                data.vehiculo || null,
+                                data.aplicacion || null,
                                 data.id];
 
             await connection.query(consulta, parametros);

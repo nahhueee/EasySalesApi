@@ -21,6 +21,11 @@ export class Producto {
     // NULL = sin proveedor asignado (FK real, a diferencia de idCategoria que usa 0 + fila
     // sintética "Sin asignar" — ver migración 20260817120000_productos_id_proveedor.js).
     idProveedor? : number | null;
+    // Rubro repuestos (handoff_repuestos_fases1_2_3.md, Fase 2 PR 2.1) — detrás del flag
+    // 'repuestos' en parametros. NULL cuando no aplica (todo cliente sin el flag encendido).
+    marca? : string;
+    vehiculo? : string;
+    aplicacion? : string;
 
     constructor(data?: any) {
         if (data) {
@@ -41,6 +46,9 @@ export class Producto {
             this.soloPrecio = data.soloPrecio;
             this.idCategoria = data.idCategoria;
             this.idProveedor = data.idProveedor;
+            this.marca = data.marca;
+            this.vehiculo = data.vehiculo;
+            this.aplicacion = data.aplicacion;
         }
     }
 }

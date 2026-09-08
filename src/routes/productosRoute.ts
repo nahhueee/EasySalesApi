@@ -9,6 +9,24 @@ import { SesionServ } from '../services/sesionService';
 const router : Router  = Router();
 
 //#region OBTENER
+// Rubro repuestos (handoff_repuestos_fases1_2_3.md, Fase 2 PR 2.2) — alimenta el autocomplete
+// de marca/vehiculo del modal. Whitelist acá (y de nuevo en el repo, por las dudas).
+const CAMPOS_VALORES_DISTINTOS_PERMITIDOS = ['marca', 'vehiculo'];
+router.get('/valores-distintos/:campo', async (req:Request, res:Response) => {
+    try{
+        const campo = req.params.campo;
+        if (!CAMPOS_VALORES_DISTINTOS_PERMITIDOS.includes(campo)) {
+            return res.status(400).send('Campo no permitido.');
+        }
+        res.json(await ProductosRepo.ObtenerValoresDistintos(campo));
+
+    } catch(error:any){
+        let msg = "Error al obtener los valores distintos.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
 router.get('/precios/:idProducto', async (req:Request, res:Response) => {
     try{
         res.json(await ProductosRepo.ObtenerPrecios(Number(req.params.idProducto)));

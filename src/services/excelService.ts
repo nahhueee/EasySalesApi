@@ -30,9 +30,29 @@ export async function procesarExcel(filePath: string, tipoPrecio:string): Promis
     const unidadesPermitidas = ['UNI', 'KG', 'LIT'];
     const redondeosPermitidos = [0, 5, 10];
 
+    // PR 2.2 (handoff_repuestos_fases1_2_3.md) — normaliza SOLO espacios en marca/vehiculo/
+    // aplicacion, nunca el contenido: decision cerrada con Nahu de no corregir "PEUG" a
+    // "PEUGEOT" en silencio (el importador no normaliza, el autocomplete evita que se
+    // reproduzca de acá en adelante). Se reusa tambien para componer el nombre.
+    const colapsarEspacios = (v: any): string => (v ?? '').toString().replace(/\s+/g, ' ').trim();
+
     for (let i = 0; i < datos.length; i++) {
       const fila = datos[i];
       const filaNum = i + 2; // +2 porque los encabezados están en la fila 1
+
+      if (fila.marca !== undefined && fila.marca !== '') fila.marca = colapsarEspacios(fila.marca);
+      if (fila.vehiculo !== undefined && fila.vehiculo !== '') fila.vehiculo = colapsarEspacios(fila.vehiculo);
+      if (fila.aplicacion !== undefined && fila.aplicacion !== '') fila.aplicacion = colapsarEspacios(fila.aplicacion);
+
+      // Si no viene nombre pero sí categoria/marca/vehiculo, se compone (PR 2.2). La
+      // aplicacion NO entra: sumada se pasa de VARCHAR(100) en filas reales del cliente y
+      // hace ilegible el ticket de 58mm (medido sobre 1927 filas — ver handoff).
+      if (!fila.nombre) {
+        const partes = [fila.categoria, fila.marca, fila.vehiculo]
+          .map(p => colapsarEspacios(p))
+          .filter(p => p.length > 0);
+        if (partes.length > 0) fila.nombre = colapsarEspacios(partes.join(' '));
+      }
 
       //Modo catalogo ('C'): solo el codigo es obligatorio. No es un tipoPrecio real,
       //es un modo de importacion; se completan defaults y se guarda como '$' (ver filesRoute/actualizar-varios).
