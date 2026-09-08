@@ -12,6 +12,32 @@ const CAMPOS_VALORES_DISTINTOS: Record<string, string> = {
     vehiculo: 'vehiculo',
 };
 
+// PR 2.3 (handoff_repuestos_fases1_2_3.md): busqueda libre multi-termino sobre
+// nombre/codigo/marca/vehiculo/aplicacion. Los campos de repuestos entran siempre al
+// CONCAT_WS -- si estan en NULL no aportan nada, asi que no hace falta gatearlos por el
+// flag `repuestos` (agregar ese if seria complejidad sin beneficio real).
+// NO usar para la rama de codigo exacto (lector de codigo de barras): ese camino tiene
+// que seguir siendo `p.codigo = ?`, sin LIKE.
+function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[] } {
+    let terminos = valor.toString().trim().split(/\s+/).filter(t => t.length > 1).slice(0, 6);
+
+    // Si el input entero era de 1 caracter no queda ningun termino: en vez de devolver
+    // un filtro vacio (que traeria todos los productos), se busca ese unico caracter tal
+    // cual, igual que se comportaba la busqueda de un solo termino antes de este PR.
+    if (terminos.length === 0) {
+        const bruto = valor.toString().trim();
+        if (bruto.length === 0) return { sql: '', params: [] };
+        terminos = [bruto];
+    }
+
+    const condiciones = terminos
+        .map(() => "LOWER(CONCAT_WS(' ', p.nombre, p.codigo, p.marca, p.vehiculo, p.aplicacion)) LIKE ?")
+        .join(' AND ');
+    const params = terminos.map(t => '%' + t.toLowerCase() + '%');
+
+    return { sql: ` AND (${condiciones})`, params };
+}
+
 class ProductosRepository{
 
     //#region OBTENER
@@ -114,8 +140,9 @@ class ProductosRepository{
             }
 
             if (filtro.metodo == 'nombre'){
-                consulta += ' AND LOWER(p.nombre) LIKE ? ';
-                params.push('%' + filtro.valor + '%');
+                const { sql, params: paramsMultiTermino } = ArmarFiltroMultiTermino(filtro.valor);
+                consulta += sql;
+                params.push(...paramsMultiTermino);
             }
 
             consulta += ' ORDER BY p.nombre ASC';
@@ -964,16 +991,17 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         if (filtros.busqueda != null && filtros.busqueda != "") {
             switch (filtros.tipoBusqueda) {
                 case 'ambos':
-                    filtro += " AND (p.nombre LIKE ? OR p.codigo LIKE ?)";
-                    params.push("%" + filtros.busqueda + "%", "%" + filtros.busqueda + "%");
+                case 'descripcion': {
+                    // PR 2.3: mismo criterio multi-termino en los dos casos de texto libre.
+                    // 'codigo' abajo queda intacto (busqueda exacta, no LIKE).
+                    const { sql, params: paramsMultiTermino } = ArmarFiltroMultiTermino(filtros.busqueda);
+                    filtro += sql;
+                    params.push(...paramsMultiTermino);
                     break;
+                }
                 case 'codigo':
                     filtro += " AND p.codigo = ?";
                     params.push(filtros.busqueda);
-                    break;
-                case 'descripcion':
-                    filtro += " AND LOWER(p.nombre) LIKE ?";
-                    params.push("%" + filtros.busqueda + "%");
                     break;
             }
         }
