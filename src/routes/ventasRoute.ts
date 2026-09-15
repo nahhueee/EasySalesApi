@@ -55,6 +55,12 @@ router.post('/agregar', async (req:Request, res:Response, next) => {
         res.json(await VentasRepo.Agregar(req.body, usuarioId, puestoId));
 
     } catch(error:any){
+        // Si el repo ya armo un AppError especifico (ej. VALIDACION de
+        // InsertPagoVenta), lo dejamos pasar tal cual -- envolverlo en el
+        // generico de abajo le esconde el mensaje al usuario (mismo criterio
+        // que ventasRoute.eliminar).
+        if (error instanceof AppError) return next(error);
+
         next(new AppError(
             CodigoError.INTERNAL_ERROR,
             'Error al intentar agregar la venta.',

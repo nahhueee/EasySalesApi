@@ -583,8 +583,23 @@ async function InsertVenta(connection, venta):Promise<number>{
     }
 }
 
+// Tope alineado a ventas_pago.pagaCon DECIMAL(10,2) (ver migracion
+// 20260710090000_ventas_pago_pagaCon.js). El front (imask) ya limita el
+// tipeo a este valor; esta validacion es la red de seguridad server-side
+// para no depender solo del front (ej. requests fuera de la app).
+const PAGA_CON_MAX = 99999999.99;
+
 async function InsertPagoVenta(connection, pago):Promise<void>{
     try {
+        if (pago.pagaCon != null && (typeof pago.pagaCon !== 'number' || !Number.isFinite(pago.pagaCon) || Math.abs(pago.pagaCon) > PAGA_CON_MAX)) {
+            throw new AppError(
+                CodigoError.VALIDACION,
+                `El monto ingresado en "Paga con" (${pago.pagaCon}) es invalido o supera el maximo permitido.`,
+                400,
+                { modulo: 'ventasRepository.InsertPagoVenta', pagaCon: pago.pagaCon }
+            );
+        }
+
         const consulta = " INSERT INTO ventas_pago(idVenta, monto, recargo, descuento, entrega, tipoModificador, realizado, pagaCon) " +
                          " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
 

@@ -1,6 +1,7 @@
 import { ProductosRepo } from '../data/productosRepository';
 import { RubrosRepo } from '../data/rubrosRepository';
 import { ProveedoresRepo } from '../data/proveedoresRepository';
+import { ProductosProveedoresRepo } from '../data/productosProveedoresRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { ExportProductosServ, ExportLimiteExcedidoError } from '../services/exportProductosService';
@@ -315,6 +316,54 @@ router.put('/asignar-proveedor', async (req:Request, res:Response) => {
 
     } catch(error:any){
         let msg = "Error al intentar asignar el proveedor del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+// Fase 3, PR 3.2 (handoff_repuestos_fases1_2_3.md) -- multi-proveedor por producto. Distinto
+// de /asignar-proveedor de arriba (que sigue existiendo, sin tocar: escribe directo el
+// espejo productos.idProveedor para quien todavia no usa la tabla nueva). Estos cuatro
+// endpoints son el ABM de productos_proveedores.
+router.get('/proveedores/:idProducto', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosProveedoresRepo.Obtener(Number(req.params.idProducto)));
+
+    } catch(error:any){
+        let msg = "Error al obtener los proveedores del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.put('/proveedores/guardar', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosProveedoresRepo.Guardar(req.body));
+
+    } catch(error:any){
+        let msg = "Error al guardar el proveedor del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.put('/proveedores/marcar-principal', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosProveedoresRepo.MarcarPrincipal(req.body));
+
+    } catch(error:any){
+        let msg = "Error al marcar el proveedor principal del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.delete('/proveedores/eliminar/:id', async (req:Request, res:Response) => {
+    try{
+        res.json(await ProductosProveedoresRepo.Eliminar(Number(req.params.id)));
+
+    } catch(error:any){
+        let msg = "Error al quitar el proveedor del producto.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }
