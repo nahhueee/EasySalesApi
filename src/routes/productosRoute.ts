@@ -2,6 +2,7 @@ import { ProductosRepo } from '../data/productosRepository';
 import { RubrosRepo } from '../data/rubrosRepository';
 import { ProveedoresRepo } from '../data/proveedoresRepository';
 import { ProductosProveedoresRepo } from '../data/productosProveedoresRepository';
+import { ImportacionCostosRepo } from '../data/importacionCostosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { ExportProductosServ, ExportLimiteExcedidoError } from '../services/exportProductosService';
@@ -414,6 +415,66 @@ router.put('/actualizar-precio', async (req:Request, res:Response) => {
 
     } catch(error:any){
         let msg = "No se pudo actualizar el precio de un producto. nro " + req.body.id;
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+//#endregion
+
+//#region IMPORTACION DE PRECIOS DE PROVEEDOR (MVP)
+// documentos/handoff_importacion_precios_proveedor.md. El matching y el parseo del archivo
+// pasan por files/procesar-lista-precios (ver filesRoute.ts) -- acá sólo se aplica el lote ya
+// confirmado por el usuario en el paso 3, y se lo puede deshacer.
+router.post('/aplicar-costos-lote', async (req:Request, res:Response) => {
+    try{
+        const { idProveedor, nombreArchivo, idUsuario, filas } = req.body;
+        if (!idProveedor || !Array.isArray(filas) || filas.length === 0) {
+            return res.status(400).json({ mensaje: "Formato inválido: falta idProveedor o filas." });
+        }
+
+        const resultado = await ImportacionCostosRepo.AplicarLote({
+            idProveedor: Number(idProveedor),
+            nombreArchivo: nombreArchivo ?? null,
+            idUsuario: Number(idUsuario) || 0,
+            filas,
+        });
+        res.json(resultado);
+
+    } catch(error:any){
+        let msg = "Error al aplicar el lote de costos importado.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.post('/deshacer-importacion-costos', async (req:Request, res:Response) => {
+    try{
+        const idImportacion = Number(req.body.idImportacion);
+        const idUsuario = Number(req.body.idUsuario) || 0;
+        if (!idImportacion) {
+            return res.status(400).json({ mensaje: "Falta idImportacion." });
+        }
+
+        const resultado = await ImportacionCostosRepo.DeshacerImportacion(idImportacion, idUsuario);
+        if (typeof resultado === 'string') {
+            return res.status(400).json({ mensaje: resultado });
+        }
+        res.json(resultado);
+
+    } catch(error:any){
+        let msg = "Error al deshacer la importación de costos.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+router.get('/ultima-importacion-costos/:idProveedor', async (req:Request, res:Response) => {
+    try{
+        const idProveedor = Number(req.params.idProveedor);
+        res.json(await ImportacionCostosRepo.ObtenerUltimaImportacion(idProveedor));
+
+    } catch(error:any){
+        let msg = "Error al obtener la última importación de costos del proveedor.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

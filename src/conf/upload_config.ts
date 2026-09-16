@@ -25,6 +25,9 @@ const upload = multer(
     }
 );
 
-export { upload, uniqueName, fullPath };  //Exporto la configuracion de multer, el nombre unico y el path completo
+export { upload, uniqueName, fullPath, uploadPath };  //Exporto la configuracion de multer, el nombre unico, el path completo
+// y uploadPath (carpeta de destino) -- este ultimo lo usa procesar-lista-precios para
+// reconstruir la ruta de un archivo por su nombre (files/previsualizar-lista-precios,
+// documentos/handoff_importacion_precios_proveedor.md), sin depender de `fullPath`.
 
 

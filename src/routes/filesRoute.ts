@@ -1,11 +1,13 @@
 import {Router, Request, Response} from 'express';
-import { upload, fullPath } from '../conf/upload_config'; // Importar configuración de Multer y las variables
+import { upload, fullPath, uploadPath } from '../conf/upload_config'; // Importar configuración de Multer y las variables
 import logger from '../logger/loggerGeneral';
 import { v4 as uuid } from 'uuid';
 const router : Router  = Router();
 const path = require('path');
+const fsSync = require('fs');
 
 import { procesarExcel } from '../services/excelService';
+import { LeerPrimerasFilas, ProcesarListaPrecios } from '../services/importacionListaPreciosService';
 import { ParametrosRepo } from '../data/parametrosRepository';
 import { ProductosRepo } from '../data/productosRepository';
 import { ComprobanteService } from '../services/comprobanteService';
@@ -147,6 +149,65 @@ router.post('/importar-excel', upload.single('excel'), async (req, res) => {
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }
+});
+//#endregion
+
+//#region IMPORTACION DE PRECIOS DE PROVEEDOR (MVP)
+// documentos/handoff_importacion_precios_proveedor.md -- flujo de 2 pasos, distinto de
+// /importar-excel de arriba. Paso 1 sube el archivo y devuelve su nombre; paso 2 lo recibe
+// explícito en el body y NO depende de `fullPath` (prohibición 5 del handoff: esa variable de
+// módulo mutable guarda el path del último archivo subido en TODO el proceso, y acá hay dos
+// requests separados).
+router.post('/previsualizar-lista-precios', upload.single('excel'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ mensaje: 'No se recibió ningún archivo.' });
+    }
+
+    const archivo = req.file.filename;
+    const filas = LeerPrimerasFilas(req.file.path);
+
+    res.json({ archivo, filas });
+
+  } catch (error: any) {
+    let msg = "Error al previsualizar la lista de precios.";
+    logger.error(msg + " " + error.message);
+    res.status(500).send(msg);
+  }
+});
+
+router.post('/procesar-lista-precios', async (req: Request, res: Response) => {
+  try {
+    const { archivo, filaHeader, colCodigo, colPrecio, idProveedor } = req.body;
+
+    if (!archivo || filaHeader == null || !colCodigo || !colPrecio || !idProveedor) {
+      return res.status(400).json({ mensaje: 'Faltan parámetros: archivo, filaHeader, colCodigo, colPrecio o idProveedor.' });
+    }
+
+    // Nunca aceptar un path del cliente -- se sanea con basename y se reconstruye sobre
+    // uploadPath, server-side (handoff, prohibición 5).
+    const nombreArchivo = path.basename(archivo);
+    const rutaAbsoluta = path.join(uploadPath, nombreArchivo);
+
+    if (!fsSync.existsSync(rutaAbsoluta)) {
+      return res.status(404).json({ mensaje: 'No se encontró el archivo subido. Volvé a cargarlo.' });
+    }
+
+    const resultado = await ProcesarListaPrecios({
+      rutaArchivo: rutaAbsoluta,
+      filaHeader: Number(filaHeader),
+      colCodigo,
+      colPrecio,
+      idProveedor: Number(idProveedor),
+    });
+
+    res.json(resultado);
+
+  } catch (error: any) {
+    let msg = "Error al procesar la lista de precios.";
+    logger.error(msg + " " + error.message);
+    res.status(500).send(msg);
+  }
 });
 //#endregion
 

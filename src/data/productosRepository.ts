@@ -18,7 +18,7 @@ const CAMPOS_VALORES_DISTINTOS: Record<string, string> = {
 // flag `repuestos` (agregar ese if seria complejidad sin beneficio real).
 // NO usar para la rama de codigo exacto (lector de codigo de barras): ese camino tiene
 // que seguir siendo `p.codigo = ?`, sin LIKE.
-function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[] } {
+function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[], terminos: string[] } {
     let terminos = valor.toString().trim().split(/\s+/).filter(t => t.length > 1).slice(0, 6);
 
     // Si el input entero era de 1 caracter no queda ningun termino: en vez de devolver
@@ -26,7 +26,7 @@ function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[]
     // cual, igual que se comportaba la busqueda de un solo termino antes de este PR.
     if (terminos.length === 0) {
         const bruto = valor.toString().trim();
-        if (bruto.length === 0) return { sql: '', params: [] };
+        if (bruto.length === 0) return { sql: '', params: [], terminos: [] };
         terminos = [bruto];
     }
 
@@ -35,7 +35,7 @@ function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[]
         .join(' AND ');
     const params = terminos.map(t => '%' + t.toLowerCase() + '%');
 
-    return { sql: ` AND (${condiciones})`, params };
+    return { sql: ` AND (${condiciones})`, params, terminos };
 }
 
 class ProductosRepository{
@@ -139,13 +139,27 @@ class ProductosRepository{
                 params.push(filtro.valor);
             }
 
+            // Ranking de relevancia (reporte de cliente 2026-09-16): el filtro multi-termino
+            // matchea contra nombre/codigo/marca/vehiculo/aplicacion por igual, pero para el
+            // autocomplete de venta un match que solo se completa via codigo/marca/vehiculo/
+            // aplicacion no deberia empatar con uno que aparece en el nombre del producto.
+            // Se agrega un nivel de relevancia (0 = todos los terminos estan en el nombre,
+            // 1 = el match depende de otro campo) antes del alfabetico, sin tocar el filtro.
+            let ordenPorRelevancia = '';
             if (filtro.metodo == 'nombre'){
-                const { sql, params: paramsMultiTermino } = ArmarFiltroMultiTermino(filtro.valor);
+                const { sql, params: paramsMultiTermino, terminos } = ArmarFiltroMultiTermino(filtro.valor);
                 consulta += sql;
                 params.push(...paramsMultiTermino);
+
+                if (terminos.length > 0) {
+                    const condicionesNombre = terminos.map(() => 'LOWER(p.nombre) LIKE ?').join(' AND ');
+                    const paramsNombre = terminos.map(t => '%' + t.toLowerCase() + '%');
+                    ordenPorRelevancia = `CASE WHEN (${condicionesNombre}) THEN 0 ELSE 1 END, `;
+                    params.push(...paramsNombre);
+                }
             }
 
-            consulta += ' ORDER BY p.nombre ASC';
+            consulta += ` ORDER BY ${ordenPorRelevancia}p.nombre ASC`;
             const [rows] = await connection.query(consulta, params);
 
             const productos:Producto[] = [];
@@ -864,10 +878,13 @@ class ProductosRepository{
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers privados
+// (Los que llevan `export` los reusa importacionCostosRepository.ts -- ver
+//  documentos/handoff_importacion_precios_proveedor.md -- para no duplicar la lógica de
+//  upsert de precios / historial / lista default.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Obtiene el idLista default desde la DB
-async function GetIdListaDefault(connection): Promise<number> {
+export async function GetIdListaDefault(connection): Promise<number> {
     const [rows] = await connection.query(
         'SELECT id FROM listas_precio WHERE esDefault = 1 LIMIT 1'
     );
@@ -876,7 +893,7 @@ async function GetIdListaDefault(connection): Promise<number> {
 }
 
 // Verifica si una lista es la default
-async function EsListaDefault(connection, idLista: number): Promise<boolean> {
+export async function EsListaDefault(connection, idLista: number): Promise<boolean> {
     const [rows] = await connection.query(
         'SELECT esDefault FROM listas_precio WHERE id = ?', [idLista]
     );
@@ -885,7 +902,7 @@ async function EsListaDefault(connection, idLista: number): Promise<boolean> {
 }
 
 // Upsert de un único precio en productos_precios
-async function UpsertUnPrecio(connection, p: {
+export async function UpsertUnPrecio(connection, p: {
     idProducto: number; idLista: number; tipoPrecio: string;
     costo: number; precio: number; redondeo: number;
     porcentaje: number | null; sumarIva: boolean;
@@ -1138,7 +1155,7 @@ async function FiltrarPreciosCambiados(
 
 // Inserta filas de historial de precios (append-only — nunca actualiza).
 // Se llama server-side, dentro del mismo flujo de persistencia, para garantizar trazabilidad.
-async function InsertarHistorialPrecios(
+export async function InsertarHistorialPrecios(
     connection: any,
     idProducto: number,
     precios: Array<{
@@ -1151,7 +1168,7 @@ async function InsertarHistorialPrecios(
         sumarIva: boolean;
     }>,
     idUsuario: number,
-    origen: 'ALTA' | 'EDICION' | 'CAMBIO_MASIVO'
+    origen: 'ALTA' | 'EDICION' | 'CAMBIO_MASIVO' | 'IMPORTACION'
 ): Promise<void> {
     if (!precios || precios.length === 0) return;
 
