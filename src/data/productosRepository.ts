@@ -12,6 +12,19 @@ const CAMPOS_VALORES_DISTINTOS: Record<string, string> = {
     vehiculo: 'vehiculo',
 };
 
+// Arma la condicion LIKE para un termino de busqueda sobre una expresion SQL ya envuelta en
+// LOWER(). Terminos de 1 caracter (ej. "x" en "termica x 20w") se buscan como palabra completa
+// delimitada por espacios: un LIKE libre matchearia contra cualquier palabra que lo contenga
+// (ej. "exterior"), volviendolo inutil. Se comparte entre el filtro y el ranking de relevancia
+// de BuscarProductos para que ambos usen siempre el mismo criterio.
+function ArmarCondicionTermino(campoLower: string, termino: string): { sql: string, param: string } {
+    const t = termino.toLowerCase();
+    if (t.length === 1) {
+        return { sql: `CONCAT(' ', ${campoLower}, ' ') LIKE ?`, param: `% ${t} %` };
+    }
+    return { sql: `${campoLower} LIKE ?`, param: `%${t}%` };
+}
+
 // PR 2.3 (handoff_repuestos_fases1_2_3.md): busqueda libre multi-termino sobre
 // nombre/codigo/marca/vehiculo/aplicacion. Los campos de repuestos entran siempre al
 // CONCAT_WS -- si estan en NULL no aportan nada, asi que no hace falta gatearlos por el
@@ -19,23 +32,20 @@ const CAMPOS_VALORES_DISTINTOS: Record<string, string> = {
 // NO usar para la rama de codigo exacto (lector de codigo de barras): ese camino tiene
 // que seguir siendo `p.codigo = ?`, sin LIKE.
 function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[], terminos: string[] } {
-    let terminos = valor.toString().trim().split(/\s+/).filter(t => t.length > 1).slice(0, 6);
+    const terminos = valor.toString().trim().split(/\s+/).filter(t => t.length > 0).slice(0, 6);
 
-    // Si el input entero era de 1 caracter no queda ningun termino: en vez de devolver
-    // un filtro vacio (que traeria todos los productos), se busca ese unico caracter tal
-    // cual, igual que se comportaba la busqueda de un solo termino antes de este PR.
     if (terminos.length === 0) {
-        const bruto = valor.toString().trim();
-        if (bruto.length === 0) return { sql: '', params: [], terminos: [] };
-        terminos = [bruto];
+        return { sql: '', params: [], terminos: [] };
     }
 
-    const condiciones = terminos
-        .map(() => "LOWER(CONCAT_WS(' ', p.nombre, p.codigo, p.marca, p.vehiculo, p.aplicacion)) LIKE ?")
-        .join(' AND ');
-    const params = terminos.map(t => '%' + t.toLowerCase() + '%');
+    const campo = "LOWER(CONCAT_WS(' ', p.nombre, p.codigo, p.marca, p.vehiculo, p.aplicacion))";
+    const condiciones = terminos.map(t => ArmarCondicionTermino(campo, t));
 
-    return { sql: ` AND (${condiciones})`, params, terminos };
+    return {
+        sql: ` AND (${condiciones.map(c => c.sql).join(' AND ')})`,
+        params: condiciones.map(c => c.param),
+        terminos
+    };
 }
 
 class ProductosRepository{
@@ -152,10 +162,9 @@ class ProductosRepository{
                 params.push(...paramsMultiTermino);
 
                 if (terminos.length > 0) {
-                    const condicionesNombre = terminos.map(() => 'LOWER(p.nombre) LIKE ?').join(' AND ');
-                    const paramsNombre = terminos.map(t => '%' + t.toLowerCase() + '%');
-                    ordenPorRelevancia = `CASE WHEN (${condicionesNombre}) THEN 0 ELSE 1 END, `;
-                    params.push(...paramsNombre);
+                    const condicionesNombre = terminos.map(t => ArmarCondicionTermino('LOWER(p.nombre)', t));
+                    ordenPorRelevancia = `CASE WHEN (${condicionesNombre.map(c => c.sql).join(' AND ')}) THEN 0 ELSE 1 END, `;
+                    params.push(...condicionesNombre.map(c => c.param));
                 }
             }
 
