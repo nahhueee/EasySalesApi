@@ -13,14 +13,17 @@ const CAMPOS_VALORES_DISTINTOS: Record<string, string> = {
 };
 
 // Arma la condicion LIKE para un termino de busqueda sobre una expresion SQL ya envuelta en
-// LOWER(). Terminos de 1 caracter (ej. "x" en "termica x 20w") se buscan como palabra completa
-// delimitada por espacios: un LIKE libre matchearia contra cualquier palabra que lo contenga
-// (ej. "exterior"), volviendolo inutil. Se comparte entre el filtro y el ranking de relevancia
-// de BuscarProductos para que ambos usen siempre el mismo criterio.
+// LOWER(). Terminos de 1 caracter (ej. "f" en "agv f150") exigen solo limite de INICIO de
+// palabra (espacio antes), no de cierre: un LIKE libre matchearia contra cualquier palabra que
+// lo contenga (ej. "exterior" con "x"), pero exigir tambien el espacio de cierre deja sin
+// resultados mientras el usuario todavia esta tipeando esa palabra (reporte de cliente
+// 2026-09-16, "agv f" sin resultados hasta terminar de escribir la palabra completa). Se
+// comparte entre el filtro y el ranking de relevancia de BuscarProductos para que ambos usen
+// siempre el mismo criterio.
 function ArmarCondicionTermino(campoLower: string, termino: string): { sql: string, param: string } {
     const t = termino.toLowerCase();
     if (t.length === 1) {
-        return { sql: `CONCAT(' ', ${campoLower}, ' ') LIKE ?`, param: `% ${t} %` };
+        return { sql: `CONCAT(' ', ${campoLower}) LIKE ?`, param: `% ${t}%` };
     }
     return { sql: `${campoLower} LIKE ?`, param: `%${t}%` };
 }
