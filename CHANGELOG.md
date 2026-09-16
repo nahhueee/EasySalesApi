@@ -9,3 +9,7 @@
 
 _(sin entradas registradas para esta versión)_
 
+## 2.8.18 — 2026-09-16
+
+_(sin entradas registradas para esta versión)_
+
