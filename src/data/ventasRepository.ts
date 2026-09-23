@@ -201,6 +201,17 @@ class VentasRepository{
         const connection = await db.getConnection();
 
         try {
+            // Idempotencia (ver 20260922120000_ventas_idempotency_key.js): si el front ya
+            // mandó esta misma clave -- reintento tras un error/timeout de red donde la venta
+            // en realidad ya se habia insertado del lado del servidor -- devolvemos el id ya
+            // creado en vez de insertar de nuevo. Chequeo fuera de la transaccion nueva:
+            // es una lectura simple, el UNIQUE index es lo que realmente protege la carrera
+            // (ver catch mas abajo).
+            if (venta.idempotencyKey) {
+                const existente = await BuscarPorIdempotencyKey(connection, venta.idempotencyKey);
+                if (existente) return existente.toString();
+            }
+
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
@@ -323,6 +334,16 @@ class VentasRepository{
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
             await connection.rollback();
+
+            // Carrera de idempotencia: dos requests con la misma key llegaron casi juntas y
+            // ambas pasaron el chequeo de arriba antes de que la primera hiciera commit. El
+            // UNIQUE index en idempotencyKey corta la segunda insercion con ER_DUP_ENTRY --
+            // no es un error real, la otra request ya dejo la venta insertada.
+            if (venta.idempotencyKey && error?.code === 'ER_DUP_ENTRY') {
+                const existente = await BuscarPorIdempotencyKey(connection, venta.idempotencyKey);
+                if (existente) return existente.toString();
+            }
+
             throw error;
         } finally{
             connection.release();
@@ -569,12 +590,23 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 }
 
 //#region INSERT
+
+// Lectura simple usada para la idempotencia de Agregar() -- ver
+// 20260922120000_ventas_idempotency_key.js. undefined si no hay venta con esa clave.
+async function BuscarPorIdempotencyKey(connection, idempotencyKey:string): Promise<number | undefined> {
+    const [rows] = await connection.query(
+        'SELECT id FROM ventas WHERE idempotencyKey = ? LIMIT 1',
+        [idempotencyKey]
+    );
+    return rows[0]?.id;
+}
+
 async function InsertVenta(connection, venta):Promise<number>{
     try {
-        const consulta = " INSERT INTO ventas(idCaja, idCliente, fecha, hora, total, idLista) " +
-                         " VALUES(?, ?, ?, ?, ?, ?) ";
+        const consulta = " INSERT INTO ventas(idCaja, idCliente, fecha, hora, total, idLista, idempotencyKey) " +
+                         " VALUES(?, ?, ?, ?, ?, ?, ?) ";
 
-        const parametros = [venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total, venta.idLista ?? null];
+        const parametros = [venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total, venta.idLista ?? null, venta.idempotencyKey ?? null];
         const [resultado] = await connection.query(consulta, parametros) as [ResultSetHeader, any];
         return resultado.insertId;
 

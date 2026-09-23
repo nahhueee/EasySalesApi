@@ -253,8 +253,18 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
             ? `, (SELECT saldo FROM proveedor_cuenta_movimientos WHERE idProveedor = p.id ORDER BY id DESC LIMIT 1) AS saldo`
             : '';
 
+        // Cuenta filas de productos_proveedores (Fase 3, multiproveedor), no productos.idProveedor:
+        // esa columna es solo el espejo del principal, subcuenta un producto que tiene a este
+        // proveedor como secundario. Se descartan productos con baja lógica (fechaBaja) para no
+        // inflar el número con productos que ya no se venden.
+        const cantidadProductosSelect = !esTotal
+            ? `, (SELECT COUNT(*) FROM productos_proveedores pp
+                 INNER JOIN productos pr ON pr.id = pp.idProducto AND pr.fechaBaja IS NULL
+                 WHERE pp.idProveedor = p.id) AS cantidadProductos`
+            : '';
+
         query = count +
-            " SELECT p.* " + saldoSelect +
+            " SELECT p.* " + saldoSelect + cantidadProductosSelect +
             " FROM proveedores p" +
             filtro +
             " ORDER BY p.id DESC" +
