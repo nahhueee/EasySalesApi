@@ -505,6 +505,12 @@ class ProductosRepository{
             const [result]: any = await connection.query(consulta, parametros);
             const idProducto = result.insertId;
 
+            // productos_proveedores: hasta ahora el alta escribia SOLO el espejo
+            // productos.idProveedor y nunca creaba la fila en la tabla nueva, asi que el tab
+            // "Proveedores" salia vacio en todo producto creado despues del backfill de la
+            // migracion 20260908120000 (226 productos huerfanos en la base del cliente).
+            await SincronizarProveedorPrincipal(connection, idProducto, data.idProveedor || null, precioBase.costo ?? null);
+
             // Upsert en productos_precios
             await UpsertPreciosProducto(connection, idProducto, data);
 
@@ -583,6 +589,13 @@ class ProductosRepository{
 
             await connection.query(consulta, parametros);
 
+            // El UPDATE de arriba ya movio el espejo productos.idProveedor, asi que esPrincipal
+            // tiene que seguirlo o quedan desincronizados. Camino real de esta linea hoy: la
+            // reimportacion de productos por Excel (/actualizar-varios con accion ACTUALIZAR),
+            // que puede traer otro proveedor -- desde la UI el select ya no existe y el tab
+            // mantiene las dos cosas por su cuenta.
+            await SincronizarProveedorPrincipal(connection, data.id, data.idProveedor || null, precioBase.costo ?? null);
+
             // Upsert en productos_precios (si vienen precios[])
             if (data.precios && Array.isArray(data.precios) && data.precios.length > 0) {
                 // Leer ANTES del upsert — después la BD ya tiene los valores nuevos y la comparación da vacío
@@ -626,6 +639,10 @@ class ProductosRepository{
 
             // Eliminar precios asociados primero (FK)
             await connection.query("DELETE FROM productos_precios WHERE idProducto = ?", [id]);
+            // productos_proveedores tambien tiene FK a productos sin ON DELETE (RESTRICT por
+            // default). Antes casi nunca habia filas y el borrado fisico pasaba de casualidad;
+            // ahora que el alta siempre crea la relacion, sin este DELETE el borrado falla.
+            await connection.query("DELETE FROM productos_proveedores WHERE idProducto = ?", [id]);
             await connection.query("DELETE FROM productos WHERE id = ?", [id]);
 
             //Registramos el Movimiento
@@ -938,6 +955,41 @@ export async function UpsertUnPrecio(connection, p: {
 }
 
 // Upsert masivo: procesa data.precios[] o fallback a campos top-level con lista default
+// Mantiene productos_proveedores en linea con el espejo productos.idProveedor. Se llama
+// DESPUES de escribir el espejo, y su unico trabajo es que esPrincipal apunte a lo mismo:
+// el invariante "esPrincipal y productos.idProveedor se escriben siempre juntos" ya estaba
+// establecido en productosProveedoresRepository.ts, pero este repositorio no lo cumplia
+// porque directamente no conocia la tabla.
+//
+// idProveedor null no borra nada: significa "no vino informacion", no "sacale los
+// proveedores". Quitar una relacion es responsabilidad exclusiva del tab.
+//
+// costo solo se usa al CREAR la relacion (es el unico costo conocido en ese momento). Si la
+// relacion ya existia no se pisa: ese valor lo manejan el tab y la importacion de precios.
+// codigoProveedor queda NULL: no sabemos con que codigo identifica la pieza ese proveedor.
+// La importacion de precios lo completa cuando matchea por codigo propio (nivel 2).
+async function SincronizarProveedorPrincipal(connection, idProducto: number, idProveedor: number | null, costo: number | null): Promise<void> {
+    if (!idProveedor) return;
+
+    const [filas] = await connection.query(
+        'SELECT idProveedor FROM productos_proveedores WHERE idProducto = ?', [idProducto]
+    );
+    const yaExistia = (filas as any[]).some(f => Number(f.idProveedor) === Number(idProveedor));
+
+    if (!yaExistia) {
+        await connection.query(`
+            INSERT INTO productos_proveedores (idProducto, idProveedor, codigoProveedor, costo, esPrincipal, fechaActualizacion)
+            VALUES (?, ?, NULL, ?, 0, NOW())
+        `, [idProducto, idProveedor, costo]);
+    }
+
+    await connection.query('UPDATE productos_proveedores SET esPrincipal = 0 WHERE idProducto = ?', [idProducto]);
+    await connection.query(
+        'UPDATE productos_proveedores SET esPrincipal = 1, fechaActualizacion = NOW() WHERE idProducto = ? AND idProveedor = ?',
+        [idProducto, idProveedor]
+    );
+}
+
 async function UpsertPreciosProducto(connection, idProducto: number, data: any): Promise<void> {
     if (data.precios && Array.isArray(data.precios) && data.precios.length > 0) {
         // Nuevo flujo multi-precio: el front envía cada lista explícitamente

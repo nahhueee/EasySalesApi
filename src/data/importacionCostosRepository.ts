@@ -122,7 +122,7 @@ class ImportacionCostosRepository {
                 // Estado anterior, con lock -- para el detalle (Deshacer) y para no pisar
                 // sumarIva, que la importación nunca toca (handoff).
                 const [filasProducto] = await connection.query(
-                    `SELECT costo, precio, tipoPrecio, porcentaje, redondeo, sumarIva FROM productos WHERE id = ? FOR UPDATE`,
+                    `SELECT costo, precio, tipoPrecio, porcentaje, redondeo, sumarIva, idProveedor FROM productos WHERE id = ? FOR UPDATE`,
                     [fila.idProducto]
                 );
                 if (!Array.isArray(filasProducto) || filasProducto.length === 0) {
@@ -167,7 +167,13 @@ class ImportacionCostosRepository {
                     [fila.idProducto]
                 );
                 const filasProveedores = proveedoresExistentes as any[];
-                const teniaAlgunProveedor = filasProveedores.length > 0;
+                // Se mira TAMBIEN el espejo productos.idProveedor, no solo la tabla: hubo 226
+                // productos con el espejo cargado y sin fila acá (Agregar/Modificar escribían
+                // uno sin el otro). Para esos, contar sólo filas daba "no tenía proveedor" y la
+                // importación se auto-marcaba principal, pisando en silencio el proveedor que el
+                // producto ya tenía. El backfill 20260925120000 repara los datos; esto evita que
+                // una desincronización futura vuelva a producir el mismo efecto.
+                const teniaAlgunProveedor = filasProveedores.length > 0 || anterior.idProveedor != null;
                 const relacionYaExistia = filasProveedores.some(p => p.idProveedor === data.idProveedor);
 
                 if (relacionYaExistia) {
