@@ -21,3 +21,7 @@ _(sin entradas registradas para esta versión)_
 
 _(sin entradas registradas para esta versión)_
 
+## 2.8.21 — 2026-09-25
+
+_(sin entradas registradas para esta versión)_
+
