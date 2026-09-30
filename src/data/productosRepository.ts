@@ -51,6 +51,26 @@ function ArmarFiltroMultiTermino(valor: string): { sql: string, params: string[]
     };
 }
 
+// Busqueda avanzada (dialogo F4 de new-venta): filtro por UN campo. `multiTermino` = AND de
+// terminos con el mismo criterio que la busqueda libre (ArmarCondicionTermino); si no, "contiene"
+// sobre todo el texto. Siempre bindeado. `campoLower` es una expresion SQL ya envuelta en LOWER()
+// y fija en el codigo (nunca viene del cliente).
+function ArmarFiltroCampo(valor: any, campoLower: string, multiTermino: boolean): { sql: string, params: string[] } {
+    const texto = (valor ?? '').toString().trim();
+    if (texto === '') return { sql: '', params: [] };
+
+    if (!multiTermino) {
+        return { sql: ` AND ${campoLower} LIKE ?`, params: [`%${texto.toLowerCase()}%`] };
+    }
+
+    const terminos = texto.split(/\s+/).filter(t => t.length > 0).slice(0, 6);
+    const condiciones = terminos.map(t => ArmarCondicionTermino(campoLower, t));
+    return {
+        sql: ` AND (${condiciones.map(c => c.sql).join(' AND ')})`,
+        params: condiciones.map(c => c.param)
+    };
+}
+
 class ProductosRepository{
 
     //#region OBTENER
@@ -1085,6 +1105,24 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
                     params.push(filtros.busqueda);
                     break;
             }
+        }
+
+        // Busqueda avanzada (dialogo F4 de new-venta): filtros por campo, se combinan por AND
+        // entre si y con los de arriba. No tocan `busqueda`/`tipoBusqueda`, asi que el resto de
+        // las pantallas se comportan igual. Los de repuestos (marca/vehiculo/aplicacion) no se
+        // gatean por el flag: en un comercio sin repuestos el front nunca los manda.
+        const camposAvanzados: Array<[any, string, boolean]> = [
+            [filtros.codigo,     "LOWER(p.codigo)",     false],
+            [filtros.nombre,     "LOWER(p.nombre)",     true],
+            [filtros.marca,      "LOWER(p.marca)",      false],
+            [filtros.categoria,  "LOWER(c.nombre)",     false],
+            [filtros.vehiculo,   "LOWER(p.vehiculo)",   true],
+            [filtros.aplicacion, "LOWER(p.aplicacion)", true],
+        ];
+        for (const [valor, campo, multi] of camposAvanzados) {
+            const { sql, params: paramsCampo } = ArmarFiltroCampo(valor, campo, multi);
+            filtro += sql;
+            params.push(...paramsCampo);
         }
 
         if (filtros.faltantes != null && filtros.faltantes == true)

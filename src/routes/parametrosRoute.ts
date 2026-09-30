@@ -1,4 +1,6 @@
-import {ParametrosRepo} from '../data/parametrosRepository';
+import {ParametrosRepo, normalizarParametrosImpresion} from '../data/parametrosRepository';
+import multer from 'multer';
+import { LOGO_MAX_BYTES, validarPNG, guardarLogo, eliminarLogo } from '../services/logoService';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 const path = require('path');
@@ -63,13 +65,55 @@ router.post('/actualizar-facturacion', async (req:Request, res:Response) => {
 
 router.post('/actualizar-impresion', async (req:Request, res:Response) => {
     try{ 
-        res.json(await ParametrosRepo.ActualizarImpresion(req.body));
+        const previo = await ParametrosRepo.ObtenerParametrosImpresion();
+        const resultado = await ParametrosRepo.ActualizarImpresion(req.body);
+
+        // Si el logo cambió (o se quitó), el archivo anterior ya no lo referencia nadie: se borra.
+        const nuevo = normalizarParametrosImpresion(req.body);
+        if ('logo' in nuevo && previo?.logo && previo.logo !== nuevo.logo) {
+            await eliminarLogo(previo.logo);
+        }
+
+        res.json(resultado);
 
     } catch(error:any){
         let msg = "Error al intentar guardar parametros de impresion.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }
+});
+
+// Sube el logo (PNG ya optimizado por el front). Memoria y no disco: se valida antes de escribir
+// nada, y el nombre lo genera el server. La base se actualiza recién al Guardar (actualizar-impresion).
+const subidaLogo = multer({ storage: multer.memoryStorage(), limits: { fileSize: LOGO_MAX_BYTES } }).single('logo');
+
+router.post('/subir-logo', (req:Request, res:Response) => {
+    subidaLogo(req, res, async (error:any) => {
+        try {
+            if (error) {
+                const msg = error.code === 'LIMIT_FILE_SIZE' ? 'El logo supera 1 MB.' : 'No se pudo leer el archivo del logo.';
+                res.status(400).send(msg);
+                return;
+            }
+            if (!req.file) {
+                res.status(400).send('No se recibió ningún archivo.');
+                return;
+            }
+
+            const problema = validarPNG(req.file.buffer);
+            if (problema) {
+                res.status(400).send(problema);
+                return;
+            }
+
+            res.json({ logo: await guardarLogo(req.file.buffer) });
+
+        } catch(err:any) {
+            let msg = "Error al intentar guardar el logo.";
+            logger.error(msg + " " + err.message);
+            res.status(500).send(msg);
+        }
+    });
 });
 
 //Modo en red

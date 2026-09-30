@@ -5,6 +5,10 @@ import { FacturacionServ } from "./facturacionService";
 import { Venta } from "../models/Venta";
 import { Presupuesto } from "../models/Presupuesto";
 import { DetallePresupuesto } from "../models/DetallePresupuesto";
+import logger from "../logger/loggerGeneral";
+import { rutaLogo } from "./logoService";
+import { ventaMuestra, presupuestoMuestra, detallesPresupuestoMuestra, TOTAL_MUESTRA } from "./comprobanteMuestra";
+const QRCode = require('qrcode');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTES Y LOOKUP TABLES
@@ -62,7 +66,8 @@ const printer = new PdfPrinter(fonts);
 
 /** Propiedades visuales y de layout para cada tamaño de papel soportado. */
 interface ConfiguracionPapel {
-  pageSize:     string | { width: number; height: number };
+  /** height 'auto' (térmicas): la página mide lo que mide el contenido — ver CONFIGURACIONES_PAPEL. */
+  pageSize:     string | { width: number; height: number | 'auto' };
   fontSizes:    { titulo: number; normal: number; tabla: number; total: number };
   marginTop:    number;
   tableMargin:  number[];
@@ -92,6 +97,15 @@ interface ComprobanteData {
   filasTabla:       unknown[][];
   /** Recuadro en blanco para que el cliente anote observaciones a mano. Solo aplica a tickets (no A4, ver buildObservaciones). Opcional: mapearComprobanteNotaCredito/mapearPresupuestoComprobante no lo setean porque esos documentos no lo usan. */
   mostrarObservaciones?: boolean;
+  /** Título del recuadro de observaciones (editable: "Observaciones", "Firma", ...). */
+  textoObservaciones?: string;
+  /** Datos NO fiscales ya resueltos por resolverPersonalizacion(): vacío = no se imprime. */
+  telefonoLocal?: string;
+  mensajeExtra?: string;
+  /** Path absoluto del logo, solo si está activo y el archivo existe (ver rutaLogo). */
+  logoPath?: string;
+  /** false solo cuando el usuario ocultó el nombre Y hay logo: sin logo el nombre siempre se imprime. */
+  mostrarNombre?: boolean;
 }
 
 /**
@@ -178,6 +192,9 @@ interface ResumenVenta {
   totalMostrar: number;
 }
 
+/** Documentos que soporta la vista previa de configuración. */
+export type TipoVistaPrevia = 'interno' | 'factura' | 'presupuesto';
+
 /**
  * Parámetros del comprobante recibidos desde el caller (route → servicio).
  * Las propiedades con nombres legacy (desLocal, dirLocal, nomLocal) vienen de la DB
@@ -192,6 +209,17 @@ interface ParametrosComprobante {
   dirLocal:  string;
   /** Preferencia de impresión (default true, ver migración parametros_impresion): agrega un recuadro en blanco al pie del ticket para anotaciones. No aplica a A4. */
   mostrarObservaciones?: boolean;
+  /** Personalización (Preferencias > Impresión). Los mostrar* llegan como 0/1 desde mysql2. */
+  textoObservaciones?: string | null;
+  telefonoLocal?:      string | null;
+  mensajeExtra?:       string | null;
+  mostrarDireccion?:   boolean | number;
+  mostrarTelefono?:    boolean | number;
+  mostrarMensaje?:     boolean | number;
+  /** Nombre de archivo del logo (no un path) y sus toggles. Ver services/logoService.ts. */
+  logo?:               string | null;
+  mostrarLogo?:        boolean | number;
+  mostrarNombre?:      boolean | number;
 }
 
 /**
@@ -205,6 +233,38 @@ interface PresupuestoComprobante {
   total:        number;
 }
 
+/**
+ * mysql2 devuelve los tinyint(1) como 0/1, no como boolean: `valor !== false` daba siempre
+ * true y un toggle apagado seguía imprimiendo. Solo 0/false/'0' cuentan como apagado; el
+ * default (undefined/null, columna aún sin migrar) es encendido = comportamiento previo.
+ */
+function activo(valor: unknown): boolean {
+  return !(valor === false || valor === 0 || valor === '0');
+}
+
+/**
+ * Resuelve los datos NO fiscales personalizables del local aplicando los toggles: un dato
+ * apagado o vacío queda en '' y los builders solo chequean truthiness. Nunca afecta al
+ * domicilio fiscal de las facturas (sale de parametros_facturacion, no de acá).
+ */
+function resolverPersonalizacion(parametros: ParametrosComprobante) {
+  const visible = (mostrar: unknown, valor?: string | null) =>
+    activo(mostrar) ? (valor ?? '').trim() : '';
+
+  const logoPath = activo(parametros.mostrarLogo) ? rutaLogo(parametros.logo) : undefined;
+
+  return {
+    // Ocultar el nombre solo tiene sentido si el logo realmente se va a imprimir; si no, el
+    // comprobante quedaría sin identificar al local.
+    logoPath,
+    mostrarNombre:      activo(parametros.mostrarNombre) || !logoPath,
+    direccionLocal:     visible(parametros.mostrarDireccion, parametros.dirLocal),
+    telefonoLocal:      visible(parametros.mostrarTelefono,  parametros.telefonoLocal),
+    mensajeExtra:       visible(parametros.mostrarMensaje,   parametros.mensajeExtra),
+    textoObservaciones: parametros.textoObservaciones?.trim() || 'Observaciones',
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURACIÓN POR PAPEL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,7 +276,9 @@ interface PresupuestoComprobante {
  */
 const CONFIGURACIONES_PAPEL: Record<string, ConfiguracionPapel> = {
   '58mm': {
-    pageSize:     { width: 140, height: 800 },
+    // height 'auto': un ticket es un rollo continuo. Con alto fijo (800pt ≈ 28cm) una venta larga
+    // se partía en 2 páginas (2 cortes) y una corta arrastraba papel en blanco.
+    pageSize:     { width: 140, height: 'auto' },
     fontSizes:    { titulo: 11, normal: 7, tabla: 6.5, total: 9 },
     marginTop:    1,
     tableMargin:  [0, 3, 0, 2],
@@ -227,7 +289,7 @@ const CONFIGURACIONES_PAPEL: Record<string, ConfiguracionPapel> = {
   },
 
   '80mm': {
-    pageSize:     { width: 200, height: 800 },
+    pageSize:     { width: 200, height: 'auto' },
     fontSizes:    { titulo: 14, normal: 10, tabla: 8.5, total: 12 },
     marginTop:    2,
     tableMargin:  [0, 4, 0, 2],
@@ -375,6 +437,28 @@ function formatearTextoPago(venta: Venta): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Caja máxima [ancho, alto] del logo por papel, en pt. `fit` escala manteniendo la proporción: un
+ * logo vertical no se estira al ancho y no ocupa medio ticket. Fija a propósito: un selector de
+ * tamaño se agrega si un comercio lo pide.
+ */
+const CAJA_LOGO: Record<string, [number, number]> = { '58mm': [90, 55], '80mm': [130, 75], 'A4': [110, 70] };
+
+/**
+ * Logo del local centrado, listo para esparcir en `content`/`stack` (vacío si no hay logo activo).
+ * Todos los encabezados lo usan: buildEncabezado (térmicas, interno y presupuesto A4) y las
+ * columnas del emisor de factura A4 y NC A4.
+ */
+function buildLogo(comprobante: ComprobanteData): object[] {
+  if (!comprobante.logoPath) return [];
+  return [{
+    image:     comprobante.logoPath,
+    fit:       CAJA_LOGO[comprobante.papel] ?? CAJA_LOGO['80mm'],
+    alignment: 'center',
+    margin:    [0, 2, 0, 4],
+  }];
+}
+
+/**
  * Encabezado del comprobante: nombre del local, descripción, dirección y fecha.
  *
  * A4 usa dos columnas (nombre izquierda | fecha derecha).
@@ -384,19 +468,44 @@ function buildEncabezado(
   comprobante: ComprobanteData,
   configuracionPapel: ConfiguracionPapel,
   esFactura = false,
+  documento?: { titulo: string; numero?: string | number },
 ): object {
   if (comprobante.papel === 'A4') {
+    // Mismo esquema que el encabezado de factura A4 (emisor | documento), sin datos fiscales.
     return {
-      columns: [
-        { text: comprobante.nombreLocal?.toUpperCase(), bold: true, fontSize: configuracionPapel.fontSizes.titulo },
-        { text: `${comprobante.fechaVenta} ${comprobante.horaVenta}`, alignment: 'right', fontSize: configuracionPapel.fontSizes.normal },
-      ],
-      margin: [0, 0, 0, configuracionPapel.marginTop],
+      table: {
+        widths: ['55%', '45%'],
+        body: [[
+          {
+            stack: [
+              ...buildLogo(comprobante),
+              ...(comprobante.mostrarNombre !== false
+                ? [{ text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 6, 0, 8] }]
+                : []),
+              ...(comprobante.direccionLocal?.trim() ? [labelValor('Dirección', comprobante.direccionLocal)] : []),
+              ...(comprobante.telefonoLocal?.trim() ? [labelValor('Teléfono', comprobante.telefonoLocal)] : []),
+            ],
+          },
+          {
+            stack: [
+              { text: documento?.titulo ?? 'COMPROBANTE', fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
+              ...(documento?.numero ? [labelValor('Nro', documento.numero, true)] : []),
+              labelValor('Fecha', [comprobante.fechaVenta, comprobante.horaVenta].filter(Boolean).join(' - ')),
+            ],
+          },
+        ]],
+      },
+      layout: layoutLineas(),
+      margin: [0, 0, 0, 6],
     };
   }
 
   const filas = [
-    { text: comprobante.nombreLocal?.toUpperCase(), alignment: 'center', fontSize: configuracionPapel.fontSizes.titulo, bold: true },
+    ...buildLogo(comprobante),
+
+    comprobante.mostrarNombre !== false
+      ? { text: comprobante.nombreLocal?.toUpperCase(), alignment: 'center', fontSize: configuracionPapel.fontSizes.titulo, bold: true }
+      : null,
 
     comprobante.descripcionLocal?.trim()
       ? { text: comprobante.descripcionLocal, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal }
@@ -405,6 +514,11 @@ function buildEncabezado(
     // En facturas AFIP la dirección ya aparece en el bloque del emisor — no duplicar
     (!esFactura && comprobante.direccionLocal?.trim())
       ? { text: comprobante.direccionLocal, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal }
+      : null,
+
+    // El teléfono no es dato fiscal ni aparece en otro bloque: se muestra también en facturas/NC
+    comprobante.telefonoLocal?.trim()
+      ? { text: `Tel: ${comprobante.telefonoLocal}`, alignment: 'center', fontSize: configuracionPapel.fontSizes.normal }
       : null,
 
     {
@@ -416,6 +530,24 @@ function buildEncabezado(
   ];
 
   return filas.filter(Boolean);
+}
+
+/**
+ * Línea divisoria entre el encabezado y el cuerpo del comprobante interno/presupuesto (la factura
+ * ya tiene la suya en buildEncabezadoFactura). El ancho se calcula desde el papel y los márgenes
+ * reales —la de la factura usa 515 fijo, que solo tiene sentido en A4— para que sea igual en
+ * 58mm, 80mm y A4. Los márgenes replican los de buildDocInterno/buildDocPresupuesto.
+ */
+function buildSeparador(comprobante: ComprobanteData, configuracionPapel: ConfiguracionPapel): object {
+  const esA4          = comprobante.papel === 'A4';
+  const anchoPagina   = typeof configuracionPapel.pageSize === 'string' ? 595.28 : configuracionPapel.pageSize.width;
+  const margenIzq     = esA4 ? (comprobante.margenIzq || 15) : comprobante.margenIzq;
+  const margenDer     = esA4 ? (comprobante.margenDer || 15) : comprobante.margenDer;
+
+  return {
+    canvas: [{ type: 'line', x1: 0, y1: 0, x2: anchoPagina - margenIzq - margenDer, y2: 0, lineWidth: 0.5 }],
+    margin: [0, 3, 0, 3],
+  };
 }
 
 /**
@@ -748,10 +880,10 @@ function buildQR(factura: FacturaAFIP, configuracionPapel: ConfiguracionPapel): 
  * Preferencia "Impresión > Mostrar observaciones" en parametros_impresion (default true) —
  * ver mapearComprobante(). Nunca se llama para A4 (gateado en el caller).
  */
-function buildObservaciones(configuracionPapel: ConfiguracionPapel): object {
+function buildObservaciones(configuracionPapel: ConfiguracionPapel, titulo = 'Observaciones'): object {
   return {
     stack: [
-      { text: 'Observaciones', fontSize: configuracionPapel.fontSizes.normal, bold: true, margin: [0, 6, 0, 2] },
+      { text: titulo, fontSize: configuracionPapel.fontSizes.normal, bold: true, margin: [0, 6, 0, 2] },
       {
         table: {
           widths: ['*'],
@@ -769,6 +901,20 @@ function buildObservaciones(configuracionPapel: ConfiguracionPapel): object {
   };
 }
 
+/**
+ * Mensaje libre al pie ("Gracias por su compra"). Devuelve un array para poder esparcirlo en
+ * `content` sin nulls: vacío si el local no configuró mensaje o lo apagó. No se usa en NC.
+ */
+function buildMensajeExtra(comprobante: ComprobanteData, configuracionPapel: ConfiguracionPapel): object[] {
+  if (!comprobante.mensajeExtra?.trim()) return [];
+  return [{
+    text:      comprobante.mensajeExtra,
+    alignment: 'center',
+    fontSize:  configuracionPapel.fontSizes.normal,
+    margin:    [0, 6, 0, 0],
+  }];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BUILDERS DE DOCUMENTO COMPLETO
 // ─────────────────────────────────────────────────────────────────────────────
@@ -783,11 +929,13 @@ function buildDocInterno(comprobante: ComprobanteData, resumen: ResumenVenta | n
       : [comprobante.margenIzq, 4, comprobante.margenDer, 4],
 
     content: [
-      buildEncabezado(comprobante, configuracionPapel),
+      buildEncabezado(comprobante, configuracionPapel, false, { titulo: 'COMPROBANTE' }),
+      ...(comprobante.papel === 'A4' ? [] : [buildSeparador(comprobante, configuracionPapel)]),
       ...buildClienteYPago(venta, configuracionPapel),
       buildTabla(comprobante, configuracionPapel),
       ...buildTotales(resumen, configuracionPapel),
-      ...(comprobante.papel !== 'A4' && comprobante.mostrarObservaciones ? [buildObservaciones(configuracionPapel)] : []),
+      ...buildMensajeExtra(comprobante, configuracionPapel),
+      ...(comprobante.papel !== 'A4' && comprobante.mostrarObservaciones ? [buildObservaciones(configuracionPapel, comprobante.textoObservaciones)] : []),
     ],
   };
 }
@@ -811,8 +959,10 @@ function buildDocPresupuesto(comprobante: ComprobanteData, presupuesto: Presupue
       : [comprobante.margenIzq, 4, comprobante.margenDer, 4],
 
     content: [
-      buildEncabezado(comprobante, configuracionPapel),
-      {
+      buildEncabezado(comprobante, configuracionPapel, false, { titulo: 'PRESUPUESTO', numero: presupuesto.numero }),
+      ...(comprobante.papel === 'A4' ? [] : [buildSeparador(comprobante, configuracionPapel)]),
+      // En A4 el número ya va en el encabezado
+      comprobante.papel === 'A4' ? null : {
         text:      `Presupuesto N° ${presupuesto.numero}`,
         alignment: alineacion,
         bold:      true,
@@ -829,6 +979,7 @@ function buildDocPresupuesto(comprobante: ComprobanteData, presupuesto: Presupue
       },
       buildTabla(comprobante, configuracionPapel),
       filaAlineadaDerecha(`TOTAL: $${formatearMoneda(presupuesto.total, configuracionPapel)}`, configuracionPapel, 'total'),
+      ...buildMensajeExtra(comprobante, configuracionPapel),
       {
         text:      'Este documento es un presupuesto sin valor fiscal. Los precios pueden variar según disponibilidad.',
         italics:   true,
@@ -866,7 +1017,8 @@ function buildDocFactura(
       ...buildIVA(factura, configuracionPapel),
       buildCAE(factura, configuracionPapel),
       buildQR(factura, configuracionPapel),
-      ...(comprobante.mostrarObservaciones ? [buildObservaciones(configuracionPapel)] : []),
+      ...buildMensajeExtra(comprobante, configuracionPapel),
+      ...(comprobante.mostrarObservaciones ? [buildObservaciones(configuracionPapel, comprobante.textoObservaciones)] : []),
     ],
   };
 }
@@ -898,8 +1050,12 @@ function buildDocFacturaA4(
         // Columna izquierda — identificación del emisor
         {
           stack: [
-            { text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
+            ...buildLogo(comprobante),
+            ...(comprobante.mostrarNombre !== false
+              ? [{ text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] }]
+              : []),
             labelValor('Dirección',    factura.direccion),
+            ...(comprobante.telefonoLocal ? [labelValor('Teléfono', comprobante.telefonoLocal)] : []),
             labelValor('Cond. IVA',   factura.condicion),
             labelValor('CUIT',        factura.CUIL),
             labelValor('Razón Social', factura.razon),
@@ -1006,7 +1162,7 @@ function buildDocFacturaA4(
     pageSize:        'A4',
     pageOrientation: 'portrait',
     pageMargins:     [10, 10, 10, 10],
-    content:         [headerTable, tablaReceptor, tablaProductos, tablaTotales, pie],
+    content:         [headerTable, tablaReceptor, tablaProductos, tablaTotales, pie, ...buildMensajeExtra(comprobante, configuracionPapel)],
     styles:          estilosA4(configuracionPapel),
   };
 }
@@ -1065,8 +1221,12 @@ function buildDocNotaCreditoA4(
       body: [[
         {
           stack: [
-            { text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] },
+            ...buildLogo(comprobante),
+            ...(comprobante.mostrarNombre !== false
+              ? [{ text: comprobante.nombreLocal?.toUpperCase(), fontSize: 14, bold: true, alignment: 'center', margin: [0, 10, 0, 8] }]
+              : []),
             labelValor('Dirección',    factura.direccion),
+            ...(comprobante.telefonoLocal ? [labelValor('Teléfono', comprobante.telefonoLocal)] : []),
             labelValor('Cond. IVA',   factura.condicion),
             labelValor('CUIT',        factura.CUIL),
             labelValor('Razón Social', factura.razon),
@@ -1198,6 +1358,25 @@ function estilosA4(configuracionPapel: ConfiguracionPapel): object {
 export class ComprobanteService {
 
   /**
+   * Imprimir una venta nunca puede fallar por el logo. rutaLogo() ya descarta archivos faltantes o
+   * truncados, pero un PNG con la firma y el final correctos y el medio dañado recién revienta
+   * dentro de pdfmake. En ese caso se reintenta el mismo documento sin logo y se deja registro.
+   */
+  private async conRespaldoSinLogo(
+    parametros: ParametrosComprobante,
+    generar: (p: ParametrosComprobante) => Promise<Buffer>,
+  ): Promise<Buffer> {
+    try {
+      return await generar(parametros);
+    } catch (error: any) {
+      if (!parametros.logo) throw error;
+
+      logger.warn(`No se pudo renderizar el comprobante con el logo "${parametros.logo}"; se reintenta sin logo. ${error?.message ?? ''}`);
+      return generar({ ...parametros, logo: null });
+    }
+  }
+
+  /**
    * Punto de entrada público. Genera el Buffer del PDF listo para enviar al cliente.
    *
    * @param venta      - Venta completa con detalles, pago y factura (si aplica)
@@ -1205,6 +1384,10 @@ export class ComprobanteService {
    * @param tipo       - 'interno' para ticket sin datos AFIP, 'factura' para comprobante fiscal
    */
   async generarComprobantePDF(venta: Venta, parametros: ParametrosComprobante, tipo: string): Promise<Buffer> {
+    return this.conRespaldoSinLogo(parametros, p => this.renderComprobante(venta, p, tipo));
+  }
+
+  private async renderComprobante(venta: Venta, parametros: ParametrosComprobante, tipo: string): Promise<Buffer> {
     const comprobante = this.mapearComprobante(venta, parametros);
     const resumen     = calcularResumenVenta(venta);
 
@@ -1216,6 +1399,73 @@ export class ComprobanteService {
   }
 
   /**
+   * Vista previa de configuración (Preferencias > Impresión): renderiza el comprobante con
+   * datos de EJEMPLO y los parámetros borrador recibidos (aún sin guardar). Usa los mismos
+   * builders que la impresión real, así que lo que se ve es el layout real.
+   *
+   * Nunca consulta a ARCA ni toca la base de ventas. En factura el emisor (razón social,
+   * CUIT, domicilio fiscal) es el real —es lo que el usuario necesita ver—, pero CAE y QR son
+   * ficticios, y todo documento sale con marca de agua "VISTA PREVIA" para que no pueda
+   * confundirse con un comprobante fiscal.
+   */
+  async generarVistaPrevia(tipo: TipoVistaPrevia, parametros: ParametrosComprobante): Promise<Buffer> {
+    return this.conRespaldoSinLogo(parametros, p => this.renderVistaPrevia(tipo, p));
+  }
+
+  private async renderVistaPrevia(tipo: TipoVistaPrevia, parametros: ParametrosComprobante): Promise<Buffer> {
+    let docDefinition: object;
+
+    if (tipo === 'presupuesto') {
+      const { comprobante, datos } = this.mapearPresupuestoComprobante(presupuestoMuestra(), detallesPresupuestoMuestra(), parametros);
+      docDefinition = buildDocPresupuesto(comprobante, datos);
+    } else {
+      const venta       = ventaMuestra();
+      const comprobante = this.mapearComprobante(venta, parametros);
+      const resumen     = calcularResumenVenta(venta);
+
+      docDefinition = tipo === 'interno'
+        ? buildDocInterno(comprobante, resumen, venta)
+        : buildDocFactura(comprobante, resumen, venta, await this.mapearFacturaMuestra());
+    }
+
+    return generarBufferPDF({
+      ...docDefinition,
+      watermark: { text: 'VISTA PREVIA', color: '#808080', opacity: 0.18, bold: true },
+    });
+  }
+
+  /** FacturaAFIP ficticia para la vista previa. Ver generarVistaPrevia(). */
+  private async mapearFacturaMuestra(): Promise<FacturaAFIP> {
+    const emisor = await ParametrosRepo.ObtenerParametrosFacturacion();
+    const esRI   = emisor?.condicion === 'responsable_inscripto';
+    const tipo   = esRI ? 6 : 11;   // Factura B (RI a consumidor final) / Factura C (monotributo)
+
+    const neto = Math.round((TOTAL_MUESTRA / 1.21) * 100) / 100;
+    const vto  = new Date();
+    vto.setDate(vto.getDate() + 10);
+
+    return {
+      puntoVenta:         emisor?.puntoVta ?? 1,
+      ticket:             1,
+      neto,
+      iva:                Math.round((TOTAL_MUESTRA - neto) * 100) / 100,
+      cae:                '00000000000000',
+      caeVto:             vto.toLocaleDateString('es-AR'),
+      tipoComprobante:    tipo,
+      desTipoComprobante: TIPO_COMPROBANTE_LETRA[tipo],
+      condicion:          esRI ? 'RESPONSABLE INSCRIPTO' : 'MONOTRIBUTISTA',
+      razon:              emisor?.razon     ?? 'Razón social de ejemplo',
+      direccion:          emisor?.direccion ?? 'Domicilio fiscal de ejemplo',
+      CUIL:               emisor?.cuil      ?? '20000000000',
+      condicionReceptor:  'Consumidor Final',
+      clienteReceptor:    'Consumidor Final',
+      DNI:                undefined,
+      tipoDNI:            undefined,
+      qr:                 await QRCode.toDataURL('https://www.arca.gob.ar/fe/qr/?p=VISTA-PREVIA'),
+    };
+  }
+
+  /**
    * Punto de entrada para PDF de presupuestos — documento simple sin datos fiscales.
    *
    * @param presupuesto - Presupuesto con cliente cargado
@@ -1223,6 +1473,10 @@ export class ComprobanteService {
    * @param parametros  - Configuración del local: papel, márgenes, nombre, etc.
    */
   async generarPresupuestoPDF(presupuesto: Presupuesto, detalles: DetallePresupuesto[], parametros: ParametrosComprobante): Promise<Buffer> {
+    return this.conRespaldoSinLogo(parametros, p => this.renderPresupuesto(presupuesto, detalles, p));
+  }
+
+  private async renderPresupuesto(presupuesto: Presupuesto, detalles: DetallePresupuesto[], parametros: ParametrosComprobante): Promise<Buffer> {
     const { comprobante, datos } = this.mapearPresupuestoComprobante(presupuesto, detalles, parametros);
     const docDefinition = buildDocPresupuesto(comprobante, datos);
 
@@ -1248,7 +1502,7 @@ export class ComprobanteService {
       margenDer:        parametros.margenDer,
       nombreLocal:      parametros.nomLocal,
       descripcionLocal: parametros.desLocal,
-      direccionLocal:   parametros.dirLocal,
+      ...resolverPersonalizacion(parametros),
       fechaVenta:       fecha.toLocaleDateString('es-ES'),
       horaVenta:        '',
       filasTabla:       buildFilasDetallePresupuesto(detalles, configuracionPapel),
@@ -1278,11 +1532,11 @@ export class ComprobanteService {
       margenDer:        parametros.margenDer,
       nombreLocal:      parametros.nomLocal,
       descripcionLocal: parametros.desLocal,
-      direccionLocal:   parametros.dirLocal,
+      ...resolverPersonalizacion(parametros),
       fechaVenta:       fecha.toLocaleDateString('es-ES'),
       horaVenta:        venta.hora,
       filasTabla:       buildFilasDetalle(venta, configuracionPapel),
-      mostrarObservaciones: parametros.mostrarObservaciones !== false,
+      mostrarObservaciones: activo(parametros.mostrarObservaciones),
     };
   }
 
@@ -1331,6 +1585,10 @@ export class ComprobanteService {
    * AFIP — esta función no vuelve a consultar la DB ni a llamar a AFIP, solo arma el PDF.
    */
   async generarNotaCreditoPDF(nc: NotaCreditoImpresion, parametros: ParametrosComprobante): Promise<Buffer> {
+    return this.conRespaldoSinLogo(parametros, p => this.renderNotaCredito(nc, p));
+  }
+
+  private async renderNotaCredito(nc: NotaCreditoImpresion, parametros: ParametrosComprobante): Promise<Buffer> {
     const comprobante  = this.mapearComprobanteNotaCredito(nc, parametros);
     const facturaAFIP  = await this.mapearNotaCredito(nc);
     const docDefinition = buildDocNotaCredito(comprobante, nc, facturaAFIP);
@@ -1353,7 +1611,7 @@ export class ComprobanteService {
       margenDer:        parametros.margenDer,
       nombreLocal:      parametros.nomLocal,
       descripcionLocal: parametros.desLocal,
-      direccionLocal:   parametros.dirLocal,
+      ...resolverPersonalizacion(parametros),
       fechaVenta:       fecha.toLocaleDateString('es-ES'),
       horaVenta:        fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
       filasTabla:       buildFilasDetalleNotaCredito(nc.detalles, configuracionPapel),

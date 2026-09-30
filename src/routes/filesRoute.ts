@@ -8,7 +8,7 @@ const fsSync = require('fs');
 
 import { procesarExcel } from '../services/excelService';
 import { LeerPrimerasFilas, ProcesarListaPrecios } from '../services/importacionListaPreciosService';
-import { ParametrosRepo } from '../data/parametrosRepository';
+import { ParametrosRepo, normalizarParametrosImpresion } from '../data/parametrosRepository';
 import { ProductosRepo } from '../data/productosRepository';
 import { ComprobanteService } from '../services/comprobanteService';
 const ComprobanteServ = new ComprobanteService();
@@ -76,6 +76,36 @@ router.post('/imprimir-pdf-nota-credito', async (req: Request, res: Response) =>
 
   } catch (error: any) {
     let msg = "Error al imprimir la nota de crédito.";
+    logger.error(msg + " " + error.message);
+    res.status(500).send(msg);
+  }
+});
+
+// Vista previa de Preferencias > Impresión: renderiza datos de ejemplo con la configuración
+// que el usuario está editando (borrador sin guardar), superpuesta a la guardada. No imprime
+// ni consulta a ARCA — ver ComprobanteService.generarVistaPrevia().
+const TIPOS_VISTA_PREVIA = ['interno', 'factura', 'presupuesto'];
+
+router.post('/vista-previa-comprobante', async (req: Request, res: Response) => {
+  try {
+    const { tipo, parametros } = req.body ?? {};
+
+    if (!TIPOS_VISTA_PREVIA.includes(tipo)) {
+      res.status(400).send('Tipo de vista previa inválido.');
+      return;
+    }
+
+    const guardados = await ParametrosRepo.ObtenerParametrosImpresion();
+    const borrador  = { ...guardados, ...normalizarParametrosImpresion(parametros) };
+
+    const pdfBuffer = await ComprobanteServ.generarVistaPrevia(tipo, borrador);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename=vista-previa.pdf');
+    res.send(pdfBuffer);
+
+  } catch (error: any) {
+    let msg = "Error al generar la vista previa.";
     logger.error(msg + " " + error.message);
     res.status(500).send(msg);
   }

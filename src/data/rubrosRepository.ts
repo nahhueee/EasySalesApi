@@ -92,19 +92,21 @@ class RubrosRepository{
         }
     }
 
-    async Agregar(data:any): Promise<string>{
+    // Devuelve el id insertado para que el front pueda seleccionar la categoria recien creada
+    // (alta rapida desde addmod-productos). En error de validacion, resultado trae el mensaje y no hay id.
+    async Agregar(data:any): Promise<{resultado:string, id?:number}>{
         const connection = await db.getConnection();
         
         try {
             let existe = await ValidarExistencia(connection, data, false);
             if(existe)//Verificamos si ya existe un rubro con el mismo nombre 
-                return "Ya existe un rubro con el mismo nombre.";
+                return { resultado: "Ya existe un rubro con el mismo nombre." };
             
             const consulta = "INSERT INTO categorias(nombre, color) VALUES (?, ?)";
             const parametros = [data.nombre.toUpperCase(), data.color || null];
             
-            await connection.query(consulta, parametros);
-            return "OK";
+            const [insertado]: any = await connection.query(consulta, parametros);
+            return { resultado: "OK", id: insertado.insertId };
 
         } catch (error:any) {
             throw error;
