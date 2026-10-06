@@ -642,20 +642,44 @@ class ProductosRepository{
         const connection = await db.getConnection();
 
         try {
-            // Si el producto tiene historial de precios o ventas asociadas → baja lógica (preserva trazabilidad).
-            // Si no tiene historial → eliminación física.
+            // VARIOS. Protegido por codigo de negocio (§12.7), no por id — a diferencia de
+            // Consumidor Final en clientes, acá no hay un id fijo verificado.
+            const [productoRows] = await connection.query<any[]>(
+                "SELECT codigo FROM productos WHERE id = ?", [id]
+            );
+            if (productoRows[0]?.codigo === '*') {
+                return "PROTEGIDO";
+            }
+
+            // Borrado físico solo si el producto no aparece en ninguna tabla que lo
+            // referencia. Si aparece en al menos una → baja lógica (preserva trazabilidad).
+            // productos_precios y productos_proveedores son configuración propia del
+            // producto, no historial: no cuentan como referencia, se borran junto con él.
             const [refs] = await connection.query<any[]>(
-                `SELECT
-                    (SELECT COUNT(*) FROM producto_precio_historial WHERE idProducto = ?) AS historial,
-                    (SELECT COUNT(*) FROM ventas_detalle WHERE idProducto = ?) AS ventas`,
-                [id, id]
+                `SELECT EXISTS(
+                    SELECT 1 FROM ventas_detalle WHERE idProducto = ?
+                    UNION ALL
+                    SELECT 1 FROM producto_precio_historial WHERE idProducto = ?
+                    UNION ALL
+                    SELECT 1 FROM presupuestos_detalle WHERE idProducto = ?
+                    UNION ALL
+                    SELECT 1 FROM notas_credito_detalle WHERE idProducto = ?
+                    UNION ALL
+                    SELECT 1 FROM importaciones_costos_detalle WHERE idProducto = ?
+                ) AS tieneReferencias`,
+                [id, id, id, id, id]
             );
 
-            if (refs[0].historial > 0 || refs[0].ventas > 0) {
+            if (refs[0].tieneReferencias) {
                 await connection.query("UPDATE productos SET fechaBaja = NOW() WHERE id = ?", [id]);
                 await SesionServ.RegistrarMovimiento("Dar de baja Producto nro " + id);
                 return "BAJA";
             }
+
+            //Iniciamos una transaccion: si el DELETE de productos falla por alguna FK que no
+            //hayamos previsto, los DELETE de productos_precios/productos_proveedores de abajo
+            //no deben quedar aplicados a mitad de camino.
+            await connection.beginTransaction();
 
             // Eliminar precios asociados primero (FK)
             await connection.query("DELETE FROM productos_precios WHERE idProducto = ?", [id]);
@@ -665,12 +689,17 @@ class ProductosRepository{
             await connection.query("DELETE FROM productos_proveedores WHERE idProducto = ?", [id]);
             await connection.query("DELETE FROM productos WHERE id = ?", [id]);
 
+            //Mandamos la transaccion
+            await connection.commit();
+
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Eliminar Producto nro " + id);
 
             return "OK";
 
         } catch (error:any) {
+            //Si ocurre un error volvemos todo para atras
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();

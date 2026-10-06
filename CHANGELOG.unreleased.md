@@ -28,3 +28,5 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
+
+- [correccion] Eliminar() de clientes/productos solo miraba algunas tablas de referencia (cuenta_corriente_movimientos en clientes; producto_precio_historial + ventas_detalle en productos). Ahora revisa TODAS las tablas que referencian (clientes: ventas, ventas_entrega, cuenta_corriente_movimientos, presupuestos — productos: ventas_detalle, producto_precio_historial, presupuestos_detalle, notas_credito_detalle, importaciones_costos_detalle) antes de decidir borrado físico vs baja lógica. Se protegen Consumidor Final (id 1) y el producto Varios (codigo '*'). El borrado físico de producto ahora corre en una sola transacción (antes, si el DELETE de productos fallaba por una FK no prevista, el DELETE de productos_precios ya aplicado no se revertía).

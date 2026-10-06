@@ -152,13 +152,28 @@ class ClientesRepository{
         const connection = await db.getConnection();
 
         try {
-            // Si el cliente tiene movimientos en CC → baja lógica (preserva auditoría).
-            // Si no tiene historial → eliminación física.
-            const [movs] = await connection.query<any[]>(
-                "SELECT COUNT(*) AS total FROM cuenta_corriente_movimientos WHERE idCliente = ?", [id]
+            // CONSUMIDOR FINAL. id fijo verificado en toda la flota (diagnóstico 3.0, C6).
+            // Deuda §12.7: reemplazar por flag cuando se toque el modelo de clientes.
+            if (Number(id) === 1) {
+                return "PROTEGIDO";
+            }
+
+            // Borrado físico solo si el cliente no aparece en ninguna tabla que lo
+            // referencia. Si aparece en al menos una → baja lógica (preserva auditoría/trazabilidad).
+            const [refs] = await connection.query<any[]>(
+                `SELECT EXISTS(
+                    SELECT 1 FROM ventas WHERE idCliente = ?
+                    UNION ALL
+                    SELECT 1 FROM ventas_entrega WHERE idCliente = ?
+                    UNION ALL
+                    SELECT 1 FROM cuenta_corriente_movimientos WHERE idCliente = ?
+                    UNION ALL
+                    SELECT 1 FROM presupuestos WHERE idCliente = ?
+                ) AS tieneReferencias`,
+                [id, id, id, id]
             );
 
-            if (movs[0].total > 0) {
+            if (refs[0].tieneReferencias) {
                 await connection.query("UPDATE clientes SET fechaBaja = NOW() WHERE id = ?", [id]);
                 await SesionServ.RegistrarMovimiento("Dar de baja Cliente nro " + id);
                 return "BAJA";
