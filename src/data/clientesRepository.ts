@@ -158,6 +158,16 @@ class ClientesRepository{
                 return "PROTEGIDO";
             }
 
+            // Con saldo pendiente (deuda o saldo a favor) no se elimina ni se da de baja: la baja
+            // lo oculta de los listados y ese saldo quedaria sin seguimiento. Mismo criterio de
+            // "saldo actual" que el listado de clientes: saldo del ultimo movimiento del ledger.
+            const [saldoRows] = await connection.query<any[]>(
+                "SELECT saldo FROM cuenta_corriente_movimientos WHERE idCliente = ? ORDER BY id DESC LIMIT 1", [id]
+            );
+            if (saldoRows.length > 0 && Math.round(Number(saldoRows[0].saldo) * 100) !== 0) {
+                return "CON_SALDO";
+            }
+
             // Borrado físico solo si el cliente no aparece en ninguna tabla que lo
             // referencia. Si aparece en al menos una → baja lógica (preserva auditoría/trazabilidad).
             const [refs] = await connection.query<any[]>(
