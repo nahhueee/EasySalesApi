@@ -31,7 +31,7 @@ clientes) — por eso `scripts/diagnostico/informes/` está en `.gitignore`.
 ## 2. Crear la base de referencia (una vez, o cuando cambie el schema)
 
 `diag_referencia` representa una instalación **nueva de hoy**: corre
-`src/db/script-bootstrap.sql` y encima `knex.migrate.latest()` con las 45 migrations de
+`src/db/script-bootstrap.sql` y encima `knex.migrate.latest()` con todas las migrations de
 `src/db/tasks`. Sirve de punto de comparación para el check C2.
 
 ```
@@ -59,6 +59,27 @@ El informe queda en `scripts/diagnostico/informes/<db>_<YYYYMMDD>.md`. Si falta 
 (backup viejo sin `proveedores`, por ejemplo) el informe se genera igual — es un hallazgo,
 no un crash.
 
+## 3.b Migrar una copia (Fase 3.1)
+
+Para validar una migration sobre copias de backups (nunca sobre las bases del diagnóstico original,
+que sirven de "antes", ni sobre `dbeasysales`):
+
+```
+mysql -u root -p -e "CREATE DATABASE diag_a_31"
+mysql -u root -p diag_a_31 < backup_cliente_a.sql
+
+node scripts/diagnostico/migrar.js --db diag_a_31                                  # knex migrate:latest
+node scripts/diagnostico/migrar.js --db diag_a_31 --down                           # revierte la última migration
+node scripts/diagnostico/migrar.js --db diag_a_31 --cortar-despues-del-paso 2      # test de interrupción (V3)
+```
+
+Para la validación completa de la migration de reconciliación (V1–V4 + criterios de aceptación),
+ver `PRUEBAS_3_1A.md` y `validar-3-1a.js`.
+
+Misma guarda `diag_` que el resto. Loguea `SELECT DATABASE()`, las migrations pendientes antes y
+las aplicadas después. Los avisos de la migration de reconciliación quedan en
+`informes/migrar_<db>_avisos.log` (fuera de git).
+
 ## 4. Leer el informe
 
 El `## Resumen` de arriba de todo se puede leer en 30 segundos: cuenta hallazgos críticos,
@@ -73,20 +94,23 @@ nadie fuera de este flujo, revisarlo una vez a mano.
 
 | Check | Qué mide |
 |---|---|
-| C1 | Versión de MySQL, motor/collation/tamaño por tabla. MyISAM es hallazgo crítico (ignora FKs sin avisar). |
+| C1 | Versión de MySQL, motor/collation/`COUNT(*)`/tamaño por tabla. MyISAM es hallazgo crítico (ignora FKs sin avisar); una collation distinta de `utf8mb4*` es hallazgo. |
 | C2 | Diferencias de schema contra `diag_referencia` (tablas, columnas, índices, FKs). Requiere `--ref`. |
 | C3 | Estado de `knex_migrations`: qué migrations faltan o sobran, antigüedad aproximada de la instalación. |
-| C4 | Para cada relación de `relaciones.js`: ¿el tipo de la columna hija coincide con la PK del padre? (si no, una FK real fallaría). También lista columnas `id*` que no están en `relaciones.js` ("relación no clasificada"). |
-| C5 | Para cada relación: cuántos NULL, cuántos = 0, cuántos huérfanos (con hasta 20 IDs de ejemplo). |
+| C4 | Para cada relación de `relaciones.js`: ¿el tipo de la columna hija coincide con la PK del padre? (si no, una FK real fallaría) y si ya existe la FK. También lista columnas `id*` que no están en `relaciones.js` ("relación no clasificada"). |
+| C5 | Para cada relación: cuántos NULL, cuántos = 0, cuántos negativos y cuántos huérfanos (con hasta 20 IDs de ejemplo). |
 | C6 | Registros especiales: producto VARIOS (id 1), tipo de pago EFECTIVO (id 1), cliente CONSUMIDOR FINAL (id 1, solo sí/no), cargos 1-3. |
 | C7 | Códigos de producto duplicados (entre activos) y documentos de cliente duplicados. Solo conteos. |
 | C8 | Índices del conjunto mínimo de `architecture.md` §12.2. |
 | C9 | Pre-conciliación de caja: NULL/0 en `ventas.total`, diferencia entre `cajas.ventas` y la suma real por caja finalizada. Solo mide — qué debería ir en `cajas.ventas` es una decisión de negocio pendiente (3.4). |
 | C10 | Stock: productos con cantidad negativa, decimales fuera de KG, `soloPrecio` inconsistente, volumen de `ventas_detalle` por año. |
+| C11 | Todas las FKs existentes (tabla, columna, padre, `DELETE_RULE`) y cuáles de las declaradas por migrations (`relaciones.conFk`) faltan en esta base. |
 
 ## Archivos
 
 - `relaciones.js`: la lista declarativa de relaciones (legacy sin FK, con FK ya declarada por
   migration, de auditoría sin FK por diseño, y polimórficas). Reusable en Fase 3.5.
 - `crear-referencia.js`: construye `diag_referencia` desde cero.
-- `diagnosticar.js`: corre los checks C1-C10 y escribe el informe.
+- `diagnosticar.js`: corre los checks C1-C11 y escribe el informe.
+- `validar-3-1a.js` / `PRUEBAS_3_1A.md`: validación automatizada de la migration 3.1-A sobre una copia.
+- `migrar.js`: corre `knex migrate:latest`/`down` sobre una base `diag_*` (Fase 3.1).

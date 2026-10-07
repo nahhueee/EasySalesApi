@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/diagnostico/diagnosticar.js
 //
-// Fase 3.0 — corre los checks C1-C10 (ver documentos/handoff_fase3_0_diagnostico_schema.md)
+// Fase 3.0 — corre los checks C1-C11 (ver documentos/handoff_fase3_0_diagnostico_schema.md)
 // contra una base "diag_*" (backup real restaurado, o diag_referencia) y escribe un informe
 // en markdown. Solo lectura: únicamente SELECT e information_schema.
 //
@@ -272,19 +272,38 @@ async function checkC1(conn, ctx) {
   ctx.reporte.linea('');
 
   const filasTabla = [];
+  const tablasCollationNoUtf8mb4 = [];
   for (const t of ctx.tablas) {
+    // COUNT(*) real: TABLE_ROWS es una estimación de InnoDB y da 0 (o cualquier cosa) justo
+    // después de restaurar un backup.
+    let filasReales = '?';
+    try {
+      const [{ n }] = await filas(conn, `SELECT COUNT(*) AS n FROM \`${t.TABLE_NAME}\``);
+      filasReales = String(n);
+    } catch (err) {
+      ctx.reporte.error(`COUNT(*) de \`${t.TABLE_NAME}\`: ${err.message}`);
+    }
     filasTabla.push([
       t.TABLE_NAME,
       t.ENGINE || '?',
       t.TABLE_COLLATION || '?',
-      t.TABLE_ROWS == null ? '?' : String(t.TABLE_ROWS),
+      filasReales,
       formatoBytes((t.DATA_LENGTH || 0) + (t.INDEX_LENGTH || 0)),
     ]);
     if (t.ENGINE && t.ENGINE.toUpperCase() === 'MYISAM') {
       ctx.reporte.hallazgo(`tabla \`${t.TABLE_NAME}\` usa MyISAM — MyISAM ignora las FKs sin avisar.`, { critico: true });
     }
+    if (t.TABLE_COLLATION && !/^utf8mb4/i.test(t.TABLE_COLLATION)) {
+      tablasCollationNoUtf8mb4.push(`${t.TABLE_NAME} (${t.TABLE_COLLATION})`);
+    }
   }
-  ctx.reporte.tabla(['Tabla', 'Engine', 'Collation', 'Filas (aprox)', 'Tamaño'], filasTabla);
+  if (tablasCollationNoUtf8mb4.length > 0) {
+    ctx.reporte.hallazgo(
+      `${tablasCollationNoUtf8mb4.length} tabla(s) con collation distinta de utf8mb4*: ` +
+      tablasCollationNoUtf8mb4.slice(0, 5).join(', ') + (tablasCollationNoUtf8mb4.length > 5 ? ', ...' : '')
+    );
+  }
+  ctx.reporte.tabla(['Tabla', 'Engine', 'Collation', 'Filas', 'Tamaño'], filasTabla);
 }
 
 // ---------------------------------------------------------------------------
@@ -414,6 +433,12 @@ async function checkC3(conn, ctx) {
 // C4 — Compatibilidad de tipos por relación (+ columnas id* sin clasificar)
 // ---------------------------------------------------------------------------
 
+// Normaliza COLUMN_TYPE para comparar: MySQL < 8.0.19 reporta el ancho de display de los enteros
+// ("int(11) unsigned"), y desde 8.0.19 no ("int unsigned"). Es el mismo tipo; no es un desajuste.
+function normalizarTipo(tipo) {
+  return String(tipo).toLowerCase().replace(/^(tinyint|smallint|mediumint|int|bigint)\(\d+\)/, '$1').replace(/\s+/g, ' ').trim();
+}
+
 function tablaYColumnaExisten(columnasMap, tabla, columna) {
   const cols = columnasMap.get(tabla);
   return Boolean(cols && cols.has(columna));
@@ -433,13 +458,13 @@ async function checkC4(conn, ctx) {
       const padreExiste = tablaYColumnaExisten(ctx.columnas, rel.padre, rel.columnaPadre);
 
       if (!hijaExiste || !padreExiste) {
-        filasTabla.push([`${rel.hija}.${rel.columna}`, `${rel.padre}.${rel.columnaPadre}`, '—', '—', '(no existe en esta base)']);
+        filasTabla.push([`${rel.hija}.${rel.columna}`, `${rel.padre}.${rel.columnaPadre}`, '—', '—', '—', '(no existe en esta base)']);
         continue;
       }
 
       const tipoHija = ctx.columnas.get(rel.hija).get(rel.columna).COLUMN_TYPE;
       const tipoPadre = ctx.columnas.get(rel.padre).get(rel.columnaPadre).COLUMN_TYPE;
-      const coincide = tipoHija.toLowerCase() === tipoPadre.toLowerCase();
+      const coincide = normalizarTipo(tipoHija) === normalizarTipo(tipoPadre);
       const tieneIdx = tieneIndice(ctx.indices, rel.hija, rel.columna);
       const esAuditoria = clavesAuditoria.has(`${rel.hija}.${rel.columna}`);
 
@@ -448,6 +473,7 @@ async function checkC4(conn, ctx) {
         `${rel.padre}.${rel.columnaPadre}`,
         tipoHija,
         tipoPadre,
+        ctx.foreignKeys.mapa.has(`${rel.hija}.${rel.columna}`) ? 'sí' : 'no',
         (coincide ? 'OK' : (esAuditoria ? 'DIFIEREN (sin FK por diseño)' : 'DIFIEREN')) + (tieneIdx ? '' : ' · sin índice en hija'),
       ]);
 
@@ -465,7 +491,7 @@ async function checkC4(conn, ctx) {
       ctx.reporte.error(`relación ${rel.hija}.${rel.columna} -> ${rel.padre}.${rel.columnaPadre}: ${err.message}`);
     }
   }
-  ctx.reporte.tabla(['Relación', 'Referencia', 'Tipo hija', 'Tipo padre', 'Resultado'], filasTabla);
+  ctx.reporte.tabla(['Relación', 'Referencia', 'Tipo hija', 'Tipo padre', 'FK existe', 'Resultado'], filasTabla);
 
   // Columnas id[A-Z]* no cubiertas por relaciones.js (§5: "relación no clasificada").
   const cubiertas = new Set([
@@ -510,6 +536,10 @@ async function checkC5(conn, ctx) {
         `SELECT COUNT(*) AS nulos FROM \`${rel.hija}\` WHERE \`${rel.columna}\` IS NULL`);
       const [{ ceros }] = await filas(conn,
         `SELECT COUNT(*) AS ceros FROM \`${rel.hija}\` WHERE \`${rel.columna}\` = 0`);
+      // Negativos: la migration de 3.1-A alinea el tipo de la hija a UNSIGNED y saltea la columna
+      // si hay valores < 0 (no se pueden representar). Hace falta saber si los hay.
+      const [{ negativos }] = await filas(conn,
+        `SELECT COUNT(*) AS negativos FROM \`${rel.hija}\` WHERE \`${rel.columna}\` < 0`);
       const [{ huerfanos }] = await filas(conn, `
         SELECT COUNT(*) AS huerfanos
         FROM \`${rel.hija}\` h
@@ -522,7 +552,14 @@ async function checkC5(conn, ctx) {
         console.warn(`  (lento: ${rel.hija}.${rel.columna} tardó ${Date.now() - inicio}ms — revisar índice en local, es esperable sobre tablas grandes)`);
       }
 
-      ctx.reporte.linea(`- NULL: ${nulos} · = 0: ${ceros} · huérfanos: ${huerfanos}`);
+      ctx.reporte.linea(`- NULL: ${nulos} · = 0: ${ceros} · < 0: ${negativos} · huérfanos: ${huerfanos}`);
+
+      if (Number(negativos) > 0) {
+        ctx.reporte.hallazgo(
+          `${negativos} fila(s) con valor negativo en \`${rel.hija}.${rel.columna}\` — no entran en una columna UNSIGNED.` +
+          (rel.nota ? ` (${rel.nota})` : '')
+        );
+      }
 
       if (Number(huerfanos) > 0) {
         const ejemplos = await filas(conn, `
@@ -813,6 +850,41 @@ async function checkC10(conn, ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// C11 — Foreign keys existentes
+// ---------------------------------------------------------------------------
+
+async function checkC11(conn, ctx) {
+  const { rows, mapa } = ctx.foreignKeys;
+
+  ctx.reporte.linea(`${rows.length} FK(s) en la base.`);
+  ctx.reporte.linea('');
+  ctx.reporte.tabla(
+    ['Tabla', 'Columna', 'Padre', 'DELETE_RULE', 'Constraint'],
+    rows.map(r => [r.tabla, r.columna, `${r.tablaReferenciada}.${r.columnaReferenciada}`, r.reglaBorrado, r.nombre])
+  );
+
+  // FKs que alguna migration de src/db/tasks declara (relaciones.conFk) y que acá no existen.
+  // Se omiten las relaciones cuya tabla o columna no existe en esta base (backup viejo): eso ya
+  // lo reporta C4 / C2.
+  ctx.reporte.linea('### FKs declaradas por migrations (relaciones.conFk)');
+  ctx.reporte.linea('');
+  const filasEstado = [];
+  for (const rel of relaciones.conFk) {
+    if (!tablaYColumnaExisten(ctx.columnas, rel.hija, rel.columna) ||
+        !tablaYColumnaExisten(ctx.columnas, rel.padre, rel.columnaPadre)) {
+      filasEstado.push([`${rel.hija}.${rel.columna}`, `${rel.padre}.${rel.columnaPadre}`, '(no existe en esta base)']);
+      continue;
+    }
+    const existe = mapa.has(`${rel.hija}.${rel.columna}`);
+    filasEstado.push([`${rel.hija}.${rel.columna}`, `${rel.padre}.${rel.columnaPadre}`, existe ? 'sí' : 'NO']);
+    if (!existe) {
+      ctx.reporte.hallazgo(`\`${rel.hija}.${rel.columna}\` -> \`${rel.padre}.${rel.columnaPadre}\`: una migration la declara pero la FK no existe en esta base.`);
+    }
+  }
+  ctx.reporte.tabla(['Relación', 'Padre', 'FK existe'], filasEstado);
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -827,6 +899,7 @@ const CHECKS = [
   ['C8', 'Índices de architecture.md §12.2', checkC8],
   ['C9', 'Pre-conciliación de caja', checkC9],
   ['C10', 'Stock', checkC10],
+  ['C11', 'Foreign keys existentes', checkC11],
 ];
 
 async function main() {

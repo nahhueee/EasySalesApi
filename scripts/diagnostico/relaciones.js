@@ -43,6 +43,9 @@ const legacy = [
   { hija: 'proveedor_cuenta_movimientos', columna: 'idCaja', padre: 'cajas', columnaPadre: 'id', nota: null },
 ];
 
+// Corregido en 3.1-A: ventas_pagos_detalle.idEntrega NO tiene FK declarada (20260324115247 solo agrega la
+// columna) y faltaba proveedor_cuenta_movimientos.idProveedor (20260808100000). Esta lista tiene que
+// coincidir con FKS_DECLARADAS de la migration de reconciliación 3.1-A.
 // Verificadas contra src/db/tasks/*.js (grep de table.foreign/.references), no contra la
 // prosa del handoff. Cada comentario inline dice de qué migration sale.
 const conFk = [
@@ -50,11 +53,12 @@ const conFk = [
   // INT con signo, ventas.id es INT UNSIGNED.
   { hija: 'ventas_pagos_detalle', columna: 'idVenta', padre: 'ventas', columnaPadre: 'id', nota: null },
   // 20260723120000_cobro_fiado_caja.js
-  { hija: 'ventas_pagos_detalle', columna: 'idEntrega', padre: 'ventas_entrega', columnaPadre: 'id', nota: null },
   { hija: 'ventas_entrega', columna: 'idCaja', padre: 'cajas', columnaPadre: 'id', nota: null },
   { hija: 'ventas_pagos_detalle', columna: 'idCaja', padre: 'cajas', columnaPadre: 'id', nota: null },
   { hija: 'cajas_movimientos', columna: 'idEntrega', padre: 'ventas_entrega', columnaPadre: 'id', nota: 'ON DELETE SET NULL desde 20260724090000' },
   { hija: 'cajas_movimientos', columna: 'idVentaPagoDetalle', padre: 'ventas_pagos_detalle', columnaPadre: 'id', nota: 'ON DELETE SET NULL desde 20260724090000; tipo corregido a UNSIGNED en esa misma migration' },
+  // 20260808100000_proveedor_cuenta_movimientos.js
+  { hija: 'proveedor_cuenta_movimientos', columna: 'idProveedor', padre: 'proveedores', columnaPadre: 'id', nota: null },
   // 20260808130000_cajas_movimientos_id_proveedor_movimiento.js
   { hija: 'cajas_movimientos', columna: 'idProveedorMovimiento', padre: 'proveedor_cuenta_movimientos', columnaPadre: 'id', nota: null },
   // 20260903120000_cajas_movimientos_id_movimiento_compensado.js
