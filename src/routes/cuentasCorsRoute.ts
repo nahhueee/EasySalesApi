@@ -2,6 +2,7 @@ import {CuentasRepo} from '../data/cuentasCorsRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { datosAuditoria } from '../utils/auditoria';
+import { TienePermisoBackend } from '../utils/permisos';
 const router : Router  = Router();
 
 router.post('/movimientos', async (req:Request, res:Response) => {
@@ -58,6 +59,27 @@ router.put('/entrega', async (req:Request, res:Response) => {
 
     } catch(error:any){
         let msg = "No se pudo realizar el proceso de entrega de dinero.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+// Ajuste manual del saldo del cliente (ledger). Solo ADMINISTRADOR, validado en el backend:
+// mueve el saldo sin respaldo de caja ni de venta, no alcanza con ocultar el botón.
+router.post('/ajuste', async (req:Request, res:Response) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+
+        const tienePermiso = await TienePermisoBackend(usuarioId, ["ADMINISTRADOR"]);
+        if (!tienePermiso) {
+            res.status(403).send("No tenés permiso para ajustar la cuenta corriente de clientes.");
+            return;
+        }
+
+        res.json(await CuentasRepo.RegistrarAjusteCliente(req.body, usuarioId, puestoId));
+
+    } catch(error:any){
+        let msg = "No se pudo registrar el ajuste de cuenta corriente.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }

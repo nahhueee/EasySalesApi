@@ -145,6 +145,12 @@ class CuentasCorsRepository{
 
     async EntregaDinero(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
 
+        // Defensa en profundidad (la UI ya lo valida): una entrega negativa o en 0 no tiene sentido
+        // y hoy no hay otra validación del monto en este método.
+        if (!(Number(data.monto) > 0)) {
+            return "El monto de la entrega debe ser mayor a 0.";
+        }
+
         const connection = await db.getConnection();
 
         //Obtenemos el listado de ventas del cliente en estado impagas
@@ -556,6 +562,97 @@ class CuentasCorsRepository{
             await connection.rollback();
             throw error;
         } finally{
+            connection.release();
+        }
+    }
+
+    // Ajuste manual del saldo de un cliente (solo ledger): corrige una deuda/saldo a favor mal
+    // cargado, un redondeo o un saldo heredado que hay que regularizar. Modelado sobre
+    // ProveedorCuentaRepo.RegistrarAjuste. El guard de rol (ADMINISTRADOR) lo hace el caller.
+    //   modo 'monto': aplica `monto` en `sentido` ('debe' aumenta la deuda, 'haber' la disminuye).
+    //   modo 'cero' : calcula acá, con la fila del cliente lockeada, el movimiento que deja el
+    //                 saldo en 0 (evita que el front calcule sobre un saldo que cambió en el medio).
+    // LIMITE CONOCIDO: solo escribe el ledger. No toca ventas_pago (realizado/entrega), así que
+    // las ventas impagas siguen figurando pendientes y un cobro posterior (EntregaDinero, FIFO)
+    // podría imputarse a ellas. Aceptado en esta etapa.
+    async RegistrarAjusteCliente(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
+        const connection = await db.getConnection();
+
+        try {
+            const idCliente = Number(data.idCliente);
+            const observacion = String(data.observacion ?? '').trim();
+
+            if (!idCliente) { return "El cliente no es válido."; }
+            if (!observacion) { return "El ajuste requiere una observación."; }
+            if (idCliente === 1) { return "No se puede ajustar la cuenta de Consumidor Final."; }
+
+            await connection.beginTransaction();
+
+            // Lock de la fila del cliente: serializa contra ventas/entregas concurrentes y
+            // garantiza que el saldo leído abajo es el que efectivamente se ajusta.
+            const [cliRows] = await connection.query(
+                'SELECT id, nombre, fechaBaja FROM clientes WHERE id = ? FOR UPDATE', [idCliente]
+            ) as [any[], any];
+            const cliente = cliRows[0];
+
+            if (!cliente || cliente.fechaBaja) {
+                await connection.rollback();
+                return "El cliente no existe o está dado de baja.";
+            }
+
+            let sentido: string;
+            let monto: number;
+
+            if (data.modo === 'cero') {
+                const [ultimo] = await connection.query(
+                    'SELECT saldo FROM cuenta_corriente_movimientos WHERE idCliente = ? ORDER BY id DESC LIMIT 1',
+                    [idCliente]
+                ) as [any[], any];
+                const saldoCent = ultimo.length > 0 ? Math.round(Number(ultimo[0].saldo) * 100) : 0;
+
+                if (saldoCent === 0) {
+                    await connection.rollback();
+                    return "La cuenta corriente ya está en 0.";
+                }
+                // Saldo > 0 (deuda): se compensa con haber. Saldo < 0 (a favor): con debe.
+                sentido = saldoCent > 0 ? 'haber' : 'debe';
+                monto = Math.abs(saldoCent) / 100;
+            } else {
+                monto = Math.round(Number(data.monto) * 100) / 100;
+                sentido = data.sentido;
+                if (!(monto > 0)) {
+                    await connection.rollback();
+                    return "El monto debe ser mayor a 0.";
+                }
+                if (sentido !== 'debe' && sentido !== 'haber') {
+                    await connection.rollback();
+                    return "El sentido del ajuste no es válido.";
+                }
+            }
+
+            // Descripción distinta de 'Pago manual de venta' (ObtenerCobrosCaja la usa para
+            // identificar cobros de fiado); acá siempre arranca con "Ajuste manual".
+            await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+                idCliente,
+                tipo: 'ajuste',
+                descripcion: `Ajuste manual - ${observacion}`,
+                debe: sentido === 'debe' ? monto : undefined,
+                haber: sentido === 'haber' ? monto : undefined
+            });
+
+            await connection.commit();
+
+            await SesionServ.RegistrarMovimiento(
+                `Ajuste manual de cuenta corriente del cliente nro ${idCliente} (${cliente.nombre}): ${sentido === 'debe' ? '+' : '-'}$${monto}`,
+                usuarioId, puestoId
+            );
+
+            return "OK";
+
+        } catch (error:any) {
+            await connection.rollback();
+            throw error;
+        } finally {
             connection.release();
         }
     }
