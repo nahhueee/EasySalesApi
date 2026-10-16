@@ -5,8 +5,8 @@ import { ResultSetHeader } from 'mysql2';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { MovimientosRepo } from './movimientosRepository';
 
-// tipos_pago.id del medio EFECTIVO. Verificado contra los seeds/backups (script.sql,
-// script-bootstrap.sql, respaldos): siempre id=1. El front de entrega-ventas ya hardcodea
+// tipos_pago.id del medio EFECTIVO. Verificado contra los seeds y los backups:
+// siempre id=1. El front de entrega-ventas ya hardcodea
 // ids de tipos_pago (excluye id=4=TARJETA), así que hardcodear acá es consistente con el
 // estilo existente. Riesgo: si se reordena el seed de tipos_pago, esto se rompe en silencio.
 // Exportada para que proveedorCuentaRepository.ts (guard de efectivo del pago a proveedores,

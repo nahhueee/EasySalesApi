@@ -41,8 +41,6 @@ async function setup() {
       // cuando build:server-installer instala node_modules directo en dist/.
       { from: "package-lock.json", to: "package-lock.json" },
       { from: "scripts/knexfile.js", to: "scripts/knexfile.js" },
-      { from: "src/db/script.sql", to: "src/db/script.sql" },
-      { from: "src/db/script-bootstrap.sql", to: "src/db/script-bootstrap.sql" },
       { from: ".env", to: ".env"},
 
       { from: "src/fonts/Roboto-Italic.ttf", to: "src/fonts/Roboto-Italic.ttf" },

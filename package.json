@@ -9,6 +9,7 @@
     "build": "tsc && node scripts/setup.js",
     "build:server-installer": "npm run build && npm ci --omit=dev --prefix dist",
     "release": "node scripts/release.js",
+    "db:reset": "node scripts/db-reset.js",
     "migration": "cd scripts && knex migrate:latest",
     "migrate:make": "cd scripts && knex migrate:make",
     "migrate:rollback": "cd scripts && knex migrate:rollback",
