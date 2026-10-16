@@ -30,13 +30,17 @@ clientes) — por eso `scripts/diagnostico/informes/` está en `.gitignore`.
 
 ## 2. Crear la base de referencia (una vez, o cuando cambie el schema)
 
-`diag_referencia` representa una instalación **nueva de hoy**: corre
-`src/db/script-bootstrap.sql` y encima `knex.migrate.latest()` con todas las migrations de
-`src/db/tasks`. Sirve de punto de comparación para el check C2.
+`diag_referencia` representa una instalación **nueva de hoy**: una base vacía sobre la que
+corre `knex.migrate.latest()` con todas las migrations de `src/db/tasks` (la primera es la
+migration base `20260101000000_schema_base.js`). Sirve de punto de comparación para el check C2.
 
 ```
-node scripts/diagnostico/crear-referencia.js
+node scripts/diagnostico/crear-referencia.js [--db diag_referencia]
 ```
+
+Checklist de release con migrations nuevas: crear una referencia nueva con este script y correr
+`diagnosticar.js --db <base actualizada> --ref <referencia nueva>` para confirmar que una
+instalación nueva y una actualizada quedan iguales (architecture.md §13).
 
 Si una migration falla acá, **es un hallazgo** (bootstrap y migrations ya no coinciden hoy) —
 el script no la "arregla", se frena y hay que reportarlo.

@@ -1,35 +1,39 @@
 #!/usr/bin/env node
 // scripts/diagnostico/crear-referencia.js
 //
-// Fase 3.0 — construye diag_referencia: una base tal como quedaría una
-// instalación nueva de EasySales hoy (script-bootstrap.sql + todas las
-// migrations de src/db/tasks corridas encima). Sirve de referencia para
-// el check C2 (deriva) en diagnosticar.js.
+// Construye una base de referencia tal como queda una instalación NUEVA de EasySales:
+// base vacía + knex.migrate.latest() con todas las migrations de src/db/tasks (la primera es
+// la migration base 20260101000000_schema_base, Fase 3.1-B). Sirve de referencia para el check
+// C2 (deriva) de diagnosticar.js, y de validación de que una instalación nueva y una actualizada
+// terminan con el mismo schema (checklist de release con migrations nuevas, architecture.md §13).
 //
-// Uso: node scripts/diagnostico/crear-referencia.js
+// Uso: node scripts/diagnostico/crear-referencia.js [--db diag_referencia]
 //
-// Un fallo de una migration sobre una instalación "nueva" ES un hallazgo
-// (bootstrap y migrations ya no coinciden hoy), no algo que este script
-// deba arreglar: se reporta y se frena.
+// Un fallo de una migration sobre una instalación "nueva" ES un hallazgo (la base y las
+// migrations ya no coinciden), no algo que este script deba arreglar: se reporta y se frena.
 
 const path = require('path');
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 const knexLib = require('knex');
 
-const DB_REFERENCIA = 'diag_referencia';
+const DB_DEFAULT = 'diag_referencia';
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CONFIG_PATH = path.resolve(REPO_ROOT, `config.${process.env.NODE_ENV || 'pc'}.json`);
-const BOOTSTRAP_PATH = path.resolve(REPO_ROOT, 'src', 'db', 'script-bootstrap.sql');
 const MIGRATIONS_DIR = path.resolve(REPO_ROOT, 'src', 'db', 'tasks');
 
-// Guardia de nombre — sin excepciones ni flag para saltearla. La comparten,
-// cada una por su cuenta, crear-referencia.js y diagnosticar.js: acá el
-// destino está hardcodeado a "diag_referencia", pero la dejamos igual para
-// no depender de que nadie recuerde respetar la convención a mano si el
-// valor cambia.
+function parsearArgs(argv) {
+  const args = { db: DB_DEFAULT };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--db') args.db = argv[++i];
+    else throw new Error(`Argumento desconocido: ${argv[i]}`);
+  }
+  return args;
+}
+
+// Guardia de nombre — sin excepciones ni flag para saltearla. Este script hace DROP DATABASE.
 function asegurarPrefijoDiag(nombreBase) {
-  if (!nombreBase.startsWith('diag_')) {
+  if (!nombreBase || !nombreBase.startsWith('diag_')) {
     throw new Error(
       `Guardia de seguridad: "${nombreBase}" no empieza con "diag_". ` +
       'Esta herramienta nunca corre contra una base que no sea explícitamente de diagnóstico.'
@@ -38,85 +42,46 @@ function asegurarPrefijoDiag(nombreBase) {
 }
 
 function leerCredencialesDb() {
-  const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-  const config = JSON.parse(raw);
+  const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   if (!config.db || !config.db.host || !config.db.user) {
     throw new Error(`No encontré credenciales de DB en ${CONFIG_PATH} (esperaba config.db.{host,user,password}).`);
   }
   return config.db;
 }
 
-// Reescribe "USE dbeasysales;" -> "USE <nombreBaseDestino>;" en memoria.
-// No toca script-bootstrap.sql en disco.
-function prepararBootstrapSql(nombreBaseDestino) {
-  const sqlOriginal = fs.readFileSync(BOOTSTRAP_PATH, 'utf8');
-
-  const usePattern = /^USE\s+dbeasysales\s*;/mi;
-  if (!usePattern.test(sqlOriginal)) {
-    throw new Error(
-      `No encontré la línea "USE dbeasysales;" en ${BOOTSTRAP_PATH}. ` +
-      'El reemplazo asume que existe exactamente una vez — revisar el archivo antes de seguir.'
-    );
-  }
-
-  return sqlOriginal.replace(usePattern, `USE \`${nombreBaseDestino}\`;`);
-}
-
-async function crearBaseYCorrerBootstrap(credenciales) {
-  const bootstrapSql = prepararBootstrapSql(DB_REFERENCIA);
-
-  // multipleStatements: true vive SOLO en esta conexión y SOLO en este script
-  // (tooling de desarrollo puntual). La app, y la conexión de knex más abajo,
-  // siguen con el default (false).
+async function recrearBaseVacia(credenciales, nombreBase) {
   const conexion = await mysql.createConnection({
     host: credenciales.host,
     user: credenciales.user,
     password: credenciales.password,
-    multipleStatements: true,
   });
-
   try {
-    console.log(`Recreando base "${DB_REFERENCIA}" desde cero...`);
-    await conexion.query(`DROP DATABASE IF EXISTS \`${DB_REFERENCIA}\`;`);
-    await conexion.query(`CREATE DATABASE \`${DB_REFERENCIA}\`;`);
-
-    console.log('Ejecutando script-bootstrap.sql sobre esa base...');
-    await conexion.query(bootstrapSql);
-
-    const [rows] = await conexion.query('SELECT DATABASE() AS db;');
-    const baseActiva = rows[0].db;
-    if (baseActiva !== DB_REFERENCIA) {
-      throw new Error(
-        `Después de correr el bootstrap, SELECT DATABASE() devolvió "${baseActiva}", ` +
-        `esperaba "${DB_REFERENCIA}". Algo en el script cambió de base activa — no sigo.`
-      );
-    }
-    console.log(`OK: bootstrap aplicado. Base activa confirmada: ${baseActiva}`);
+    console.log(`Recreando base "${nombreBase}" desde cero (vacía, sin charset explícito)...`);
+    await conexion.query(`DROP DATABASE IF EXISTS \`${nombreBase}\`;`);
+    await conexion.query(`CREATE DATABASE \`${nombreBase}\`;`);
   } finally {
     await conexion.end();
   }
 }
 
-async function correrMigrations(credenciales) {
+async function correrMigrations(credenciales, nombreBase) {
   const knex = knexLib({
     client: 'mysql2',
     connection: {
       host: credenciales.host,
       user: credenciales.user,
       password: credenciales.password,
-      database: DB_REFERENCIA,
+      database: nombreBase,
     },
-    migrations: {
-      directory: MIGRATIONS_DIR,
-    },
+    migrations: { directory: MIGRATIONS_DIR },
   });
 
   try {
     const raw = await knex.raw('SELECT DATABASE() AS db;');
     const baseActiva = raw[0][0].db;
     console.log(`Conexión de knex confirmada contra: ${baseActiva}`);
-    if (baseActiva !== DB_REFERENCIA) {
-      throw new Error(`knex está conectado a "${baseActiva}", no a "${DB_REFERENCIA}". Abortando antes de migrar.`);
+    if (baseActiva !== nombreBase) {
+      throw new Error(`knex está conectado a "${baseActiva}", no a "${nombreBase}". Abortando antes de migrar.`);
     }
 
     console.log(`Corriendo knex.migrate.latest() (directory: ${MIGRATIONS_DIR})...`);
@@ -131,7 +96,7 @@ async function correrMigrations(credenciales) {
       }
     }
   } catch (err) {
-    console.error('\nHALLAZGO: una migration falló sobre una instalación nueva de hoy.');
+    console.error('\nHALLAZGO: una migration falló sobre una instalación nueva.');
     console.error(`  ${err.message}`);
     console.error(
       'No se "arregla" la migration acá — esto es justo el tipo de deriva que el ' +
@@ -144,13 +109,14 @@ async function correrMigrations(credenciales) {
 }
 
 async function main() {
-  asegurarPrefijoDiag(DB_REFERENCIA);
+  const args = parsearArgs(process.argv.slice(2));
+  asegurarPrefijoDiag(args.db);
   const credenciales = leerCredencialesDb();
 
-  await crearBaseYCorrerBootstrap(credenciales);
-  await correrMigrations(credenciales);
+  await recrearBaseVacia(credenciales, args.db);
+  await correrMigrations(credenciales, args.db);
 
-  console.log(`\nListo: "${DB_REFERENCIA}" está construida (bootstrap + migrations) y lista para usarse como --ref en diagnosticar.js.`);
+  console.log(`\nListo: "${args.db}" está construida (base vacía + migrations) y lista para usarse como --ref en diagnosticar.js.`);
 }
 
 main().catch(err => {
