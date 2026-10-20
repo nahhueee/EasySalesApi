@@ -43,3 +43,7 @@ _(sin entradas registradas para esta versión)_
 
 _(sin entradas registradas para esta versión)_
 
+## 2.8.25 — 2026-10-20
+
+_(sin entradas registradas para esta versión)_
+
