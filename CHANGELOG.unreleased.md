@@ -28,3 +28,4 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
+- [correccion] al anular una venta, la caja y el stock se ajustan con los datos guardados de la venta (no los del front); se impide anular dos veces la misma venta (VENTA_YA_ANULADA)

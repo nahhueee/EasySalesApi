@@ -369,10 +369,39 @@ class VentasRepository{
         const connection = await db.getConnection();
 
         try {
+            //Iniciamos una transaccion
+            await connection.beginTransaction();
+
+            //Lock + verificación (Fase 3.2-0): del body solo usamos venta.id y obs. Total, caja y
+            //detalles se leen de la base. El FOR UPDATE serializa dos anulaciones simultáneas:
+            //la segunda espera y, al entrar, ve fechaBaja ya seteada.
+            const [ventaRows] = await connection.query(
+                "SELECT id, idCaja, total, fechaBaja FROM ventas WHERE id = ? FOR UPDATE",
+                [venta.id]
+            );
+            const ventaDb = (ventaRows as any[])[0];
+            if (!ventaDb) {
+                throw new AppError(
+                    CodigoError.NOT_FOUND,
+                    'La venta no existe.',
+                    404,
+                    { modulo: 'ventasRepository.Eliminar', idVenta: venta.id }
+                );
+            }
+            if (ventaDb.fechaBaja !== null) {
+                throw new AppError(
+                    CodigoError.VENTA_YA_ANULADA,
+                    'Esta venta ya fue anulada.',
+                    409,
+                    { modulo: 'ventasRepository.Eliminar', idVenta: venta.id }
+                );
+            }
+
             // Guard fiscal (Lote 5, Fase 2): una venta con CAE no se elimina, se acredita
             // con una Nota de Crédito. La UI ya no ofrece el botón (ver ventas.component.ts
             // mostrarEliminar/mostrarNC), esto es la validación equivalente en el backend
-            // para no depender solo del front.
+            // para no depender solo del front. Va después del lock para que no haya ventana
+            // entre el chequeo y la baja.
             const [facturaRows] = await connection.query(
                 "SELECT cae FROM ventas_factura WHERE idVenta = ? AND cae IS NOT NULL",
                 [venta.id]
@@ -385,9 +414,6 @@ class VentasRepository{
                     { modulo: 'ventasRepository.Eliminar', idVenta: venta.id }
                 );
             }
-
-            //Iniciamos una transaccion
-            await connection.beginTransaction();
 
             //Leemos el estado de pago real de la venta (no confiamos en lo que
             //venga del front) para revertir exactamente lo que se posteó en el ledger.
@@ -402,12 +428,21 @@ class VentasRepository{
             //Damos de baja la venta
             await connection.query("UPDATE ventas SET fechaBaja = NOW(), obsBaja = ? WHERE id = ?", [obs, venta.id]);
 
-            //Actualizamos el total de ventas caja
-            await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [venta.total, venta.idCaja]);
+            //Actualizamos el total de ventas caja con los valores persistidos (no los del body)
+            await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [ventaDb.total, ventaDb.idCaja]);
 
-            //Actualizamos el inventario
-            for (const element of venta.detalles) {
-                await ActualizarInventario(connection, element, "+")
+            //Reponemos el inventario desde ventas_detalle (no desde el body). Misma regla que
+            //ActualizarInventario: no tocamos VARIOS (por código, §12.7), soloPrecio ni productos inexistentes.
+            const [detalleRows] = await connection.query(
+                `SELECT vd.idProducto, vd.cantidad, p.soloPrecio, p.codigo
+                 FROM ventas_detalle vd LEFT JOIN productos p ON p.id = vd.idProducto
+                 WHERE vd.idVenta = ?`,
+                [venta.id]
+            );
+            for (const d of (detalleRows as any[])) {
+                if (d.codigo === null || d.codigo === undefined) continue; //producto huérfano (LEFT JOIN sin match)
+                if (d.codigo === '*' || d.soloPrecio) continue;
+                await connection.query("UPDATE productos SET cantidad = cantidad + ? WHERE id = ?", [d.cantidad, d.idProducto]);
             }
 
             // Libreta completa (PR B, 2026-07-03): revertir exactamente lo que Agregar posteó.

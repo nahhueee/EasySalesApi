@@ -102,6 +102,14 @@ export enum CodigoError {
   VENTA_FACTURADA_REQUIERE_NC = 'VENTA_FACTURADA_REQUIERE_NC',
 
   /**
+   * Intento de anular una venta que ya tiene fechaBaja (doble click, o dos
+   * puestos anulando la misma venta). No se repite caja/stock/ledger.
+   * Severidad: BAJA — error de uso, no del sistema.
+   * Ver documentos/handoff_fase3_2_0_anulacion_venta.md.
+   */
+  VENTA_YA_ANULADA = 'VENTA_YA_ANULADA',
+
+  /**
    * Error interno no categorizado.
    * Causa típica: excepción inesperada, bug en código.
    * Severidad: ALTA — requiere investigación.
@@ -208,6 +216,7 @@ export const SEVERIDAD: Record<CodigoError, Severidad> = {
   [CodigoError.APPCLIENTE_CREACION_ERROR]: 'MEDIA',
   [CodigoError.NOT_FOUND]:                 'BAJA',
   [CodigoError.VENTA_FACTURADA_REQUIERE_NC]: 'BAJA',
+  [CodigoError.VENTA_YA_ANULADA]:          'BAJA',
   [CodigoError.INTERNAL_ERROR]:            'ALTA',
   [CodigoError.FRONT_ERROR]:               'MEDIA',
   // Operacionales
