@@ -1,6 +1,7 @@
 import {MovimientosRepo} from '../data/movimientosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
+import { auditoriaDesdeRequest } from '../utils/auditoria';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -19,7 +20,7 @@ router.post('/obtener', async (req:Request, res:Response) => {
 //#region ABM
 router.post('/agregar', async (req:Request, res:Response) => {
     try{ 
-        res.json(await MovimientosRepo.Agregar(req.body));
+        res.json(await MovimientosRepo.Agregar(req.body, undefined, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         let msg = "Error al intentar agregar el movimiento.";
@@ -30,7 +31,7 @@ router.post('/agregar', async (req:Request, res:Response) => {
 
 router.put('/eliminar', async (req:Request, res:Response) => {
     try{ 
-        res.json(await MovimientosRepo.Eliminar(req.body));
+        res.json(await MovimientosRepo.Eliminar(req.body, undefined, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         let msg = "Error al intentar eliminar el movimiento.";
@@ -43,7 +44,7 @@ router.put('/eliminar', async (req:Request, res:Response) => {
 // no borra, compensa con el inverso. Ver MovimientosRepo.Anular.
 router.put('/anular', async (req:Request, res:Response) => {
     try{ 
-        res.json(await MovimientosRepo.Anular(req.body));
+        res.json(await MovimientosRepo.Anular(req.body, undefined, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         let msg = "Error al intentar anular el movimiento.";

@@ -1,5 +1,8 @@
 import db from '../db';
 import { ResultSetHeader } from 'mysql2';
+import { EventosRepo } from './eventosRepository';
+import { Auditoria } from '../models/Evento';
+import { SIN_AUDITORIA } from '../utils/auditoria';
 
 class MovimientosRepository{
 
@@ -32,7 +35,12 @@ class MovimientosRepository{
     // a cargo del caller, para poder garantizar atomicidad con otras operaciones (ej. cobro
     // de fiado + movimiento de caja en la misma transacción). Si no se pasa, se comporta
     // igual que antes (conexión y transacción propias).
-    async Agregar(data:any, connection?:any): Promise<string>{
+    //
+    // Fase 3.2-B: "auditoria" es opcional. Los callers internos (cobro de fiado, pagos a
+    // proveedor, anulaciones) le pasan la suya; movimientosRoute la arma desde el request. El
+    // evento se escribe siempre; sin auditoria, usuario y puesto quedan en NULL.
+    // data.origen (solo para el evento, no es columna) permite marcar casos como 'anulacion'.
+    async Agregar(data:any, connection?:any, auditoria?: Auditoria): Promise<string>{
         const conexionExterna = !!connection;
         const conn = connection ?? await db.getConnection();
 
@@ -67,6 +75,23 @@ class MovimientosRepository{
             if(data.tipoMovimiento.toUpperCase() == "SALIDA")
                 await conn.query("UPDATE cajas SET salidas = salidas + ? WHERE id = ?", [data.monto, data.idCaja]);
 
+            const origen = data.origen
+                ?? ((data.idEntrega != null || data.idVentaPagoDetalle != null) ? 'cobro_fiado'
+                  : data.idProveedorMovimiento != null ? 'proveedor'
+                  : 'manual');
+            await EventosRepo.Registrar(conn, {
+                accion: 'CAJA_MOVIMIENTO_CREAR',
+                entidad: 'cajas_movimientos',
+                entidadId: resultado.insertId,
+                datosDespues: {
+                    idCaja: data.idCaja,
+                    tipoMovimiento: data.tipoMovimiento.toUpperCase(),
+                    monto: Number(data.monto),
+                    origen,
+                },
+                descripcion: `Movimiento de caja #${data.idCaja}: ${data.tipoMovimiento.toUpperCase()} $${data.monto} - ${data.descripcion ?? ''}`,
+                auditoria: auditoria ?? SIN_AUDITORIA,
+            });
 
             if(!conexionExterna) await conn.commit();
             return conexionExterna ? String(resultado.insertId) : "OK";
@@ -80,7 +105,7 @@ class MovimientosRepository{
         }
     }
 
-    async Eliminar(data:any, connection?:any): Promise<string>{
+    async Eliminar(data:any, connection?:any, auditoria?: Auditoria): Promise<string>{
         const conexionExterna = !!connection;
         const conn = connection ?? await db.getConnection();
 
@@ -92,7 +117,7 @@ class MovimientosRepository{
             // contra la base, no contra lo que mande el front, porque el front puede tener bugs
             // y la base no puede quedar inconsistente (handoff_proveedores_fase2.md, PR6).
             const [movRows] = await conn.query(
-                "SELECT idProveedorMovimiento FROM cajas_movimientos WHERE id = ?", [data.id]
+                "SELECT idCaja, tipoMovimiento, monto, idProveedorMovimiento FROM cajas_movimientos WHERE id = ?", [data.id]
             ) as [any[], any];
             if (movRows[0]?.idProveedorMovimiento != null) {
                 if(!conexionExterna) await conn.rollback();
@@ -108,6 +133,21 @@ class MovimientosRepository{
 
             if(data.tipoMovimiento.toUpperCase() == "SALIDA")
                 await conn.query("UPDATE cajas SET salidas = salidas - ? WHERE id = ?", [data.monto, data.idCaja]);
+
+            // Snapshot "antes": lo persistido si la fila existía; si no, lo que mandó el caller.
+            const previo = movRows[0];
+            await EventosRepo.Registrar(conn, {
+                accion: 'CAJA_MOVIMIENTO_ELIMINAR',
+                entidad: 'cajas_movimientos',
+                entidadId: Number(data.id),
+                datosAntes: {
+                    idCaja: previo?.idCaja ?? data.idCaja,
+                    tipoMovimiento: String(previo?.tipoMovimiento ?? data.tipoMovimiento).toUpperCase(),
+                    monto: Number(previo?.monto ?? data.monto),
+                },
+                descripcion: `Eliminación del movimiento de caja #${data.id}`,
+                auditoria: auditoria ?? SIN_AUDITORIA,
+            });
 
             if(!conexionExterna) await conn.commit();
             return "OK";
@@ -125,7 +165,7 @@ class MovimientosRepository{
     // project_anular_movimientos_caja.md): no se borra fisicamente un movimiento, se compensa
     // con el inverso por el mismo monto, preservando el historial completo para auditoria.
     // Eliminar() se deja intacto arriba (sin ruta publica) por si hace falta alguna vez a mano.
-    async Anular(data:any, connection?:any): Promise<string>{
+    async Anular(data:any, connection?:any, auditoria?: Auditoria): Promise<string>{
         const conexionExterna = !!connection;
         const conn = connection ?? await db.getConnection();
 
@@ -184,13 +224,24 @@ class MovimientosRepository{
                 tipoMovimiento: tipoInverso,
                 monto: movimiento.monto,
                 descripcion: `Anulación de mov. #${movimiento.id}: ${movimiento.descripcion ?? ''}`.trim(),
-            }, conn);
+                origen: 'anulacion',
+            }, conn, auditoria);
 
             // Marcamos el original como compensado.
             await conn.query(
                 "UPDATE cajas_movimientos SET idMovimientoCompensado = ? WHERE id = ?",
                 [Number(idInverso), movimiento.id]
             );
+
+            await EventosRepo.Registrar(conn, {
+                accion: 'CAJA_MOVIMIENTO_ANULAR',
+                entidad: 'cajas_movimientos',
+                entidadId: Number(movimiento.id),
+                datosAntes: { monto: Number(movimiento.monto), tipoMovimiento: movimiento.tipoMovimiento },
+                datosDespues: { idMovimientoCompensacion: Number(idInverso) },
+                descripcion: `Anulación del movimiento de caja #${movimiento.id} (${movimiento.tipoMovimiento} $${movimiento.monto})`,
+                auditoria: auditoria ?? SIN_AUDITORIA,
+            });
 
             if(!conexionExterna) await conn.commit();
             return "OK";

@@ -31,6 +31,9 @@ export function datosAuditoria(req: Request): { usuarioId: string | null, puesto
 // NUNCA se completa con session.json: un "no se sabe" honesto es mejor que atribuirle la
 // operación a otra persona en una LAN. datosAuditoria() queda como está porque SesionServ
 // (log legacy usuarios_movimientos) todavía lo usa.
+/** Identidad desconocida: se registra como NULL, nunca con session.json. */
+export const SIN_AUDITORIA: Auditoria = { usuarioId: null, puestoId: null };
+
 export function auditoriaDesde(usuarioId?: number | string | null, puestoId?: string | null): Auditoria {
     const n = Number(usuarioId);
     return {

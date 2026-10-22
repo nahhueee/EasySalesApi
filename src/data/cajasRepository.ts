@@ -2,6 +2,8 @@ import db from '../db';
 import { ResultSetHeader } from 'mysql2';
 import { Caja } from '../models/Caja';
 import { SesionServ } from '../services/sesionService';
+import { EventosRepo } from './eventosRepository';
+import { auditoriaDesde } from '../utils/auditoria';
 const moment = require('moment');
 
 class CajasRepository{
@@ -103,6 +105,9 @@ class CajasRepository{
         const connection = await db.getConnection();
 
         try {
+            // Transacción (Fase 3.2-B): el cambio de estado y su evento se persisten juntos.
+            await connection.beginTransaction();
+
             const consulta = " UPDATE cajas " +
                              " SET finalizada = ? " +
                              " WHERE id = ?";
@@ -117,10 +122,28 @@ class CajasRepository{
             else
                 await SesionServ.RegistrarMovimiento("Revertir la caja nro " + data.idCaja, usuarioId, puestoId);
 
+            // Auditoría: foto del arqueo leída de la base EN ESTE MOMENTO (la 3.4 la usa para
+            // conciliar). Se lee dentro de la transacción, después del UPDATE.
+            const [filas] = await connection.query(
+                "SELECT inicial, ventas, entradas, salidas FROM cajas WHERE id = ?", [data.idCaja]
+            ) as [any[], any];
+            if (filas[0]) {
+                const cerrar = data.finalizada == 1;
+                await EventosRepo.Registrar(connection, {
+                    accion: cerrar ? 'CAJA_CERRAR' : 'CAJA_REABRIR',
+                    entidad: 'cajas',
+                    entidadId: Number(data.idCaja),
+                    datosDespues: ArqueoCaja(filas[0]),
+                    descripcion: `${cerrar ? 'Cierre' : 'Reapertura'} de la caja #${data.idCaja}`,
+                    auditoria: auditoriaDesde(usuarioId, puestoId),
+                });
+            }
 
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
@@ -131,6 +154,9 @@ class CajasRepository{
         const connection = await db.getConnection();
         
         try {
+            // Transacción (Fase 3.2-B): la caja y su evento se persisten juntos.
+            await connection.beginTransaction();
+
             const consulta = " INSERT INTO cajas(idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada, fondoProveedores) " +
                              " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
@@ -144,10 +170,26 @@ class CajasRepository{
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Agregar Nueva Caja nro " + idCaja, usuarioId, puestoId);
 
+            await EventosRepo.Registrar(connection, {
+                accion: 'CAJA_ABRIR',
+                entidad: 'cajas',
+                entidadId: idCaja,
+                datosDespues: {
+                    idResponsable: data.responsable.id,
+                    inicial: Number(data.inicial),
+                    fondoProveedores: data.fondoProveedores ?? null,
+                },
+                descripcion: `Apertura de la caja #${idCaja} - inicial $${data.inicial}`,
+                auditoria: auditoriaDesde(usuarioId, puestoId),
+            });
+
+            await connection.commit();
+
             //Terminamos retornando el id de la caja insertada
             return idCaja;
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
@@ -158,7 +200,14 @@ class CajasRepository{
         const connection = await db.getConnection();
         
         try {
-                       
+            // Transacción (Fase 3.2-B): se lee la fila ANTES del UPDATE para el snapshot "antes".
+            await connection.beginTransaction();
+
+            const [antesRows] = await connection.query(
+                "SELECT idResponsable, fecha, inicial, fondoProveedores FROM cajas WHERE id = ? FOR UPDATE", [data.id]
+            ) as [any[], any];
+            const antes = antesRows[0];
+
             // fondoProveedores siempre viaja en el payload (con el valor anterior si el flag
             // está apagado o no se tocó): igual que idLista en clientesRepository.Modificar,
             // sin este fallback en el front, modificar cualquier otro campo de la caja le
@@ -176,9 +225,33 @@ class CajasRepository{
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Modificar Caja nro " + data.id, usuarioId, puestoId);
 
+            if (antes) {
+                await EventosRepo.Registrar(connection, {
+                    accion: 'CAJA_MODIFICAR',
+                    entidad: 'cajas',
+                    entidadId: Number(data.id),
+                    datosAntes: {
+                        idResponsable: antes.idResponsable,
+                        fecha: moment(antes.fecha).format('YYYY-MM-DD'),
+                        inicial: Number(antes.inicial),
+                        fondoProveedores: antes.fondoProveedores ?? null,
+                    },
+                    datosDespues: {
+                        idResponsable: data.responsable.id,
+                        fecha: moment(data.fecha).format('YYYY-MM-DD'),
+                        inicial: Number(data.inicial),
+                        fondoProveedores: data.fondoProveedores ?? null,
+                    },
+                    descripcion: `Modificación de la caja #${data.id}`,
+                    auditoria: auditoriaDesde(usuarioId, puestoId),
+                });
+            }
+
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
@@ -189,6 +262,14 @@ class CajasRepository{
         const connection = await db.getConnection();
 
         try {
+            // Transacción (Fase 3.2-B): se lee el arqueo ANTES de dar de baja para el snapshot.
+            await connection.beginTransaction();
+
+            const [antesRows] = await connection.query(
+                "SELECT inicial, ventas, entradas, salidas FROM cajas WHERE id = ? FOR UPDATE", [id]
+            ) as [any[], any];
+            const antes = antesRows[0];
+
             let consulta = " UPDATE cajas " +
                            " SET fechaBaja = ? " +
                            " WHERE id = ?";
@@ -198,15 +279,38 @@ class CajasRepository{
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Eliminar Caja nro " + id, usuarioId, puestoId);
 
+            if (antes) {
+                await EventosRepo.Registrar(connection, {
+                    accion: 'CAJA_ELIMINAR',
+                    entidad: 'cajas',
+                    entidadId: Number(id),
+                    datosAntes: ArqueoCaja(antes),
+                    descripcion: `Eliminación de la caja #${id}`,
+                    auditoria: auditoriaDesde(usuarioId, puestoId),
+                });
+            }
+
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
         }
     }
     //#endregion
+}
+
+// Snapshot del arqueo para los eventos de caja (DECIMAL llega como string desde mysql2).
+function ArqueoCaja(fila:any){
+    return {
+        inicial: Number(fila.inicial),
+        ventas: Number(fila.ventas),
+        entradas: Number(fila.entradas),
+        salidas: Number(fila.salidas),
+    };
 }
 
 async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
