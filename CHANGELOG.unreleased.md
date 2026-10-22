@@ -29,3 +29,4 @@ No edites este archivo vos mismo salvo que te lo pida explícitamente — el que
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
 - [correccion] al anular una venta, la caja y el stock se ajustan con los datos guardados de la venta (no los del front); se impide anular dos veces la misma venta (VENTA_YA_ANULADA)
+- [mejora] registro local de puestos (tabla puestos, POST /registrar, middleware puestoVisto) y terminalesLanActivas del heartbeat con el conteo real de puestos activos (24 h)

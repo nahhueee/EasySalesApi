@@ -23,6 +23,7 @@ import pkg from '../../package.json';
 import path from 'path';
 import fs from 'fs';
 import db from '../db';
+import { PuestosRepo } from '../data/puestosRepository';
 import { logger } from '../logger/logger';
 import { CodigoError } from '../logger/CodigosError';
 
@@ -77,6 +78,19 @@ class HeartbeatService {
 
             const estadoBackup = LeerEstadoBackup();
 
+            // Si la consulta falla (p. ej. migration de `puestos` aún sin aplicar) mandamos 1,
+            // igual que antes, para no romper el contrato con AdminServer.
+            let terminalesLanActivas = 1;
+            try {
+                terminalesLanActivas = await PuestosRepo.ContarActivos();
+            } catch (error: any) {
+                logger.warn({
+                    type: 'HEARTBEAT_WARN',
+                    message: `No se pudo contar puestos activos, se envía 1: ${error.message}`,
+                    modulo: 'heartbeatService',
+                });
+            }
+
             const respuesta = await axios.post(`${config.adminUrl}heartbeat`, {
                 terminal,
                 idApp:                     config.idApp,
@@ -87,13 +101,10 @@ class HeartbeatService {
                 erroresRecientes,
                 ultimoBackupFecha:         estadoBackup?.fecha ?? null,
                 ultimoBackupOk:            estadoBackup !== null ? (estadoBackup.ok ? 1 : 0) : null,
-                // ⚠️ Hardcodeado: el panel de flota muestra este número y por lo tanto miente
-                // para toda instalación LAN. El nombre del campo es legacy y usa "terminal"
-                // con el sentido de máquina; lo que cuenta en realidad son PUESTOS.
-                // Corrección pendiente: COUNT sobre la tabla local `puestos` filtrando por
-                // ultimo_visto reciente. Ver architecture.md §12.3.1 y §16.1.
-                // El nombre de la clave no se cambia: es contrato con AdminServer.
-                terminalesLanActivas:      1,
+                // Cantidad real de PUESTOS activos (vistos en las últimas 24 h, tabla `puestos`).
+                // El nombre de la clave es legacy ("terminal" con el sentido de máquina) y no se
+                // cambia: es contrato congelado con AdminServer (architecture.md §9.5).
+                terminalesLanActivas:      terminalesLanActivas,
                 eventoActualizacion,
                 eventoActualizacionFront,
                 confirmacionFrontPendiente,
