@@ -13,11 +13,12 @@ export interface MovimientoCC {
 
 class CuentaCorrienteRepository {
 
-    // Inserta un movimiento en el ledger y devuelve el saldo resultante.
+    // Inserta un movimiento en el ledger y devuelve {id, saldo}: el id de la fila insertada (lo
+    // usan los eventos de auditoría, Fase 3.2-B) y el saldo resultante.
     // IMPORTANTE: debe llamarse con una connection que ya tiene una transaccion
     // abierta por el caller (venta a credito, entrega de dinero, etc.) — esta
     // funcion no abre ni cierra transaccion ni libera la connection.
-    async RegistrarMovimiento(connection, mov: MovimientoCC): Promise<number> {
+    async RegistrarMovimiento(connection, mov: MovimientoCC): Promise<{id:number, saldo:number}> {
         try {
             // Lockeamos la fila del cliente (no el ultimo movimiento) para serializar
             // los movimientos concurrentes de ese cliente. Lockear "el ultimo movimiento"
@@ -40,7 +41,7 @@ class CuentaCorrienteRepository {
 
             const ahora = moment();
 
-            await connection.query(
+            const [resultado] = await connection.query(
                 `INSERT INTO cuenta_corriente_movimientos
                     (idCliente, fecha, hora, tipo, descripcion, debe, haber, idReferencia, saldo)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -57,7 +58,7 @@ class CuentaCorrienteRepository {
                 ]
             );
 
-            return saldoNuevo;
+            return { id: resultado.insertId, saldo: saldoNuevo };
 
         } catch (error) {
             throw error;

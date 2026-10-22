@@ -4,6 +4,8 @@ import { SesionServ } from '../services/sesionService';
 import { ResultSetHeader } from 'mysql2';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { MovimientosRepo } from './movimientosRepository';
+import { EventosRepo } from './eventosRepository';
+import { auditoriaDesde } from '../utils/auditoria';
 
 // tipos_pago.id del medio EFECTIVO. Verificado contra los seeds y los backups:
 // siempre id=1. El front de entrega-ventas ya hardcodea
@@ -152,6 +154,7 @@ class CuentasCorsRepository{
         }
 
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         // Guard de efectivo en el backend (defensa en profundidad, no confiar solo en la UI):
         // idCaja solo se acepta si el medio de pago es EFECTIVO. Con cualquier otro medio se
@@ -253,8 +256,23 @@ class CuentasCorsRepository{
                     monto: data.monto,
                     descripcion: `Cobro fiado - cliente ${data.idCliente} - entrega #${idEntrega}`,
                     idEntrega: idEntrega
-                }, connection);
+                }, connection, auditoria);
             }
+
+            // Auditoría (Fase 3.2-B)
+            await EventosRepo.Registrar(connection, {
+                accion: 'CC_COBRO',
+                entidad: 'cuenta_corriente',
+                entidadId: idEntrega,
+                datosDespues: {
+                    idCliente: data.idCliente,
+                    monto: Number(data.monto),
+                    idCaja: idCajaImputada,
+                    idTPago: data.idTPago,
+                },
+                descripcion: `Cobro al cliente #${data.idCliente} por $${data.monto} (entrega #${idEntrega})`,
+                auditoria,
+            });
 
             //Mandamos la transaccion
             await connection.commit();
@@ -275,6 +293,7 @@ class CuentasCorsRepository{
 
     async RevertirEntregaDinero(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
         try {
             //Iniciamos una transaccion
             await connection.beginTransaction();
@@ -336,7 +355,7 @@ class CuentasCorsRepository{
                         monto: movimiento.monto,
                         descripcion: `Reversión de cobro fiado - entrega #${data.idEntrega}`,
                         idEntrega: data.idEntrega
-                    }, connection);
+                    }, connection, auditoria);
                 }
             }
 
@@ -383,6 +402,20 @@ class CuentasCorsRepository{
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega, usuarioId, puestoId);
 
+            // Auditoría (Fase 3.2-B): entregaOriginal se leyó de la base antes de borrar la cabecera.
+            await EventosRepo.Registrar(connection, {
+                accion: 'CC_COBRO_REVERTIR',
+                entidad: 'cuenta_corriente',
+                entidadId: Number(data.idEntrega),
+                datosAntes: {
+                    idCliente: entregaOriginal.idCliente,
+                    monto: Number(entregaOriginal.monto),
+                    idCaja: entregaOriginal.idCaja ?? null,
+                },
+                descripcion: `Reversión del cobro (entrega #${data.idEntrega}) al cliente #${entregaOriginal.idCliente} por $${entregaOriginal.monto}`,
+                auditoria,
+            });
+
             //Mandamos la transaccion
             await connection.commit();
 
@@ -399,6 +432,7 @@ class CuentasCorsRepository{
 
     async ActualizarEstadoPago(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
         try {
 
             //Iniciamos una transaccion
@@ -407,6 +441,12 @@ class CuentasCorsRepository{
             //Necesitamos idCliente para el movimiento en la cuenta corriente
             const [ventaRows] = await connection.query("SELECT idCliente FROM ventas WHERE id = ?", [data.idVenta]);
             const idCliente = (ventaRows as any)[0]?.idCliente;
+
+            //Estado de pago ANTES del UPDATE (snapshot "antes" del evento de auditoría)
+            const [pagoPrevioRows] = await connection.query(
+                "SELECT realizado, entrega FROM ventas_pago WHERE idVenta = ?", [data.idVenta]
+            ) as [any[], any];
+            const pagoPrevio = pagoPrevioRows[0];
 
             const consulta = " UPDATE ventas_pago " +
                              " SET realizado = 1, " +
@@ -448,11 +488,29 @@ class CuentasCorsRepository{
                     monto: data.total,
                     descripcion: `Cobro fiado (pago completo) - cliente ${idCliente} - venta #${data.idVenta}`,
                     idVentaPagoDetalle: idVentaPagoDetalle
-                }, connection);
+                }, connection, auditoria);
             }
 
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta, usuarioId, puestoId);
+
+            // Auditoría (Fase 3.2-B)
+            await EventosRepo.Registrar(connection, {
+                accion: 'CC_VENTA_PAGADA',
+                entidad: 'ventas',
+                entidadId: Number(data.idVenta),
+                datosAntes: pagoPrevio
+                    ? { realizado: Number(pagoPrevio.realizado), entrega: Number(pagoPrevio.entrega) }
+                    : null,
+                datosDespues: {
+                    realizado: 1,
+                    entrega: Number(data.total),
+                    idCaja: idCajaImputada,
+                    idTPago: data.idTPago,
+                },
+                descripcion: `Venta #${data.idVenta} marcada como paga por $${data.total}`,
+                auditoria,
+            });
 
             //Mandamos la transaccion
             await connection.commit();
@@ -470,6 +528,7 @@ class CuentasCorsRepository{
 
     async RevertirEstadoPago(idVenta:string, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
         try {
             await connection.beginTransaction();
 
@@ -480,7 +539,7 @@ class CuentasCorsRepository{
             //   - Otros: Agregar posteó haber=entrega.
             //            Revertir = debe=entrega para cancelar ese haber.
             const [ventaRows] = await connection.query(
-                `SELECT v.idCliente, v.total AS totalVenta, p.entrega,
+                `SELECT v.idCliente, v.total AS totalVenta, p.entrega, p.realizado,
                         tp.nombre AS metodoPago, vpd.id AS idVentaPagoDetalle, vpd.idCaja
                  FROM ventas v
                  INNER JOIN ventas_pago p ON v.id = p.idVenta
@@ -519,7 +578,7 @@ class CuentasCorsRepository{
                         monto: movimiento.monto,
                         descripcion: `Reversión de cobro fiado (pago completo) - venta #${idVenta}`,
                         idVentaPagoDetalle: ventaInfo.idVentaPagoDetalle
-                    }, connection);
+                    }, connection, auditoria);
                 }
             }
 
@@ -556,6 +615,19 @@ class CuentasCorsRepository{
             }
 
             await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta, usuarioId, puestoId);
+
+            // Auditoría (Fase 3.2-B): ventaInfo se leyó antes de borrar el detalle de pago.
+            await EventosRepo.Registrar(connection, {
+                accion: 'CC_VENTA_PAGO_REVERTIR',
+                entidad: 'ventas',
+                entidadId: Number(idVenta),
+                datosAntes: ventaInfo
+                    ? { realizado: Number(ventaInfo.realizado), entrega: Number(ventaInfo.entrega) }
+                    : null,
+                datosDespues: { realizado: 0, entrega: 0 },
+                descripcion: `Reversión del estado de pago de la venta #${idVenta}`,
+                auditoria,
+            });
             await connection.commit();
             return "OK";
 
@@ -578,6 +650,7 @@ class CuentasCorsRepository{
     // podría imputarse a ellas. Aceptado en esta etapa.
     async RegistrarAjusteCliente(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         try {
             const idCliente = Number(data.idCliente);
@@ -633,12 +706,26 @@ class CuentasCorsRepository{
 
             // Descripción distinta de 'Pago manual de venta' (ObtenerCobrosCaja la usa para
             // identificar cobros de fiado); acá siempre arranca con "Ajuste manual".
-            await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
+            const movimientoAjuste = await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
                 idCliente,
                 tipo: 'ajuste',
                 descripcion: `Ajuste manual - ${observacion}`,
                 debe: sentido === 'debe' ? monto : undefined,
                 haber: sentido === 'haber' ? monto : undefined
+            });
+
+            // Auditoría (Fase 3.2-B)
+            await EventosRepo.Registrar(connection, {
+                accion: 'CC_AJUSTE',
+                entidad: 'cuenta_corriente',
+                entidadId: movimientoAjuste.id,
+                datosDespues: {
+                    idCliente,
+                    debe: sentido === 'debe' ? monto : 0,
+                    haber: sentido === 'haber' ? monto : 0,
+                },
+                descripcion: `Ajuste manual de cuenta corriente del cliente #${idCliente} (${cliente.nombre}): ${sentido === 'debe' ? '+' : '-'}$${monto}`,
+                auditoria,
             });
 
             await connection.commit();

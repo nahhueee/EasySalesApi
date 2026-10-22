@@ -3,6 +3,8 @@ import { ResultSetHeader } from 'mysql2';
 import db from '../db';
 import { SesionServ } from '../services/sesionService';
 import { MovimientosRepo } from './movimientosRepository';
+import { EventosRepo } from './eventosRepository';
+import { auditoriaDesde } from '../utils/auditoria';
 import { ID_TIPO_PAGO_EFECTIVO } from './cuentasCorsRepository';
 
 export type TipoMovimientoProveedor = 'apertura' | 'factura' | 'pago' | 'nota_credito' | 'ajuste';
@@ -174,6 +176,7 @@ class ProveedorCuentaRepository {
     // dos, y la libreta queda armada sola.
     async RegistrarPago(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         try {
             await connection.beginTransaction();
@@ -252,8 +255,34 @@ class ProveedorCuentaRepository {
                     monto,
                     descripcion: `Pago a proveedor ${proveedor.nombre} - mov. #${pago.id}`,
                     idProveedorMovimiento: pago.id
-                }, connection);
+                }, connection, auditoria);
             }
+
+            // Auditoría (Fase 3.2-B). Con comprobante, el pago también generó una factura de
+            // "compra contado" en el ledger: se registra como PROVEEDOR_FACTURA.
+            if (idFactura !== null) {
+                await EventosRepo.Registrar(connection, {
+                    accion: 'PROVEEDOR_FACTURA',
+                    entidad: 'proveedores',
+                    entidadId: idFactura,
+                    datosDespues: { idProveedor: Number(data.idProveedor), monto, comprobante: data.comprobante, origen: 'compra_contado' },
+                    descripcion: `Compra contado a proveedor ${proveedor.nombre} por $${monto} - comp. ${data.comprobante}`,
+                    auditoria,
+                });
+            }
+            await EventosRepo.Registrar(connection, {
+                accion: 'PROVEEDOR_PAGO',
+                entidad: 'proveedores',
+                entidadId: pago.id,
+                datosDespues: {
+                    idProveedor: Number(data.idProveedor),
+                    monto,
+                    idCaja: idCajaImputada,
+                    idTipoPago: Number(data.idTipoPago),
+                },
+                descripcion: `Pago a proveedor ${proveedor.nombre} por $${monto} - ${nombreMedioPago}`,
+                auditoria,
+            });
 
             await connection.commit();
 
@@ -277,6 +306,7 @@ class ProveedorCuentaRepository {
     // ya la abra (a diferencia de RegistrarMovimiento).
     async RegistrarFactura(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         try {
             await connection.beginTransaction();
@@ -300,13 +330,23 @@ class ProveedorCuentaRepository {
             let descripcion = `Factura de compra a proveedor ${proveedor.nombre}`;
             if (data.observacion) descripcion += ` - ${data.observacion}`;
 
-            await this.RegistrarMovimiento(connection, {
+            const factura = await this.RegistrarMovimiento(connection, {
                 idProveedor: data.idProveedor,
                 tipo: 'factura',
                 descripcion,
                 comprobante: data.comprobante ?? null,
                 fechaVencimiento: data.fechaVencimiento ?? null,
                 debe: monto
+            });
+
+            // Auditoría (Fase 3.2-B)
+            await EventosRepo.Registrar(connection, {
+                accion: 'PROVEEDOR_FACTURA',
+                entidad: 'proveedores',
+                entidadId: factura.id,
+                datosDespues: { idProveedor: Number(data.idProveedor), monto, comprobante: data.comprobante ?? null },
+                descripcion: `Factura de proveedor ${proveedor.nombre} por $${monto}`,
+                auditoria,
             });
 
             await connection.commit();
@@ -357,6 +397,7 @@ class ProveedorCuentaRepository {
     // aviso previo lo maneja el front con ContarPagosImputados.
     async AnularFactura(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         try {
             await connection.beginTransaction();
@@ -376,7 +417,7 @@ class ProveedorCuentaRepository {
                 return "Esta factura ya fue anulada.";
             }
 
-            await this.RegistrarMovimiento(connection, {
+            const ajusteFactura = await this.RegistrarMovimiento(connection, {
                 idProveedor: movimiento.idProveedor,
                 tipo: 'ajuste',
                 descripcion: `Anulación de factura #${movimiento.id}`,
@@ -387,6 +428,17 @@ class ProveedorCuentaRepository {
             await connection.query(
                 'UPDATE proveedor_cuenta_movimientos SET anulado = 1 WHERE id = ?', [movimiento.id]
             );
+
+            // Auditoría (Fase 3.2-B): entidadId es la factura original; el ajuste va en datosDespues.
+            await EventosRepo.Registrar(connection, {
+                accion: 'PROVEEDOR_FACTURA_ANULAR',
+                entidad: 'proveedores',
+                entidadId: Number(movimiento.id),
+                datosAntes: { idProveedor: Number(movimiento.idProveedor), monto: Number(movimiento.debe) },
+                datosDespues: { idMovimientoAjuste: ajusteFactura.id },
+                descripcion: `Anulación de la factura de proveedor #${movimiento.id} por $${movimiento.debe}`,
+                auditoria,
+            });
 
             await connection.commit();
 
@@ -410,6 +462,7 @@ class ProveedorCuentaRepository {
     // o ENCARGADO — el guard de rol lo hace el caller (proveedoresRoute), igual que anular-pago.
     async RegistrarAjuste(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         try {
             await connection.beginTransaction();
@@ -438,12 +491,22 @@ class ProveedorCuentaRepository {
                 return "El proveedor no existe o está dado de baja.";
             }
 
-            await this.RegistrarMovimiento(connection, {
+            const ajuste = await this.RegistrarMovimiento(connection, {
                 idProveedor: data.idProveedor,
                 tipo: 'ajuste',
                 descripcion: `Ajuste manual - ${data.observacion}`,
                 debe: data.sentido === 'debe' ? monto : undefined,
                 haber: data.sentido === 'haber' ? monto : undefined
+            });
+
+            // Auditoría (Fase 3.2-B)
+            await EventosRepo.Registrar(connection, {
+                accion: 'PROVEEDOR_AJUSTE',
+                entidad: 'proveedores',
+                entidadId: ajuste.id,
+                datosDespues: { idProveedor: Number(data.idProveedor), monto, sentido: data.sentido },
+                descripcion: `Ajuste manual del proveedor ${proveedor.nombre}: ${data.sentido === 'debe' ? '+' : '-'}$${monto}`,
+                auditoria,
             });
 
             await connection.commit();
@@ -495,6 +558,7 @@ class ProveedorCuentaRepository {
     // hacia adelante con el movimiento compensatorio).
     async AnularPago(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string> {
         const connection = await db.getConnection();
+        const auditoria = auditoriaDesde(usuarioId, puestoId);
 
         try {
             await connection.beginTransaction();
@@ -559,8 +623,23 @@ class ProveedorCuentaRepository {
                     monto: movCaja.monto,
                     descripcion: `Anulación de pago a proveedor - mov. #${ajuste.id}`,
                     idProveedorMovimiento: ajuste.id
-                }, connection);
+                }, connection, auditoria);
             }
+
+            // Auditoría (Fase 3.2-B): entidadId es el pago original; el ajuste va en datosDespues.
+            await EventosRepo.Registrar(connection, {
+                accion: 'PROVEEDOR_PAGO_ANULAR',
+                entidad: 'proveedores',
+                entidadId: Number(movimiento.id),
+                datosAntes: {
+                    idProveedor: Number(movimiento.idProveedor),
+                    monto: Number(movimiento.haber),
+                    idCaja: movCaja ? movCaja.idCaja : null,
+                },
+                datosDespues: { idMovimientoAjuste: ajuste.id },
+                descripcion: `Anulación del pago a proveedor #${movimiento.id} por $${movimiento.haber}`,
+                auditoria,
+            });
 
             await connection.commit();
 
