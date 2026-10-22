@@ -163,8 +163,9 @@ class UsuariosRepository{
                 ? accion.slice(0, ACCION_MAX_LEN)
                 : accion;
 
-            const consulta = "INSERT INTO usuarios_movimientos(fecha, accion, idUsuario, idPuesto) VALUES (?, ?, ?, ?)";
-            const parametros = [moment().format('YYYY-MM-DD HH:mm:ss'), accionSegura, idUsuario, idPuesto];
+            // La hora la pone MySQL (architecture.md §11.6), no Node.
+            const consulta = "INSERT INTO usuarios_movimientos(fecha, accion, idUsuario, idPuesto) VALUES (NOW(), ?, ?, ?)";
+            const parametros = [accionSegura, idUsuario, idPuesto];
 
             await connection.query(consulta, parametros);
             return "OK";

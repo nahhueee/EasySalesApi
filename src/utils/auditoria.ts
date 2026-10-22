@@ -1,5 +1,6 @@
 import { Request } from 'express';
-import { puestoIdDeRequest } from './puestos';
+import { esUuidV4, puestoIdDeRequest } from './puestos';
+import { Auditoria } from '../models/Evento';
 
 // Lote 6 + PR 1, Fase 2 (auditoría real, ver documentos/handoff_fase2_correcciones.md y
 // documentos/handoff_pr1_identidad_puesto.md): extrae usuario_id / puesto_id del request para
@@ -22,4 +23,24 @@ export function datosAuditoria(req: Request): { usuarioId: string | null, puesto
     // operación entera. Inválido o ausente => null.
     const puestoId = puestoIdDeRequest(req);
     return { usuarioId, puestoId };
+}
+
+// Fase 3.2-B (tabla `eventos`): normaliza usuario y puesto a lo que la tabla acepta.
+// - usuarioId: entero positivo; cualquier otra cosa => null.
+// - puestoId: UUID v4 válido; cualquier otra cosa => null.
+// NUNCA se completa con session.json: un "no se sabe" honesto es mejor que atribuirle la
+// operación a otra persona en una LAN. datosAuditoria() queda como está porque SesionServ
+// (log legacy usuarios_movimientos) todavía lo usa.
+export function auditoriaDesde(usuarioId?: number | string | null, puestoId?: string | null): Auditoria {
+    const n = Number(usuarioId);
+    return {
+        usuarioId: usuarioId != null && Number.isInteger(n) && n > 0 ? n : null,
+        puestoId: esUuidV4(puestoId) ? puestoId.toLowerCase() : null,
+    };
+}
+
+/** Para las rutas que todavía no pasan identidad al repositorio. */
+export function auditoriaDesdeRequest(req: Request): Auditoria {
+    const { usuarioId, puestoId } = datosAuditoria(req);
+    return auditoriaDesde(usuarioId, puestoId);
 }
