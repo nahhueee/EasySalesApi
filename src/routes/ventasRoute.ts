@@ -7,7 +7,7 @@ import {logger} from '../logger/logger'
 import { TerminalServ } from '../services/terminalService';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
-import { datosAuditoria } from '../utils/auditoria';
+import { datosAuditoria, auditoriaDesdeRequest } from '../utils/auditoria';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -73,7 +73,7 @@ router.post('/agregar', async (req:Request, res:Response, next) => {
 
 router.post('/guardar-factura', async (req:Request, res:Response, next) => {
     try{
-        res.json(await VentasRepo.GuardarFactura(req.body));
+        res.json(await VentasRepo.GuardarFactura(req.body, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al guardar los datos de facturación para la venta.', 500, { modulo: 'ventasRoute.guardar-factura' }, error));
@@ -130,7 +130,7 @@ router.post('/notas-credito', async (req:Request, res:Response, next) => {
         // misma validación de terminal habilitada que /facturar.
         await TerminalServ.VerificarTerminalHabilitada();
 
-        res.json(await NotaCreditoServ.EmitirNotaCredito(req.body));
+        res.json(await NotaCreditoServ.EmitirNotaCredito(req.body, auditoriaDesdeRequest(req)));
     } catch(error){
         next(error);
     }

@@ -10,6 +10,8 @@ import { NotaCreditoImpresion } from './comprobanteService';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 import loggerFacturacion from '../logger/loggerFacturacion';
+import { EventosRepo } from '../data/eventosRepository';
+import { Auditoria } from '../models/Evento';
 
 /** Línea a acreditar en una NC parcial. La cantidad la decide el usuario; precio/producto se resuelven server-side contra la venta real — nunca se confía en lo que mande el front. */
 export interface LineaNotaCredito {
@@ -56,7 +58,7 @@ function mapearTipoNC(tipoFactura: number): TipoComprobante {
  */
 class NotaCreditoService {
 
-  async EmitirNotaCredito(input: EmitirNotaCreditoInput): Promise<NotaCreditoImpresion> {
+  async EmitirNotaCredito(input: EmitirNotaCreditoInput, auditoria: Auditoria = { usuarioId: null, puestoId: null }): Promise<NotaCreditoImpresion> {
     if (!input?.idVenta) {
       throw new AppError(CodigoError.VALIDACION, 'Falta indicar la venta a acreditar.', 400);
     }
@@ -210,6 +212,25 @@ class NotaCreditoService {
       if (!esParcial) {
         await connection.query('UPDATE ventas SET fechaBaja = NOW() WHERE id = ?', [venta.id]);
       }
+
+      // Auditoría (Fase 3.2-B): último INSERT antes del commit. Si falla, la persistencia local
+      // hace rollback y se loguea el CAE para conciliar (ver catch). cierraVenta = la NC total
+      // dio de baja la venta; no se emite un VENTA_ANULAR aparte.
+      await EventosRepo.Registrar(connection, {
+        accion: 'NC_EMITIR',
+        entidad: 'notas_credito',
+        entidadId: idNotaCredito,
+        datosDespues: {
+          idVenta: venta.id,
+          tipo: tipoNC,
+          total: montoNC,
+          esParcial,
+          cierraVenta: !esParcial,
+          cae: resultadoAfip.cae,
+        },
+        descripcion: `Nota de crédito ${esParcial ? 'parcial' : 'total'} de la venta #${venta.id} por $${montoNC}`,
+        auditoria,
+      });
 
       await connection.commit();
 

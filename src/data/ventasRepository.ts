@@ -10,6 +10,9 @@ import { ObjQR } from '../models/ObjQR';
 import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
 import { SesionServ } from '../services/sesionService';
+import { EventosRepo } from './eventosRepository';
+import { Auditoria } from '../models/Evento';
+import { auditoriaDesde } from '../utils/auditoria';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { DetallePago } from '../models/DetallePago';
 import { TipoPago } from '../models/TipoPago';
@@ -327,6 +330,42 @@ class VentasRepository{
                 );
             }
 
+            // Auditoría (Fase 3.2-B): dentro de la transacción, con su misma conexión. Se registra
+            // también la venta a consumidor final. Solo ids, montos y estados en los snapshots.
+            const auditoria = auditoriaDesde(usuarioId, puestoId);
+            const nombreCliente = venta.cliente.id === 1 ? 'Consumidor final' : venta.cliente.nombre;
+            await EventosRepo.Registrar(connection, {
+                accion: 'VENTA_CREAR',
+                entidad: 'ventas',
+                entidadId: venta.id,
+                datosDespues: {
+                    total: venta.total,
+                    idCaja: venta.idCaja,
+                    idCliente: venta.cliente.id,
+                    items: venta.detalles.length,
+                    medios: (venta.detallePago ?? [])
+                        .filter(d => d.monto > 0)
+                        .map(d => ({ tipo: d.tipoPago?.nombre, monto: d.monto })),
+                },
+                descripcion: `Venta #${venta.id} - ${nombreCliente} - $${venta.total}`,
+                auditoria,
+            });
+            if(venta.factura){
+                await EventosRepo.Registrar(connection, {
+                    accion: 'VENTA_FACTURAR',
+                    entidad: 'ventas',
+                    entidadId: venta.id,
+                    datosDespues: {
+                        tipoFactura: venta.factura.tipoComprobante,
+                        ptoVenta: venta.factura.ptoVenta,
+                        ticket: venta.factura.ticket,
+                        cae: venta.factura.cae,
+                    },
+                    descripcion: `Factura de la venta #${venta.id} (CAE ${venta.factura.cae})`,
+                    auditoria,
+                });
+            }
+
             //Mandamos la transaccion
             await connection.commit();
             return venta.id.toString();
@@ -350,15 +389,35 @@ class VentasRepository{
         }
     }
 
-    async GuardarFactura(data:any){
+    async GuardarFactura(data:any, auditoria?: Auditoria){
         const connection = await db.getConnection();
         
         try {
+            // Transacción (Fase 3.2-B): la factura y su evento de auditoría se persisten juntos.
+            await connection.beginTransaction();
+
             data.factura.idVenta = data.idVenta;
             await InsertFacturaVenta(connection, data.factura);
+
+            await EventosRepo.Registrar(connection, {
+                accion: 'VENTA_FACTURAR',
+                entidad: 'ventas',
+                entidadId: Number(data.idVenta),
+                datosDespues: {
+                    tipoFactura: data.factura.tipoComprobante,
+                    ptoVenta: data.factura.ptoVenta,
+                    ticket: data.factura.ticket,
+                    cae: data.factura.cae,
+                },
+                descripcion: `Factura de la venta #${data.idVenta} (CAE ${data.factura.cae})`,
+                auditoria: auditoria ?? { usuarioId: null, puestoId: null },
+            });
+
+            await connection.commit();
             return("OK");
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
@@ -376,7 +435,7 @@ class VentasRepository{
             //detalles se leen de la base. El FOR UPDATE serializa dos anulaciones simultáneas:
             //la segunda espera y, al entrar, ve fechaBaja ya seteada.
             const [ventaRows] = await connection.query(
-                "SELECT id, idCaja, total, fechaBaja FROM ventas WHERE id = ? FOR UPDATE",
+                "SELECT id, idCaja, idCliente, total, fechaBaja FROM ventas WHERE id = ? FOR UPDATE",
                 [venta.id]
             );
             const ventaDb = (ventaRows as any[])[0];
@@ -479,6 +538,17 @@ class VentasRepository{
 
             //Registramos el Movimiento
             await SesionServ.RegistrarMovimiento("Eliminar Venta nro " + venta.id, usuarioId, puestoId);
+
+            // Auditoría (Fase 3.2-B): valores leídos de la base (ventaDb), no del body.
+            await EventosRepo.Registrar(connection, {
+                accion: 'VENTA_ANULAR',
+                entidad: 'ventas',
+                entidadId: Number(venta.id),
+                datosAntes: { total: ventaDb.total, idCaja: ventaDb.idCaja, idCliente: ventaDb.idCliente },
+                datosDespues: { obsBaja: obs },
+                descripcion: `Anulación de la venta #${venta.id} - $${ventaDb.total}`,
+                auditoria: auditoriaDesde(usuarioId, puestoId),
+            });
 
             //Mandamos la transaccion
             await connection.commit();
