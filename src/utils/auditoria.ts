@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { puestoIdDeRequest } from './puestos';
 
 // Lote 6 + PR 1, Fase 2 (auditoría real, ver documentos/handoff_fase2_correcciones.md y
 // documentos/handoff_pr1_identidad_puesto.md): extrae usuario_id / puesto_id del request para
@@ -16,6 +17,9 @@ import { Request } from 'express';
 // Devuelve null si faltan — SesionServ cae al fallback de session.json en ese caso, no rompe.
 export function datosAuditoria(req: Request): { usuarioId: string | null, puestoId: string | null } {
     const usuarioId = req.header('x-usuario-id') || null;
-    const puestoId = req.header('x-puesto-id') || null;
+    // puestoId se valida (UUID v4): un header basura o más largo que usuarios_movimientos.idPuesto
+    // (varchar 36) haría fallar el INSERT del log legacy y, en los flujos con transacción, la
+    // operación entera. Inválido o ausente => null.
+    const puestoId = puestoIdDeRequest(req);
     return { usuarioId, puestoId };
 }

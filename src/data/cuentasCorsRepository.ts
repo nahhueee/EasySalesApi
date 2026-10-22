@@ -153,9 +153,6 @@ class CuentasCorsRepository{
 
         const connection = await db.getConnection();
 
-        //Obtenemos el listado de ventas del cliente en estado impagas
-        let resultados = await ObtenerVentasImpagas(connection, data.idCliente);
-
         // Guard de efectivo en el backend (defensa en profundidad, no confiar solo en la UI):
         // idCaja solo se acepta si el medio de pago es EFECTIVO. Con cualquier otro medio se
         // fuerza a null aunque venga con valor — los movimientos de caja hoy son solo efectivo.
@@ -164,6 +161,10 @@ class CuentasCorsRepository{
             : null;
 
         try {
+            //Obtenemos el listado de ventas del cliente en estado impagas. Va dentro del try:
+            //si esta consulta falla, el finally libera la conexión (antes quedaba filtrada).
+            const resultados = await ObtenerVentasImpagas(connection, data.idCliente);
+
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
