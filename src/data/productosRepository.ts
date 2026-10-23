@@ -563,6 +563,16 @@ class ProductosRepository{
             // Determinamos los campos de precio base para el espejo en productos
             const precioBase = ResolverPrecioBase(data);
 
+            // Reactivacion de un producto dado de baja (flujo del addmod al reusar su codigo).
+            // Solo cuenta si realmente esta de baja; se limpia en el mismo UPDATE (atomico).
+            let reactivar = false;
+            if (data.reactivar === true) {
+                const [bajaRows] = await connection.query<any[]>(
+                    "SELECT fechaBaja FROM productos WHERE id = ?", [data.id]
+                );
+                reactivar = bajaRows[0]?.fechaBaja != null;
+            }
+
             const consulta = `UPDATE productos SET
                                 codigo = ?,
                                 nombre = ?,
@@ -582,7 +592,8 @@ class ProductosRepository{
                                 idProveedor = ?,
                                 marca = ?,
                                 vehiculo = ?,
-                                aplicacion = ?
+                                aplicacion = ?,
+                                fechaBaja = CASE WHEN ? = 1 THEN NULL ELSE fechaBaja END
                                 WHERE id = ?`;
 
             const parametros = [data.codigo.toUpperCase(),
@@ -605,6 +616,7 @@ class ProductosRepository{
                                 data.marca || null,
                                 data.vehiculo || null,
                                 data.aplicacion || null,
+                                reactivar ? 1 : 0,
                                 data.id];
 
             await connection.query(consulta, parametros);
@@ -627,7 +639,9 @@ class ProductosRepository{
             }
 
             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Modificar Producto: " + data.codigo.toUpperCase());
+            await SesionServ.RegistrarMovimiento(
+                (reactivar ? "Reactivar Producto: " : "Modificar Producto: ") + data.codigo.toUpperCase()
+            );
 
             return "OK";
 
@@ -839,15 +853,24 @@ class ProductosRepository{
             const existe = await ValidarExistencia(connection, {codigo:parametro.cod}, false, false);
             let producto: Producto = new Producto();
 
+            let baja = false;
+
             if(existe){
-                let consulta = " SELECT id, codigo, nombre, cantidad, tipoPrecio, costo, precio, redondeo, porcentaje, vencimiento, faltante, unidad, imagen, soloPrecio " +
-                               " FROM productos WHERE codigo = ? ";
+                // SELECT * + CompletarObjeto: mismo mapeo que el listado (Obtener), para que el
+                // addmod reciba categoria, proveedor y datos de repuesto completos. Antes esto
+                // tenia su propia lista de columnas y quedaba desfasada (el modal pisaba esos
+                // campos al guardar). Si hubiera mas de una fila con el codigo, se prefiere la
+                // activa sobre la dada de baja.
+                let consulta = " SELECT * FROM productos WHERE codigo = ? " +
+                               " ORDER BY (fechaBaja IS NULL) DESC, id DESC LIMIT 1 ";
 
                 const rows = await connection.query(consulta, parametro.cod);
-                producto = new Producto(rows[0][0]);
+                producto = this.CompletarObjeto(rows[0][0]);
+                // El front decide el flujo: activo -> "traer para modificar"; baja -> reactivar.
+                baja = rows[0][0].fechaBaja != null;
             }
 
-            return {existe, producto}
+            return {existe, baja, producto}
 
         } catch (error:any) {
             throw error;
