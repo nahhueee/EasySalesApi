@@ -4,6 +4,7 @@ import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
+import { auditoriaDesdeRequest } from '../utils/auditoria';
 const router : Router  = Router();
 
 router.post('/login', async (req:Request, res:Response, next) => {
@@ -54,7 +55,7 @@ router.get('/selector-cargos', async (req:Request, res:Response) => {
 
 router.get('/selector', async (req:Request, res:Response) => {
     try{ 
-        res.json(await UsuariosRepo.UsuariosSelector());
+        res.json(await UsuariosRepo.UsuariosSelector(req.query.incluirBajas === '1'));
 
     } catch(error:any){
         let msg = "Error al obtener el selector de usuarios.";
@@ -111,14 +112,14 @@ router.put('/modificar', async (req:Request, res:Response) => {
     }
 });
 
-router.delete('/eliminar/:id', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await UsuariosRepo.Eliminar(req.params.id));
+router.delete('/eliminar/:id', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await UsuariosRepo.Eliminar(req.params.id, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
-        let msg = "Error al intentar eliminar el usuario.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
+        // Preservar el AppError del repo (404 / 409 ULTIMO_ADMINISTRADOR) para que el front lea su mensaje.
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al intentar eliminar el usuario.', 500, { modulo: 'usuariosRoute.eliminar' }, error));
     }
 });
 //#endregion

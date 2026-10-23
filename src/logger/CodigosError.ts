@@ -31,6 +31,12 @@ export enum CodigoError {
   LOGIN_INVALIDO = 'LOGIN_INVALIDO',
 
   /**
+   * Se intentó eliminar (dar de baja) al único ADMINISTRADOR activo del comercio.
+   * Severidad: BAJA — regla de negocio esperada, el usuario la ve en pantalla.
+   */
+  ULTIMO_ADMINISTRADOR = 'ULTIMO_ADMINISTRADOR',
+
+  /**
    * Los certificados AFIP no están configurados o están vencidos.
    * Causa típica: instalación nueva sin WSAA, vencimiento anual.
    * Severidad: ALTA — sin certificados no se puede facturar.
@@ -206,6 +212,7 @@ export const SEVERIDAD: Record<CodigoError, Severidad> = {
   [CodigoError.TERMINAL_NO_ENCONTRADA]:    'BAJA',
   [CodigoError.AUTH_NO_HABILITADO]:        'BAJA',
   [CodigoError.LOGIN_INVALIDO]:            'BAJA',
+  [CodigoError.ULTIMO_ADMINISTRADOR]:      'BAJA',
   [CodigoError.CERTIFICADOS]:              'ALTA',
   [CodigoError.AFIP_TIMEOUT]:              'ALTA',
   [CodigoError.AFIP_NO_DISPONIBLE]:        'ALTA',

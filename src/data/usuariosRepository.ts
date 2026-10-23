@@ -4,6 +4,9 @@ import db from '../db';
 import { SesionServ } from '../services/sesionService';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
+import { EventosRepo } from './eventosRepository';
+import { Auditoria } from '../models/Evento';
+import { SIN_AUDITORIA } from '../utils/auditoria';
 
 const BCRYPT_COST = 10;
 
@@ -15,8 +18,8 @@ class UsuariosRepository{
         
         try {
             //Obtengo la query segun los filtros
-            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false);
-            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true);
+            let { query: queryRegistros, params: paramsRegistros } = await ObtenerQuery(filtros,false,true);
+            let { query: queryTotal, params: paramsTotal } = await ObtenerQuery(filtros,true,true);
 
             //Obtengo la lista de registros y el total
             const rows = await connection.query(queryRegistros, paramsRegistros);
@@ -35,7 +38,8 @@ class UsuariosRepository{
         const connection = await db.getConnection();
 
         try {
-            let { query: consulta, params } = await ObtenerQuery(filtros,false);
+            // Sin filtro de baja: se usa para mostrar datos de usuarios históricos.
+            let { query: consulta, params } = await ObtenerQuery(filtros,false,false);
             const rows = await connection.query(consulta, params);
 
             return rows[0][0];
@@ -58,13 +62,14 @@ class UsuariosRepository{
                 " SELECT u.id, u.nombre, u.email, u.pass, u.idCargo, c.nombre cargo " +
                 " FROM usuarios u " +
                 " LEFT JOIN cargos c on c.id = u.idCargo " +
-                " WHERE u.id = ? ",
+                " WHERE u.id = ? AND u.fechaBaja IS NULL ",
                 [idUsuario]
             );
             const usuario = (rows as any[])[0];
 
             // Mismo mensaje genérico exista o no el usuario — no confirmar a un atacante
-            // si un id de usuario es válido.
+            // si un id de usuario es válido. Un usuario dado de baja entra por el mismo camino:
+            // no se revela que existe pero está de baja (Fase 3.2-C).
             const credencialesInvalidas = () => new AppError(
                 CodigoError.LOGIN_INVALIDO,
                 'Usuario o contraseña incorrecta.',
@@ -87,18 +92,26 @@ class UsuariosRepository{
         }
     }
 
-    async UsuariosSelector(){
+    // Fase 3.2-C: por defecto solo usuarios activos. Con incluirBajas devuelve también los dados
+    // de baja (campo deBaja) para filtrar pantallas históricas, ej. cajas viejas por responsable.
+    async UsuariosSelector(incluirBajas:boolean = false){
         const connection = await db.getConnection();
 
         try {
             // Se agrega idCargo/cargo (mismo JOIN que Login) para que el login pueda
             // distinguir admin/empleado sin una segunda llamada a ObtenerUsuario.
-            const [rows] = await connection.query(
-                " SELECT u.id, u.nombre, u.idCargo, c.nombre cargo " +
+            const consulta =
+                " SELECT u.id, u.nombre, u.idCargo, c.nombre cargo" +
+                (incluirBajas ? ", (u.fechaBaja IS NOT NULL) AS deBaja" : "") +
                 " FROM usuarios u " +
-                " LEFT JOIN cargos c on c.id = u.idCargo "
-            );
-            return [rows][0];
+                " LEFT JOIN cargos c on c.id = u.idCargo " +
+                (incluirBajas ? " ORDER BY (u.fechaBaja IS NOT NULL), u.id " : " WHERE u.fechaBaja IS NULL ");
+
+            const [rows] = await connection.query(consulta);
+
+            return incluirBajas
+                ? (rows as any[]).map(r => ({ ...r, deBaja: !!r.deBaja }))
+                : [rows][0];
 
         } catch (error:any) {
             throw error;
@@ -209,6 +222,11 @@ class UsuariosRepository{
     async Modificar(data:any): Promise<string>{
         const connection = await db.getConnection();
         try {
+            //Un usuario dado de baja no se edita (tampoco se reactiva, ver 3.2-C)
+            const [activo] = await connection.query<any[]>("SELECT 1 FROM usuarios WHERE id = ? AND fechaBaja IS NULL", [data.id]);
+            if(activo.length === 0)
+                return "El usuario no existe o fue dado de baja.";
+
             let existe = await ValidarExistencia(connection, data, true);
 
             if(existe)//Verificamos si ya existe un usuario con el mismo nombre o correo
@@ -245,19 +263,90 @@ class UsuariosRepository{
         }
     }
 
-    async Eliminar(id:string): Promise<string>{
+    // Fase 3.2-C. Borrado físico solo si el usuario no aparece en ninguna tabla; si aparece en
+    // alguna, baja lógica (fechaBaja). La auditoría (usuarios_movimientos, eventos) NUNCA se borra.
+    // Devuelve 'OK' (borrado) o 'BAJA' (baja lógica). Lanza AppError NOT_FOUND / ULTIMO_ADMINISTRADOR.
+    async Eliminar(id:string, auditoria:Auditoria = SIN_AUDITORIA): Promise<string>{
         const connection = await db.getConnection();
-        
+
         try {
-            await connection.query("DELETE FROM usuarios_movimientos WHERE idUsuario = ?", [id]);
-            await connection.query("DELETE FROM usuarios WHERE id = ?", [id]);
+            await connection.beginTransaction();
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Usuario");
+            // El id del cargo se resuelve por nombre, no se hardcodea.
+            const [cargoRows] = await connection.query<any[]>("SELECT id FROM cargos WHERE nombre = 'ADMINISTRADOR' LIMIT 1");
+            const idCargoAdmin = cargoRows.length > 0 ? Number(cargoRows[0].id) : null;
 
-            return "OK";
+            // Se bloquean TODAS las filas de administradores activos (no solo la del usuario):
+            // el front elimina varios usuarios en paralelo (forkJoin), y con un lock solo sobre la
+            // fila propia dos transacciones eliminando a los dos únicos admins pasarían el guard a
+            // la vez. Con este lock la segunda espera y ve el estado ya actualizado.
+            const [admins] = idCargoAdmin !== null
+                ? await connection.query<any[]>(
+                    "SELECT id FROM usuarios WHERE idCargo = ? AND fechaBaja IS NULL FOR UPDATE", [idCargoAdmin])
+                : [[] as any[]];
+
+            const [usuarioRows] = await connection.query<any[]>(
+                "SELECT id, nombre, idCargo FROM usuarios WHERE id = ? AND fechaBaja IS NULL FOR UPDATE", [id]);
+            const usuario = usuarioRows[0];
+
+            if (!usuario) {
+                throw new AppError(CodigoError.NOT_FOUND, 'El usuario no existe o ya fue dado de baja.', 404,
+                    { modulo: 'usuariosRepository.Eliminar', id });
+            }
+
+            // Guard del último administrador activo
+            const esAdmin = idCargoAdmin !== null && Number(usuario.idCargo) === idCargoAdmin;
+            if (esAdmin && !admins.some(a => Number(a.id) !== Number(usuario.id))) {
+                throw new AppError(CodigoError.ULTIMO_ADMINISTRADOR, 'No se puede eliminar al último administrador.', 409,
+                    { modulo: 'usuariosRepository.Eliminar', id });
+            }
+
+            // Referencias: cualquier tabla donde figure el usuario => baja lógica.
+            const [refs] = await connection.query<any[]>(
+                `SELECT EXISTS(
+                    SELECT 1 FROM usuarios_movimientos WHERE idUsuario = ?
+                    UNION ALL
+                    SELECT 1 FROM eventos WHERE idUsuario = ?
+                    UNION ALL
+                    SELECT 1 FROM cajas WHERE idResponsable = ?
+                    UNION ALL
+                    SELECT 1 FROM presupuestos WHERE idUsuario = ?
+                    UNION ALL
+                    SELECT 1 FROM presupuestos WHERE idUsuarioModifico = ?
+                    UNION ALL
+                    SELECT 1 FROM producto_precio_historial WHERE idUsuario = ?
+                    UNION ALL
+                    SELECT 1 FROM importaciones_costos WHERE idUsuario = ?
+                ) AS tieneReferencias`,
+                [id, id, id, id, id, id, id]
+            );
+            const conBaja = !!refs[0].tieneReferencias;
+
+            if (conBaja) {
+                await connection.query("UPDATE usuarios SET fechaBaja = NOW() WHERE id = ?", [id]);
+            } else {
+                await connection.query("DELETE FROM usuarios WHERE id = ?", [id]);
+            }
+
+            const textoLegacy = (conBaja ? "Dar de baja usuario " : "Eliminar usuario ") + usuario.nombre + " (nro " + usuario.id + ")";
+
+            //Registramos el Movimiento (log legacy, doble escritura durante la transición)
+            await SesionServ.RegistrarMovimiento(textoLegacy, auditoria.usuarioId, auditoria.puestoId);
+
+            await EventosRepo.Registrar(connection, {
+                accion: conBaja ? 'USUARIO_BAJA' : 'USUARIO_ELIMINAR',
+                entidad: 'usuarios',
+                entidadId: Number(usuario.id),
+                datosAntes: { nombre: usuario.nombre, idCargo: usuario.idCargo },
+                descripcion: textoLegacy,
+                auditoria,
+            });
+
+            await connection.commit();
+            return conBaja ? 'BAJA' : 'OK';
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
@@ -317,7 +406,7 @@ async function ObtenerQueryMovimientos(filtros:any,esTotal:boolean):Promise<{que
     }
 }
 
-async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, params:any[]}>{
+async function ObtenerQuery(filtros:any,esTotal:boolean,soloActivos:boolean):Promise<{query:string, params:any[]}>{
     try {
         //#region VARIABLES
         let query:string;
@@ -330,6 +419,9 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
         //#endregion
 
         // #region FILTROS
+        // Fase 3.2-C: el ABM lista solo activos; ObtenerUsuario(id) no filtra (datos históricos).
+        if (soloActivos) filtro += " AND u.fechaBaja IS NULL ";
+
         if (filtros.busqueda != null && filtros.busqueda != ""){
             filtro += " AND u.nombre LIKE ? ";
             params.push("%" + filtros.busqueda + "%");
@@ -376,7 +468,8 @@ async function ObtenerQuery(filtros:any,esTotal:boolean):Promise<{query:string, 
 
 async function ValidarExistencia(connection, data:any, modificando:boolean):Promise<boolean>{
     try {
-        let consulta = " SELECT * FROM usuarios WHERE nombre = ? ";
+        // Solo contra activos: se puede crear un "JUAN" nuevo aunque haya uno viejo de baja (3.2-C)
+        let consulta = " SELECT * FROM usuarios WHERE nombre = ? AND fechaBaja IS NULL ";
         if(modificando) consulta += " AND id <> ? ";
 
         const parametros = [data.nombre.toUpperCase(), data.id];
