@@ -35,3 +35,4 @@ vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 - [mejora] usuarios con baja lógica (fechaBaja): eliminar un usuario con historial lo da de baja y conserva toda su auditoría; sin historial se borra
 - [mejora] no se puede eliminar al último administrador activo (409 ULTIMO_ADMINISTRADOR, con lock sobre los admins para eliminaciones en paralelo)
 - [correccion] Usuarios.Eliminar ya no borra usuarios_movimientos ni deja huérfanos en cajas/presupuestos/eventos
+- [mejora] visor de eventos: rutas /easysales/eventos (listado paginado con filtros, historia de una venta o caja incluyendo sus notas de crédito y movimientos, y opciones de filtro)

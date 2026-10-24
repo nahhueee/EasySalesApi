@@ -104,6 +104,7 @@ import cuentasRuta from './routes/cuentasCorsRoute';
 import etiquetasRuta from './routes/etiquetasRoute';
 import registrosRuta from './routes/registrosRoute';
 import puestosRuta from './routes/puestosRoute';
+import eventosRuta from './routes/eventosRoute';
 import { puestoVisto } from './middlewares/puestoVisto';
 
 // Fase 3.2-A: ultimoVisto del puesto (X-Puesto-Id), antes de las rutas de negocio.
@@ -127,6 +128,7 @@ app.use('/easysales/cuentas', cuentasRuta);
 app.use('/easysales/etiquetas', etiquetasRuta);
 app.use('/easysales/registros', registrosRuta);
 app.use('/easysales/puestos', puestosRuta);
+app.use('/easysales/eventos', eventosRuta);
 app.use('/easysales/backup', backupRoute);
 
 //AdminServer Route
