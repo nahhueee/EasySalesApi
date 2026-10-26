@@ -3,7 +3,6 @@ import {ParametrosRepo} from '../data/parametrosRepository';
 import { ObjFacturar, TipoComprobante } from "../models/objFacturar";
 import { VentasRepo } from '../data/ventasRepository';
 import moment from "moment";
-import { SesionServ } from "./sesionService";
 import { AppError } from "../logger/AppError";
 import { CodigoError } from "../logger/CodigosError";
 import { ValidarConsistenciaFiscal } from "../utils/datosFiscales";
@@ -154,9 +153,6 @@ class FacturacionService{
                 objFactura.tipoComprobante!
             );
 
-            await SesionServ.RegistrarMovimiento(
-                `Nueva Factura tipo ${objFactura.tipoComprobante} nro ${lastVoucher.CbteNro}`
-            );
 
             return {
                 estado: 'Aprobado',

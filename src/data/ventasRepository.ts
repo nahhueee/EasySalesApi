@@ -9,7 +9,6 @@ import { FacturaVenta } from '../models/FacturaVenta';
 import { ObjQR } from '../models/ObjQR';
 import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
-import { SesionServ } from '../services/sesionService';
 import { EventosRepo } from './eventosRepository';
 import { Auditoria } from '../models/Evento';
 import { auditoriaDesde } from '../utils/auditoria';
@@ -278,7 +277,6 @@ class VentasRepository{
             // "CUENTA CORRIENTE" y "SALDO A FAVOR" no generan haber — el saldo corrido
             // los absorbe (ver documentos/handoff_implementacion_devoluciones_nc.md).
             if(venta.cliente.id !== 1){
-                await SesionServ.RegistrarMovimiento("Nueva entrada de venta para el cliente " + venta.cliente.nombre, usuarioId, puestoId);
 
                 // 1. Debe = total (la deuda de la venta)
                 await CuentaCorrienteRepo.RegistrarMovimiento(connection, {
@@ -536,8 +534,6 @@ class VentasRepository{
                 }
             }
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Venta nro " + venta.id, usuarioId, puestoId);
 
             // Auditoría (Fase 3.2-B): valores leídos de la base (ventaDb), no del body.
             await EventosRepo.Registrar(connection, {

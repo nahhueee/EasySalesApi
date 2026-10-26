@@ -1,7 +1,6 @@
 import db from '../db';
 import {  } from '../models/Cliente';
 import { Etiqueta } from '../models/Etiqueta';
-import { SesionServ } from '../services/sesionService';
 
 class EtiquetasRepository{
 
@@ -110,8 +109,6 @@ class EtiquetasRepository{
 
             await connection.query(consulta, parametros);
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Agregar Nueva Etiqueta: " + data.descripcion.toUpperCase());
 
             return "OK";
 
@@ -179,8 +176,6 @@ class EtiquetasRepository{
 
             await connection.query(consulta, parametros);
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Modificar Etiqueta: " + data.descripcion.toUpperCase());
 
             return "OK";
 
@@ -197,8 +192,6 @@ class EtiquetasRepository{
         try {
             await connection.query("DELETE FROM etiquetas WHERE id = ?", [id]);
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Etiqueta nro " + id);
 
             return "OK";
 

@@ -7,7 +7,6 @@ import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { ExportProductosServ, ExportLimiteExcedidoError } from '../services/exportProductosService';
 import { datosAuditoria } from '../utils/auditoria';
-import { SesionServ } from '../services/sesionService';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -107,11 +106,6 @@ router.post('/exportar', async (req:Request, res:Response) => {
         const resultado = await ExportProductosServ.exportar(plantilla, formato, filtro);
 
         const { usuarioId, puestoId } = datosAuditoria(req);
-        await SesionServ.RegistrarMovimiento(
-            `Exportó pedido a proveedor (${resultado.filas} productos, plantilla ${plantilla})`,
-            usuarioId,
-            puestoId
-        );
 
         logger.info(`Export de productos: plantilla=${plantilla} formato=${formato} filas=${resultado.filas} duracionMs=${resultado.duracionMs}`);
 

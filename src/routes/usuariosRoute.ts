@@ -64,16 +64,6 @@ router.get('/selector', async (req:Request, res:Response) => {
     }
 });
 
-router.post('/obtener-movimientos', async (req:Request, res:Response) => {
-    try{ 
-        res.json(await UsuariosRepo.ObtenerMovimientos(req.body));
-
-    } catch(error:any){
-        let msg = "Error al obtener el listado de movimientos para el usuario.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
 
 //#endregion
 

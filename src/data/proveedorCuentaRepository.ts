@@ -1,7 +1,6 @@
 import moment from 'moment';
 import { ResultSetHeader } from 'mysql2';
 import db from '../db';
-import { SesionServ } from '../services/sesionService';
 import { MovimientosRepo } from './movimientosRepository';
 import { EventosRepo } from './eventosRepository';
 import { auditoriaDesde } from '../utils/auditoria';
@@ -286,9 +285,6 @@ class ProveedorCuentaRepository {
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento(
-                `Se registró un pago a proveedor ${proveedor.nombre} por $${monto}`, usuarioId, puestoId
-            );
 
             return "OK";
 
@@ -351,9 +347,6 @@ class ProveedorCuentaRepository {
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento(
-                `Se registró una factura de proveedor ${proveedor.nombre} por $${monto}`, usuarioId, puestoId
-            );
 
             return "OK";
 
@@ -442,9 +435,6 @@ class ProveedorCuentaRepository {
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento(
-                `Se anuló una factura de proveedor nro ${movimiento.id}`, usuarioId, puestoId
-            );
 
             return "OK";
 
@@ -511,9 +501,6 @@ class ProveedorCuentaRepository {
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento(
-                `Se registró un ajuste manual para el proveedor ${proveedor.nombre} por $${monto}`, usuarioId, puestoId
-            );
 
             return "OK";
 
@@ -643,9 +630,6 @@ class ProveedorCuentaRepository {
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento(
-                `Se anuló un pago a proveedor nro ${movimiento.id}`, usuarioId, puestoId
-            );
 
             return "OK";
 

@@ -2,7 +2,6 @@ import moment from 'moment';
 import db from '../db';
 import { Producto } from '../models/Producto';
 import { ProductoPrecio } from '../models/ProductoPrecio';
-import { SesionServ } from '../services/sesionService';
 
 // Rubro repuestos (handoff_repuestos_fases1_2_3.md, Fase 2 PR 2.2): campos permitidos para
 // GET /valores-distintos/:campo. Whitelist explicita, nunca interpolar el parametro de ruta
@@ -540,8 +539,6 @@ class ProductosRepository{
                 : [{ idLista: await GetIdListaDefault(connection), tipoPrecio: data.tipoPrecio ?? '$', costo: data.costo ?? 0, precio: data.precio ?? 0, porcentaje: data.porcentaje ?? null, redondeo: data.redondeo ?? 0, sumarIva: data.sumarIva ?? false }];
             await InsertarHistorialPrecios(connection, idProducto, preciosHistorial, Number(data.idUsuario) || 0, 'ALTA');
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Agregar Producto: " + data.codigo.toUpperCase());
 
             return "OK";
 
@@ -638,10 +635,6 @@ class ProductosRepository{
                 }
             }
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento(
-                (reactivar ? "Reactivar Producto: " : "Modificar Producto: ") + data.codigo.toUpperCase()
-            );
 
             return "OK";
 
@@ -686,7 +679,6 @@ class ProductosRepository{
 
             if (refs[0].tieneReferencias) {
                 await connection.query("UPDATE productos SET fechaBaja = NOW() WHERE id = ?", [id]);
-                await SesionServ.RegistrarMovimiento("Dar de baja Producto nro " + id);
                 return "BAJA";
             }
 
@@ -706,8 +698,6 @@ class ProductosRepository{
             //Mandamos la transaccion
             await connection.commit();
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Producto nro " + id);
 
             return "OK";
 

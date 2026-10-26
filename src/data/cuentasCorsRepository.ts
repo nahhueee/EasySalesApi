@@ -1,6 +1,5 @@
 import moment from 'moment';
 import db from '../db';
-import { SesionServ } from '../services/sesionService';
 import { ResultSetHeader } from 'mysql2';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { MovimientosRepo } from './movimientosRepository';
@@ -277,8 +276,6 @@ class CuentasCorsRepository{
             //Mandamos la transaccion
             await connection.commit();
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Nueva entrega de dinero al cliente: " + data.idCliente, usuarioId, puestoId);
 
             return "OK";
 
@@ -399,8 +396,6 @@ class CuentasCorsRepository{
                 });
             }
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Reversión de entrega de dinero nro: " + data.idEntrega, usuarioId, puestoId);
 
             // Auditoría (Fase 3.2-B): entregaOriginal se leyó de la base antes de borrar la cabecera.
             await EventosRepo.Registrar(connection, {
@@ -491,8 +486,6 @@ class CuentasCorsRepository{
                 }, connection, auditoria);
             }
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Se marcó como pago la venta nro " + data.idVenta, usuarioId, puestoId);
 
             // Auditoría (Fase 3.2-B)
             await EventosRepo.Registrar(connection, {
@@ -614,7 +607,6 @@ class CuentasCorsRepository{
                 }
             }
 
-            await SesionServ.RegistrarMovimiento("Se revirtió el estado pago para la venta nro " + idVenta, usuarioId, puestoId);
 
             // Auditoría (Fase 3.2-B): ventaInfo se leyó antes de borrar el detalle de pago.
             await EventosRepo.Registrar(connection, {
@@ -730,10 +722,6 @@ class CuentasCorsRepository{
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento(
-                `Ajuste manual de cuenta corriente del cliente nro ${idCliente} (${cliente.nombre}): ${sentido === 'debe' ? '+' : '-'}$${monto}`,
-                usuarioId, puestoId
-            );
 
             return "OK";
 

@@ -4,7 +4,6 @@ import { MapearSugerenciaPadron, SugerenciaPadron } from '../utils/padronAfipMap
 import { EsCuitCuilValido } from '../utils/datosFiscales';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
-import { SesionServ } from './sesionService';
 
 class PadronService {
 
@@ -56,7 +55,6 @@ class PadronService {
             throw new AppError(CodigoError.NOT_FOUND, MSG_NO_ENCONTRADO, 404);
         }
 
-        await SesionServ.RegistrarMovimiento(`Consulta a padrón ARCA: CUIT ${cuit}`);
 
         return MapearSugerenciaPadron(personaReturn);
     }

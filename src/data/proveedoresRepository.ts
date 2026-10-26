@@ -1,7 +1,6 @@
 import db from '../db';
 import { ResultSetHeader } from 'mysql2';
 import { Proveedor } from '../models/Proveedor';
-import { SesionServ } from '../services/sesionService';
 import { ProveedorCuentaRepo } from './proveedorCuentaRepository';
 
 // Espejo de clientesRepository.ts, simplificado a propósito (documentos/plan_proveedores.md §4.1,
@@ -153,7 +152,6 @@ class ProveedoresRepository{
 
             await connection.commit();
 
-            await SesionServ.RegistrarMovimiento("Agregar Nuevo Proveedor: " + data.nombre.toUpperCase());
 
             return "OK";
 
@@ -184,7 +182,6 @@ class ProveedoresRepository{
             ];
             await connection.query(consulta, parametros);
 
-            await SesionServ.RegistrarMovimiento("Modificar Proveedor: " + data.nombre.toUpperCase());
 
             return "OK";
 
@@ -200,7 +197,6 @@ class ProveedoresRepository{
 
         try {
             await connection.query("UPDATE proveedores SET fechaBaja = NOW() WHERE id = ?", [id]);
-            await SesionServ.RegistrarMovimiento("Dar de baja Proveedor nro " + id);
 
             return "OK";
 

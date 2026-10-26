@@ -3,7 +3,6 @@ import db from '../db';
 import { ResultSetHeader } from 'mysql2';
 import { RegistroDetalle } from '../models/DetalleRegistro';
 import { Registro } from '../models/Registro';
-import { SesionServ } from '../services/sesionService';
 
 class RegistrosRepository{
 
@@ -97,8 +96,6 @@ class RegistrosRepository{
                 await InsertDetalleRegistro(connection, element);
             };
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Crear nuevo registro: " + data.descripcion.toUpperCase());
 
             //Mandamos la transaccion
             await connection.commit();
@@ -140,8 +137,6 @@ class RegistrosRepository{
                 await InsertDetalleRegistro(connection, element);
             };
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Modificar registro: " + data.descripcion.toUpperCase());
 
             //Mandamos la transaccion
             await connection.commit();
@@ -160,7 +155,6 @@ class RegistrosRepository{
         try {
             await connection.query("DELETE FROM registros_detalle WHERE idRegistro = ?", [id]);
             await connection.query("DELETE FROM registros WHERE id = ?", [id]);
-            await SesionServ.RegistrarMovimiento("Eliminar registro nro " + id);
 
             return "OK";
 

@@ -1,6 +1,5 @@
 import db from '../db';
 import { Cliente } from '../models/Cliente';
-import { SesionServ } from '../services/sesionService';
 import { ValidarConsistenciaFiscal } from '../utils/datosFiscales';
 
 class ClientesRepository{
@@ -90,8 +89,6 @@ class ClientesRepository{
 
             await connection.query(consulta, parametros);
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Agregar Nuevo Cliente: " + data.nombre.toUpperCase());
 
             return "OK";
 
@@ -136,8 +133,6 @@ class ClientesRepository{
             ];
             await connection.query(consulta, parametros);
 
-             //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Modificar Cliente: " + data.nombre.toUpperCase());
 
             return "OK";
 
@@ -185,12 +180,10 @@ class ClientesRepository{
 
             if (refs[0].tieneReferencias) {
                 await connection.query("UPDATE clientes SET fechaBaja = NOW() WHERE id = ?", [id]);
-                await SesionServ.RegistrarMovimiento("Dar de baja Cliente nro " + id);
                 return "BAJA";
             }
 
             await connection.query("DELETE FROM clientes WHERE id = ?", [id]);
-            await SesionServ.RegistrarMovimiento("Eliminar Cliente nro " + id);
             return "OK";
 
         } catch (error:any) {

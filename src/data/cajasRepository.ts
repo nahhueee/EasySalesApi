@@ -1,7 +1,6 @@
 import db from '../db';
 import { ResultSetHeader } from 'mysql2';
 import { Caja } from '../models/Caja';
-import { SesionServ } from '../services/sesionService';
 import { EventosRepo } from './eventosRepository';
 import { auditoriaDesde } from '../utils/auditoria';
 const moment = require('moment');
@@ -116,12 +115,6 @@ class CajasRepository{
 
             await connection.query(consulta, parametros);
 
-            //Registramos el Movimiento
-            if(data.finalizada == 1)
-                await SesionServ.RegistrarMovimiento("Finalizar la caja nro " + data.idCaja, usuarioId, puestoId);
-            else
-                await SesionServ.RegistrarMovimiento("Revertir la caja nro " + data.idCaja, usuarioId, puestoId);
-
             // Auditoría: foto del arqueo leída de la base EN ESTE MOMENTO (la 3.4 la usa para
             // conciliar). Se lee dentro de la transacción, después del UPDATE.
             const [filas] = await connection.query(
@@ -167,8 +160,6 @@ class CajasRepository{
             const [resultado] = await connection.query<ResultSetHeader>(consulta, parametros);
             const idCaja = resultado.insertId;
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Agregar Nueva Caja nro " + idCaja, usuarioId, puestoId);
 
             await EventosRepo.Registrar(connection, {
                 accion: 'CAJA_ABRIR',
@@ -222,8 +213,6 @@ class CajasRepository{
             const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.inicial, data.fondoProveedores ?? null, data.id];
             await connection.query(consulta, parametros);
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Modificar Caja nro " + data.id, usuarioId, puestoId);
 
             if (antes) {
                 await EventosRepo.Registrar(connection, {
@@ -276,8 +265,6 @@ class CajasRepository{
 
             await connection.query(consulta, [new Date(), id]);
 
-            //Registramos el Movimiento
-            await SesionServ.RegistrarMovimiento("Eliminar Caja nro " + id, usuarioId, puestoId);
 
             if (antes) {
                 await EventosRepo.Registrar(connection, {

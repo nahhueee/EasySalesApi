@@ -4,7 +4,7 @@ import { Auditoria } from '../models/Evento';
 
 // Lote 6 + PR 1, Fase 2 (auditoría real, ver documentos/handoff_fase2_correcciones.md y
 // documentos/handoff_pr1_identidad_puesto.md): extrae usuario_id / puesto_id del request para
-// pasarlos explícitos hasta SesionServ.RegistrarMovimiento(), en vez de leerlos de session.json
+// pasarlos explícitos hasta la tabla `eventos`, en vez de leerlos de session.json
 // (global, compartido entre puestos en LAN).
 //
 // Vocabulario (no reabrir, ver architecture.md §1.2, §9.2, §18.5):
@@ -15,12 +15,12 @@ import { Auditoria } from '../models/Evento';
 //
 // El front los manda como headers (ApiService los agrega a toda request autenticada,
 // leyendo usuario_id de localStorage y puesto_id del comando Tauri obtener_puesto_id).
-// Devuelve null si faltan — SesionServ cae al fallback de session.json en ese caso, no rompe.
+// Devuelve null si faltan.
 export function datosAuditoria(req: Request): { usuarioId: string | null, puestoId: string | null } {
     const usuarioId = req.header('x-usuario-id') || null;
-    // puestoId se valida (UUID v4): un header basura o más largo que usuarios_movimientos.idPuesto
-    // (varchar 36) haría fallar el INSERT del log legacy y, en los flujos con transacción, la
-    // operación entera. Inválido o ausente => null.
+    // puestoId se valida (UUID v4): un header basura o más largo que eventos.idPuesto (CHAR 36)
+    // haría fallar el INSERT de auditoría y, en los flujos con transacción, la operación entera.
+    // Inválido o ausente => null.
     const puestoId = puestoIdDeRequest(req);
     return { usuarioId, puestoId };
 }
@@ -29,8 +29,7 @@ export function datosAuditoria(req: Request): { usuarioId: string | null, puesto
 // - usuarioId: entero positivo; cualquier otra cosa => null.
 // - puestoId: UUID v4 válido; cualquier otra cosa => null.
 // NUNCA se completa con session.json: un "no se sabe" honesto es mejor que atribuirle la
-// operación a otra persona en una LAN. datosAuditoria() queda como está porque SesionServ
-// (log legacy usuarios_movimientos) todavía lo usa.
+// operación a otra persona en una LAN.
 /** Identidad desconocida: se registra como NULL, nunca con session.json. */
 export const SIN_AUDITORIA: Auditoria = { usuarioId: null, puestoId: null };
 
