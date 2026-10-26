@@ -28,13 +28,3 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
-- [correccion] al anular una venta, la caja y el stock se ajustan con los datos guardados de la venta (no los del front); se impide anular dos veces la misma venta (VENTA_YA_ANULADA)
-- [mejora] registro local de puestos (tabla puestos, POST /registrar, middleware puestoVisto) y terminalesLanActivas del heartbeat con el conteo real de puestos activos (24 h)
-- [mejora] tabla eventos: auditoría estructurada (quién, desde qué puesto, antes/después) de ventas, facturación, notas de crédito, cajas, movimientos de caja, cobros de cuenta corriente y cuentas de proveedores, dentro de la misma transacción de cada operación
-- [correccion] la hora del registro de movimientos de usuarios sale de MySQL y no de la PC; un identificador de puesto inválido ya no rompe la operación; cobro de fiado libera la conexión si falla la lectura de ventas impagas
-- [mejora] usuarios con baja lógica (fechaBaja): eliminar un usuario con historial lo da de baja y conserva toda su auditoría; sin historial se borra
-- [mejora] no se puede eliminar al último administrador activo (409 ULTIMO_ADMINISTRADOR, con lock sobre los admins para eliminaciones en paralelo)
-- [correccion] Usuarios.Eliminar ya no borra usuarios_movimientos ni deja huérfanos en cajas/presupuestos/eventos
-- [mejora] visor de eventos: rutas /easysales/eventos (listado paginado con filtros, historia de una venta o caja incluyendo sus notas de crédito y movimientos, y opciones de filtro)
-- [mejora] se deja de escribir el log legacy usuarios_movimientos (40 puntos de llamada) y se retiran SesionServ.RegistrarMovimiento, UsuariosRepo.ObtenerMovimientos y POST /usuarios/obtener-movimientos; la tabla queda sin uso hasta su migración de baja
-- [mejora] se deja de escribir el log legacy usuarios_movimientos (40 puntos de llamada) y se retiran SesionServ.RegistrarMovimiento, UsuariosRepo.ObtenerMovimientos y POST /usuarios/obtener-movimientos; la tabla queda sin uso hasta su migración de baja
