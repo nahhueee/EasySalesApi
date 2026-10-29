@@ -28,3 +28,5 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
+- [mejora] fase 3.3: historial de stock (productos_movimientos) con StockRepo.Mover como único punto de cambio de cantidad; GET /productos/:id/movimientos-stock; NC con reingreso opcional de mercadería
+- [correccion] fix lost update del stock: el modal de producto y "agregar cantidad" ya no pisan la cantidad con un valor viejo (Modificar no escribe cantidad si no se tocó; aniadir recibe delta)

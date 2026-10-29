@@ -10,6 +10,7 @@ import { ObjQR } from '../models/ObjQR';
 import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
 import { EventosRepo } from './eventosRepository';
+import { StockRepo } from './stockRepository';
 import { Auditoria } from '../models/Evento';
 import { auditoriaDesde } from '../utils/auditoria';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
@@ -313,7 +314,15 @@ class VentasRepository{
             for (const element of  venta.detalles) {
                 element.idVenta = venta.id;
                 await InsertDetalleVenta(connection, element);
-                await ActualizarInventario(connection, element, "-")
+                // Fase 3.3: todo cambio de stock pasa por StockRepo.Mover (historial + transacción).
+                // VARIOS (por código, §12.7), soloPrecio y productos inexistentes los saltea Mover.
+                await StockRepo.Mover(connection, {
+                    idProducto: element.producto!.id,
+                    delta: -Number(element.cantidad),
+                    motivo: 'VENTA',
+                    idReferencia: venta.id,
+                    auditoria: auditoriaDesde(usuarioId, puestoId),
+                });
             };
 
             //Actualizamos el total de ventas caja
@@ -488,18 +497,20 @@ class VentasRepository{
             //Actualizamos el total de ventas caja con los valores persistidos (no los del body)
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [ventaDb.total, ventaDb.idCaja]);
 
-            //Reponemos el inventario desde ventas_detalle (no desde el body). Misma regla que
-            //ActualizarInventario: no tocamos VARIOS (por código, §12.7), soloPrecio ni productos inexistentes.
+            //Reponemos el inventario desde ventas_detalle (no desde el body). Fase 3.3: vía StockRepo.Mover,
+            //que no toca VARIOS (por código, §12.7), soloPrecio ni productos inexistentes.
             const [detalleRows] = await connection.query(
-                `SELECT vd.idProducto, vd.cantidad, p.soloPrecio, p.codigo
-                 FROM ventas_detalle vd LEFT JOIN productos p ON p.id = vd.idProducto
-                 WHERE vd.idVenta = ?`,
+                "SELECT idProducto, cantidad FROM ventas_detalle WHERE idVenta = ?",
                 [venta.id]
             );
             for (const d of (detalleRows as any[])) {
-                if (d.codigo === null || d.codigo === undefined) continue; //producto huérfano (LEFT JOIN sin match)
-                if (d.codigo === '*' || d.soloPrecio) continue;
-                await connection.query("UPDATE productos SET cantidad = cantidad + ? WHERE id = ?", [d.cantidad, d.idProducto]);
+                await StockRepo.Mover(connection, {
+                    idProducto: d.idProducto,
+                    delta: Number(d.cantidad),
+                    motivo: 'ANULACION_VENTA',
+                    idReferencia: Number(venta.id),
+                    auditoria: auditoriaDesde(usuarioId, puestoId),
+                });
             }
 
             // Libreta completa (PR B, 2026-07-03): revertir exactamente lo que Agregar posteó.
@@ -864,20 +875,6 @@ async function InsertDetalleVenta(connection, detalle):Promise<void>{
     }
 }
 
-async function ActualizarInventario(connection, detalle, operacion):Promise<void>{
-    try {
-        if(detalle.producto.id === 1 || detalle.producto.soloPrecio) return; //No actualizamos el producto vario o productos que no trabajan cantidad
-
-        const consulta = `UPDATE productos SET cantidad = cantidad ${operacion} ? 
-                          WHERE id = ?`;
-
-        const parametros = [detalle.cantidad, detalle.producto.id];
-        await connection.query(consulta, parametros);
-        
-    } catch (error) {
-        throw error; 
-    }
-}
 //#endregion
 
 

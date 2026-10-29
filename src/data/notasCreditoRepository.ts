@@ -22,6 +22,7 @@ export interface NotaCreditoInput {
     esParcial: boolean;
     fecha: Date;
     motivo?: string | null;
+    reingresoStock?: boolean; // Fase 3.3: la NC devolvió la mercadería al stock
 }
 
 // Fila tal como se lee de `notas_credito` — usada por el read-path
@@ -47,13 +48,13 @@ class NotasCreditoRepository {
 
     async InsertarNotaCredito(connection, nc: NotaCreditoInput): Promise<number> {
         try {
-            const consulta = " INSERT INTO notas_credito(idVenta, tipo, cae, caeVto, ticket, ptoVenta, neto, iva, total, esParcial, fecha, motivo) " +
-                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
+            const consulta = " INSERT INTO notas_credito(idVenta, tipo, cae, caeVto, ticket, ptoVenta, neto, iva, total, esParcial, fecha, motivo, reingresoStock) " +
+                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
 
             const parametros = [
                 nc.idVenta, nc.tipo, nc.cae, moment(nc.caeVto).format('YYYY-MM-DD'),
                 nc.ticket, nc.ptoVenta, nc.neto, nc.iva, nc.total, nc.esParcial,
-                moment(nc.fecha).format('YYYY-MM-DD HH:mm:ss'), nc.motivo ?? null
+                moment(nc.fecha).format('YYYY-MM-DD HH:mm:ss'), nc.motivo ?? null, nc.reingresoStock ? 1 : 0
             ];
 
             const [resultado] = await connection.query(consulta, parametros);
@@ -116,6 +117,24 @@ class NotasCreditoRepository {
         } catch (error) {
             throw error;
         }
+    }
+
+    // Fase 3.3: cantidad ya REINGRESADA al stock por línea de venta, solo de NCs con reingresoStock = 1.
+    // Una NC total con reingreso devuelve (vendido - esto): parcial + total nunca devuelven de más.
+    async ObtenerReingresadoPorLinea(connection, idVenta: number): Promise<Record<number, number>> {
+        const [rows] = await connection.query(
+            " SELECT ncd.idVentaDetalle, COALESCE(SUM(ncd.cantidad), 0) AS cantidadReingresada " +
+            " FROM notas_credito_detalle ncd " +
+            " INNER JOIN notas_credito nc ON nc.id = ncd.idNotaCredito " +
+            " WHERE nc.idVenta = ? AND nc.reingresoStock = 1 " +
+            " GROUP BY ncd.idVentaDetalle ",
+            [idVenta]
+        );
+        const reingresado: Record<number, number> = {};
+        for (const row of rows as any[]) {
+            reingresado[row.idVentaDetalle] = Number(row.cantidadReingresada ?? 0);
+        }
+        return reingresado;
     }
 
     // Lee una NC por id. Read-path para reimprimir/reconstruir el comprobante sin

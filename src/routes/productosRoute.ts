@@ -6,7 +6,8 @@ import { ImportacionCostosRepo } from '../data/importacionCostosRepository';
 import {Router, Request, Response} from 'express';
 import logger from '../logger/loggerGeneral';
 import { ExportProductosServ, ExportLimiteExcedidoError } from '../services/exportProductosService';
-import { datosAuditoria } from '../utils/auditoria';
+import { datosAuditoria, auditoriaDesdeRequest } from '../utils/auditoria';
+import { StockRepo } from '../data/stockRepository';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -47,6 +48,22 @@ router.get('/historial/:idProducto', async (req:Request, res:Response) => {
 
     } catch(error:any){
         let msg = "Error al obtener el historial de precios del producto.";
+        logger.error(msg + " " + error.message);
+        res.status(500).send(msg);
+    }
+});
+
+// Fase 3.3: historial de stock del producto (tab Historial → Stock del modal). Paginado, máx. 100.
+router.get('/:id/movimientos-stock', async (req:Request, res:Response) => {
+    try{
+        const idProducto = Number(req.params.id);
+        if (!Number.isInteger(idProducto) || idProducto <= 0) return res.status(400).send("Producto inválido.");
+        const pagina = Number(req.query.pagina) || 1;
+        const tamanioPagina = Number(req.query.tamanioPagina) || 20;
+        res.json(await StockRepo.ObtenerPorProducto(idProducto, pagina, tamanioPagina));
+
+    } catch(error:any){
+        let msg = "Error al obtener el historial de stock del producto.";
         logger.error(msg + " " + error.message);
         res.status(500).send(msg);
     }
@@ -171,7 +188,7 @@ router.post('/productos-ids', async (req:Request, res:Response) => {
 //#region ABM
 router.post('/agregar', async (req:Request, res:Response) => {
     try{ 
-        res.json(await ProductosRepo.Agregar(req.body));
+        res.json(await ProductosRepo.Agregar(req.body, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         let msg = "Error al intentar agregar el producto.";
@@ -188,6 +205,7 @@ router.post('/actualizar-varios', async (req:Request, res:Response) => {
 
         const productos = req.body.productos;
         const accionActualizar = req.body.accion;
+        const auditoria = auditoriaDesdeRequest(req);
         if (!productos || !Array.isArray(productos)) {
             return res.status(400).json({ mensaje: "Formato inválido de productos." });
         }
@@ -218,20 +236,23 @@ router.post('/actualizar-varios', async (req:Request, res:Response) => {
             try {
             const existente = await ProductosRepo.ValidarCodigo(prod);
             if (existente==0) {
-                await ProductosRepo.Agregar(prod);
+                prod.observacionStock = 'Importación desde Excel';
+                await ProductosRepo.Agregar(prod, auditoria);
                 insertados++;
             } else {
                 prod.id = existente;
 
                 if(accionActualizar == "ACTUALIZAR"){
-                    await ProductosRepo.Modificar(prod);
+                    // Sin cantidadOriginal: el Excel fija la cantidad → AJUSTE contra el valor actual.
+                    prod.observacionStock = 'Importación desde Excel';
+                    await ProductosRepo.Modificar(prod, auditoria);
                     actualizados++;
                 }else if(accionActualizar == "SUMARSTOCK"){
                     const producto = await ProductosRepo.ObtenerUno(prod.id)
-                    let nvaCantidad = prod.cantidad + producto.cantidad;
-                    
                     if(producto.id!=0){
-                        await ProductosRepo.AniadirCantidad({cant:nvaCantidad, idProducto:producto.id});
+                        // Fase 3.3: se suma lo que trae el Excel (delta), no un total calculado
+                        // con una lectura previa que una venta intermedia dejaba desactualizada.
+                        await ProductosRepo.AniadirCantidad({delta:Number(prod.cantidad) || 0, idProducto:producto.id, observacionStock:'Importación desde Excel'}, auditoria);
                         actualizados++;
                     }else{
                         errores.push(`No se pudo actualizar el producto con código ${prod.codigo}.`);
@@ -261,7 +282,7 @@ router.post('/actualizar-varios', async (req:Request, res:Response) => {
 
 router.put('/modificar', async (req:Request, res:Response) => {
     try{ 
-        res.json(await ProductosRepo.Modificar(req.body));
+        res.json(await ProductosRepo.Modificar(req.body, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         let msg = "Error al intentar modificar el producto.";
@@ -273,7 +294,7 @@ router.put('/modificar', async (req:Request, res:Response) => {
 
 router.put('/aniadir', async (req:Request, res:Response) => {
     try{ 
-        res.json(await ProductosRepo.AniadirCantidad(req.body));
+        res.json(await ProductosRepo.AniadirCantidad(req.body, auditoriaDesdeRequest(req)));
 
     } catch(error:any){
         let msg = "Error al intentar añadir cantidad al producto.";

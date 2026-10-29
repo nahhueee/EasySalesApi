@@ -11,11 +11,12 @@ export type AccionEvento =
     | 'PROVEEDOR_PAGO' | 'PROVEEDOR_PAGO_ANULAR'
     | 'PROVEEDOR_FACTURA' | 'PROVEEDOR_FACTURA_ANULAR'
     | 'PROVEEDOR_AJUSTE'
-    | 'USUARIO_BAJA' | 'USUARIO_ELIMINAR';
+    | 'USUARIO_BAJA' | 'USUARIO_ELIMINAR'
+    | 'STOCK_AJUSTE' | 'STOCK_INGRESO';
 
 export type EntidadEvento =
     | 'ventas' | 'notas_credito' | 'cajas' | 'cajas_movimientos'
-    | 'cuenta_corriente' | 'proveedores' | 'usuarios';
+    | 'cuenta_corriente' | 'proveedores' | 'usuarios' | 'productos';
 
 /** Quién y desde dónde. null = "no se sabe" (nunca se completa con session.json). */
 export interface Auditoria {

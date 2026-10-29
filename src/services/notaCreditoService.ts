@@ -12,6 +12,7 @@ import { CodigoError } from '../logger/CodigosError';
 import loggerFacturacion from '../logger/loggerFacturacion';
 import { EventosRepo } from '../data/eventosRepository';
 import { Auditoria } from '../models/Evento';
+import { StockRepo } from '../data/stockRepository';
 
 /** Línea a acreditar en una NC parcial. La cantidad la decide el usuario; precio/producto se resuelven server-side contra la venta real — nunca se confía en lo que mande el front. */
 export interface LineaNotaCredito {
@@ -24,6 +25,8 @@ export interface EmitirNotaCreditoInput {
   motivo?: string;
   /** Sin líneas (u omitido) → NC total. Con líneas → NC parcial. */
   lineas?: LineaNotaCredito[];
+  /** Fase 3.3: devolver la mercadería al stock. Opcional, default false (comportamiento anterior). */
+  reingresarStock?: boolean;
 }
 
 /** Factura A/B/C → Nota de Crédito A/B/C correspondiente (objFacturar.ts). */
@@ -78,6 +81,7 @@ class NotaCreditoService {
     }
 
     const esParcial = Array.isArray(input.lineas) && input.lineas.length > 0;
+    const reingresarStock = input.reingresarStock === true;
     let montoNC = 0;
     const detallesNC: NotaCreditoDetalleInput[] = [];
 
@@ -185,6 +189,7 @@ class NotaCreditoService {
         esParcial,
         fecha:    fechaNC,
         motivo:   input.motivo ?? null,
+        reingresoStock: reingresarStock,
       };
 
       idNotaCredito = await NotasCreditoRepo.InsertarNotaCredito(connection, ncInput);
@@ -192,6 +197,30 @@ class NotaCreditoService {
       if (esParcial) {
         for (const detalle of detallesNC) {
           await NotasCreditoRepo.InsertarDetalle(connection, idNotaCredito, detalle);
+        }
+      }
+
+      // Fase 3.3: reingreso opcional de mercadería. Misma transacción que la NC. VARIOS y
+      // soloPrecio los saltea StockRepo.Mover solo.
+      if (reingresarStock) {
+        if (esParcial) {
+          for (const detalle of detallesNC) {
+            await StockRepo.Mover(connection, {
+              idProducto: detalle.idProducto, delta: detalle.cantidad, motivo: 'DEVOLUCION_NC',
+              idReferencia: idNotaCredito, auditoria,
+            });
+          }
+        } else {
+          // NC total: lo vendido menos lo que ya reingresaron NCs parciales previas con reingreso.
+          const reingresado = await NotasCreditoRepo.ObtenerReingresadoPorLinea(connection, venta.id!);
+          for (const d of venta.detalles) {
+            const pendiente = Math.round(((d.cantidad ?? 0) - (reingresado[d.id!] ?? 0)) * 1000) / 1000;
+            if (pendiente <= 0) continue;
+            await StockRepo.Mover(connection, {
+              idProducto: d.producto!.id!, delta: pendiente, motivo: 'DEVOLUCION_NC',
+              idReferencia: idNotaCredito, auditoria,
+            });
+          }
         }
       }
 
@@ -226,6 +255,7 @@ class NotaCreditoService {
           total: montoNC,
           esParcial,
           cierraVenta: !esParcial,
+          reingresoStock: reingresarStock,
           cae: resultadoAfip.cae,
         },
         descripcion: `Nota de crédito ${esParcial ? 'parcial' : 'total'} de la venta #${venta.id} por $${montoNC}`,

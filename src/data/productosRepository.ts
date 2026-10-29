@@ -2,6 +2,13 @@ import moment from 'moment';
 import db from '../db';
 import { Producto } from '../models/Producto';
 import { ProductoPrecio } from '../models/ProductoPrecio';
+import { Auditoria } from '../models/Evento';
+import { SIN_AUDITORIA } from '../utils/auditoria';
+import { StockRepo } from './stockRepository';
+import { EventosRepo } from './eventosRepository';
+
+// Fase 3.3: stock en 3 decimales (pesables). Todo cambio de productos.cantidad va por StockRepo.Mover.
+const redondear3 = (n: number): number => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
 // Rubro repuestos (handoff_repuestos_fases1_2_3.md, Fase 2 PR 2.2): campos permitidos para
 // GET /valores-distintos/:campo. Whitelist explicita, nunca interpolar el parametro de ruta
@@ -485,13 +492,16 @@ class ProductosRepository{
         }
     }
 
-    async Agregar(data:any): Promise<string>{
+    async Agregar(data:any, auditoria: Auditoria = SIN_AUDITORIA): Promise<string>{
         const connection = await db.getConnection();
 
         try {
             let existe = await ValidarExistencia(connection, data, false, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
+
+            // Fase 3.3: alta + cantidad inicial + movimiento ALTA son una sola unidad.
+            await connection.beginTransaction();
 
             // Determinamos los campos de precio base para el espejo en productos
             // Si vienen precios[], usamos los de la lista default; si no, usamos los campos top-level
@@ -502,7 +512,8 @@ class ProductosRepository{
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
-                                data.cantidad,
+                                0, // Fase 3.3: la cantidad inicial entra por StockRepo.Mover (motivo ALTA)
+                                
                                 precioBase.tipoPrecio,
                                 precioBase.sumarIva ? 1 : 0,
                                 precioBase.costo,
@@ -539,23 +550,36 @@ class ProductosRepository{
                 : [{ idLista: await GetIdListaDefault(connection), tipoPrecio: data.tipoPrecio ?? '$', costo: data.costo ?? 0, precio: data.precio ?? 0, porcentaje: data.porcentaje ?? null, redondeo: data.redondeo ?? 0, sumarIva: data.sumarIva ?? false }];
             await InsertarHistorialPrecios(connection, idProducto, preciosHistorial, Number(data.idUsuario) || 0, 'ALTA');
 
+            // Cantidad inicial: si es 0 (o el producto no maneja stock) no hay movimiento.
+            const cantidadInicial = Number(data.cantidad);
+            if (Number.isFinite(cantidadInicial) && redondear3(cantidadInicial) !== 0) {
+                await StockRepo.Mover(connection, {
+                    idProducto, delta: cantidadInicial, motivo: 'ALTA', auditoria,
+                    observacion: data.observacionStock ?? null,
+                });
+            }
 
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
         }
     }
 
-    async Modificar(data:any): Promise<string>{
+    async Modificar(data:any, auditoria: Auditoria = SIN_AUDITORIA): Promise<string>{
         const connection = await db.getConnection();
 
         try {
             let existe = await ValidarExistencia(connection, data, true, false);
             if(existe)//Verificamos si ya existe un producto con el mismo codigo
                 return "Ya existe un producto con el mismo código.";
+
+            // Fase 3.3: edición + ajuste de stock + evento son una sola unidad.
+            await connection.beginTransaction();
 
             // Determinamos los campos de precio base para el espejo en productos
             const precioBase = ResolverPrecioBase(data);
@@ -573,7 +597,6 @@ class ProductosRepository{
             const consulta = `UPDATE productos SET
                                 codigo = ?,
                                 nombre = ?,
-                                cantidad = ?,
                                 tipoPrecio = ?,
                                 sumarIva = ?,
                                 costo = ?,
@@ -595,7 +618,6 @@ class ProductosRepository{
 
             const parametros = [data.codigo.toUpperCase(),
                                 data.nombre.toUpperCase(),
-                                data.cantidad,
                                 precioBase.tipoPrecio,
                                 precioBase.sumarIva ? 1 : 0,
                                 precioBase.costo,
@@ -618,6 +640,41 @@ class ProductosRepository{
 
             await connection.query(consulta, parametros);
 
+            // Fase 3.3: el UPDATE ya NO escribe `cantidad` (antes la pisaba con el valor del modal y
+            // perdía las ventas hechas entre que se abrió y se guardó). El stock solo cambia si el
+            // usuario lo tocó a propósito, y siempre como delta contra el valor ACTUAL de la base.
+            //  - cantidadOriginal == cantidad  → no tocó el stock: nada.
+            //  - cantidadOriginal != cantidad  → conteo físico: AJUSTE hasta el número tipeado.
+            //  - sin cantidadOriginal (front viejo / Excel) → camino del ajuste, con observación.
+            const cantidadNueva = Number(data.cantidad);
+            const tieneOriginal = data.cantidadOriginal !== undefined && data.cantidadOriginal !== null;
+            const sinCambioDeStock = tieneOriginal && redondear3(Number(data.cantidadOriginal)) === redondear3(cantidadNueva);
+            if (data.cantidad !== undefined && data.cantidad !== null && Number.isFinite(cantidadNueva) && !sinCambioDeStock) {
+                const [stockRows] = await connection.query<any[]>(
+                    "SELECT cantidad FROM productos WHERE id = ? FOR UPDATE", [data.id]
+                );
+                const actual = Number(stockRows[0]?.cantidad ?? 0);
+                const delta = redondear3(cantidadNueva - actual);
+                if (delta !== 0) {
+                    const mov = await StockRepo.Mover(connection, {
+                        idProducto: data.id, delta, motivo: 'AJUSTE', auditoria,
+                        observacion: tieneOriginal ? null
+                            : (data.observacionStock ?? 'edición de producto (versión anterior del sistema)'),
+                    });
+                    if (mov.aplicado) {
+                        await EventosRepo.Registrar(connection, {
+                            accion: 'STOCK_AJUSTE',
+                            entidad: 'productos',
+                            entidadId: Number(data.id),
+                            datosAntes: { cantidad: actual },
+                            datosDespues: { cantidad: mov.cantidadResultante },
+                            descripcion: `Ajuste de stock de ${data.nombre.toUpperCase()}: ${actual} → ${mov.cantidadResultante}`,
+                            auditoria,
+                        });
+                    }
+                }
+            }
+
             // El UPDATE de arriba ya movio el espejo productos.idProveedor, asi que esPrincipal
             // tiene que seguirlo o quedan desincronizados. Camino real de esta linea hoy: la
             // reimportacion de productos por Excel (/actualizar-varios con accion ACTUALIZAR),
@@ -635,10 +692,11 @@ class ProductosRepository{
                 }
             }
 
-
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
@@ -673,8 +731,12 @@ class ProductosRepository{
                     SELECT 1 FROM notas_credito_detalle WHERE idProducto = ?
                     UNION ALL
                     SELECT 1 FROM importaciones_costos_detalle WHERE idProducto = ?
+                    UNION ALL
+                    -- Fase 3.3: solo ALTA y SALDO_INICIAL se borran con el producto; cualquier otro
+                    -- movimiento (venta, anulación, NC, ajuste, ingreso) es historia que se preserva.
+                    SELECT 1 FROM productos_movimientos WHERE idProducto = ? AND motivo NOT IN ('ALTA', 'SALDO_INICIAL')
                 ) AS tieneReferencias`,
-                [id, id, id, id, id]
+                [id, id, id, id, id, id]
             );
 
             if (refs[0].tieneReferencias) {
@@ -693,6 +755,8 @@ class ProductosRepository{
             // default). Antes casi nunca habia filas y el borrado fisico pasaba de casualidad;
             // ahora que el alta siempre crea la relacion, sin este DELETE el borrado falla.
             await connection.query("DELETE FROM productos_proveedores WHERE idProducto = ?", [id]);
+            // Fase 3.3: acá solo pueden quedar ALTA / SALDO_INICIAL (el resto cuenta como referencia arriba).
+            await connection.query("DELETE FROM productos_movimientos WHERE idProducto = ?", [id]);
             await connection.query("DELETE FROM productos WHERE id = ?", [id]);
 
             //Mandamos la transaccion
@@ -710,20 +774,57 @@ class ProductosRepository{
         }
     }
 
-    async AniadirCantidad(data:any): Promise<string>{
+    /**
+     * Fase 3.3: acepta `{ idProducto, delta }` (cuánto se suma; contrato nuevo). Compatibilidad
+     * transitoria con el contrato viejo `{ idProducto, cant }` (total absoluto calculado en el front):
+     * se convierte a delta contra el valor actual de la base y se registra con observación.
+     */
+    async AniadirCantidad(data:any, auditoria: Auditoria = SIN_AUDITORIA): Promise<string>{
         const connection = await db.getConnection();
 
         try {
-            const consulta = `UPDATE productos SET
-                              cantidad = ?
-                              WHERE id = ?`;
+            await connection.beginTransaction();
 
-            const parametros = [data.cant,data.idProducto];
+            const [rows] = await connection.query<any[]>(
+                "SELECT nombre, cantidad FROM productos WHERE id = ? FOR UPDATE", [data.idProducto]
+            );
+            if (!rows[0]) throw new Error(`El producto ${data.idProducto} no existe.`);
+            const actual = Number(rows[0].cantidad ?? 0);
 
-            await connection.query(consulta, parametros);
+            let delta: number;
+            let observacion: string | null = data.observacionStock ?? null;
+            if (data.delta !== undefined && data.delta !== null) {
+                delta = redondear3(Number(data.delta));
+            } else if (data.cant !== undefined && data.cant !== null) {
+                delta = redondear3(Number(data.cant) - actual);
+                observacion = observacion ?? 'ingreso de stock (versión anterior del sistema)';
+            } else {
+                throw new Error('Falta indicar la cantidad a añadir (delta).');
+            }
+            if (!Number.isFinite(delta)) throw new Error('La cantidad a añadir no es un número válido.');
+
+            if (delta !== 0) {
+                const mov = await StockRepo.Mover(connection, {
+                    idProducto: data.idProducto, delta, motivo: 'INGRESO', auditoria, observacion,
+                });
+                if (mov.aplicado) {
+                    await EventosRepo.Registrar(connection, {
+                        accion: 'STOCK_INGRESO',
+                        entidad: 'productos',
+                        entidadId: Number(data.idProducto),
+                        datosAntes: { cantidad: actual },
+                        datosDespues: { cantidad: mov.cantidadResultante, delta },
+                        descripcion: `Ingreso de stock de ${rows[0].nombre}: ${delta > 0 ? '+' : ''}${delta} (${actual} → ${mov.cantidadResultante})`,
+                        auditoria,
+                    });
+                }
+            }
+
+            await connection.commit();
             return "OK";
 
         } catch (error:any) {
+            await connection.rollback();
             throw error;
         } finally{
             connection.release();
