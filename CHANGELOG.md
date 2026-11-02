@@ -63,3 +63,11 @@ _(sin entradas registradas para esta versión)_
 - la hora del registro de movimientos de usuarios sale de MySQL y no de la PC; un identificador de puesto inválido ya no rompe la operación; cobro de fiado libera la conexión si falla la lectura de ventas impagas
 - Usuarios.Eliminar ya no borra usuarios_movimientos ni deja huérfanos en cajas/presupuestos/eventos
 
+## 2.9.0 — 2026-11-02
+
+**Mejoras**
+- fase 3.3: historial de stock (productos_movimientos) con StockRepo.Mover como único punto de cambio de cantidad; GET /productos/:id/movimientos-stock; NC con reingreso opcional de mercadería
+
+**Correcciones**
+- fix lost update del stock: el modal de producto y "agregar cantidad" ya no pisan la cantidad con un valor viejo (Modificar no escribe cantidad si no se tocó; aniadir recibe delta)
+
