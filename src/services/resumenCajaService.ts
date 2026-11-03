@@ -104,12 +104,16 @@ class ResumenCajaService {
             }
 
             // Fiado = lo que la venta no cubrió con pagos originales (por venta, solo si es > 0).
+            // Se agrupa partiendo de las ventas de ESTA caja (índice idCaja): una versión con un derived table
+            // sobre toda ventas_pagos_detalle recorría la tabla entera por cada caja (C: ~130 mil filas).
             const [fiadoRows] = await conn.query(
-                `SELECT COALESCE(SUM(GREATEST(v.total - COALESCE(p.pagado, 0), 0)), 0) AS fiado
-                 FROM ventas v
-                 LEFT JOIN (SELECT vpd.idVenta, SUM(vpd.monto) AS pagado
-                            FROM ventas_pagos_detalle vpd WHERE ${VPD_VENTA} GROUP BY vpd.idVenta) p ON p.idVenta = v.id
-                 WHERE v.idCaja = ? AND ${VENTA_CUENTA}`, [idCaja]
+                `SELECT COALESCE(SUM(GREATEST(t.total - t.pagado, 0)), 0) AS fiado
+                 FROM (SELECT v.id, COALESCE(v.total, 0) AS total,
+                              COALESCE(SUM(CASE WHEN COALESCE(vpd.origen, 'venta') = 'venta' THEN vpd.monto END), 0) AS pagado
+                       FROM ventas v
+                       LEFT JOIN ventas_pagos_detalle vpd ON vpd.idVenta = v.id
+                       WHERE v.idCaja = ? AND ${VENTA_CUENTA}
+                       GROUP BY v.id, v.total) t`, [idCaja]
             ) as [any[], any];
             const fiado = r2(fiadoRows[0].fiado);
             //#endregion
