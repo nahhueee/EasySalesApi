@@ -5,6 +5,7 @@ import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 import { datosAuditoria } from '../utils/auditoria';
 import { ResumenCajaServ } from '../services/resumenCajaService';
+import { CierreCajaServ } from '../services/cierreCajaService';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -48,10 +49,35 @@ router.get('/:id/resumen', async (req:Request, res:Response, next) => {
 //#endregion
 
 //#region ABM
+// Cierre con arqueo opcional (Fase 3.4-A). Body: { efectivoContado?: number | null, observacion?: string }.
+router.put('/:id/cerrar', async (req:Request, res:Response, next) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CierreCajaServ.Cerrar(Number(req.params.id), req.body ?? {}, usuarioId, puestoId));
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, `Error al intentar cerrar la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.cerrar' }, error));
+    }
+});
+
+// Reapertura: solo ADMINISTRADOR/ENCARGADO, con motivo obligatorio. Body: { motivo: string }.
+router.put('/:id/reabrir', async (req:Request, res:Response, next) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await CierreCajaServ.Reabrir(Number(req.params.id), req.body?.motivo, usuarioId, puestoId));
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, `Error al intentar reabrir la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.reabrir' }, error));
+    }
+});
+
+// TRANSITORIO: lo usa el front viejo hasta que salga la 3.4-B. Cierra sin arqueo / reabre con motivo fijo.
 router.put('/finalizar', async (req:Request, res:Response, next) => {
     try{
         const { usuarioId, puestoId } = datosAuditoria(req);
-        res.json(await CajasRepo.Finalizar(req.body, usuarioId, puestoId));
+        res.json(await CierreCajaServ.FinalizarCompat(req.body, usuarioId, puestoId));
 
     } catch(error:any){
         next(new AppError(

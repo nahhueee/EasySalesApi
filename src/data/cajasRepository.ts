@@ -144,49 +144,6 @@ class CajasRepository{
     //#endregion
 
     //#region ABM
-    async Finalizar(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<string>{
-        const connection = await db.getConnection();
-
-        try {
-            // Transacción (Fase 3.2-B): el cambio de estado y su evento se persisten juntos.
-            await connection.beginTransaction();
-
-            const consulta = " UPDATE cajas " +
-                             " SET finalizada = ? " +
-                             " WHERE id = ?";
-
-            const parametros = [data.finalizada, data.idCaja];
-
-            await connection.query(consulta, parametros);
-
-            // Auditoría: foto del arqueo leída de la base EN ESTE MOMENTO (la 3.4 la usa para
-            // conciliar). Se lee dentro de la transacción, después del UPDATE.
-            const [filas] = await connection.query(
-                "SELECT inicial, ventas, entradas, salidas FROM cajas WHERE id = ?", [data.idCaja]
-            ) as [any[], any];
-            if (filas[0]) {
-                const cerrar = data.finalizada == 1;
-                await EventosRepo.Registrar(connection, {
-                    accion: cerrar ? 'CAJA_CERRAR' : 'CAJA_REABRIR',
-                    entidad: 'cajas',
-                    entidadId: Number(data.idCaja),
-                    datosDespues: ArqueoCaja(filas[0]),
-                    descripcion: `${cerrar ? 'Cierre' : 'Reapertura'} de la caja #${data.idCaja}`,
-                    auditoria: auditoriaDesde(usuarioId, puestoId),
-                });
-            }
-
-            await connection.commit();
-            return "OK";
-
-        } catch (error:any) {
-            await connection.rollback();
-            throw error;
-        } finally{
-            connection.release();
-        }
-    }
-
     async Agregar(data:any, usuarioId?:number|string|null, puestoId?:string|null): Promise<number>{
         const connection = await db.getConnection();
         
@@ -194,10 +151,11 @@ class CajasRepository{
             // Transacción (Fase 3.2-B): la caja y su evento se persisten juntos.
             await connection.beginTransaction();
 
+            // Fase 3.4-A: ventas, entradas y salidas arrancan SIEMPRE en 0 (son acumuladores; se ignora lo que mande el body).
             const consulta = " INSERT INTO cajas(idResponsable, fecha, hora, inicial, ventas, entradas, salidas, finalizada, fondoProveedores) " +
                              " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, data.ventas, data.entradas, data.salidas, data.finalizada ? 1 : 0, data.fondoProveedores ?? null];
+            const parametros = [data.responsable.id, moment(data.fecha).format('YYYY-MM-DD'), data.hora, data.inicial, 0, 0, 0, data.finalizada ? 1 : 0, data.fondoProveedores ?? null];
 
             //id real de AUTO_INCREMENT (antes se "adivinaba" con ObtenerUltimaCaja, sin
             //transacción ni lock — dos cajeros abriendo caja al mismo tiempo podían chocar)
@@ -307,10 +265,10 @@ class CajasRepository{
             const antes = antesRows[0];
 
             let consulta = " UPDATE cajas " +
-                           " SET fechaBaja = ? " +
+                           " SET fechaBaja = CURDATE() " +
                            " WHERE id = ?";
 
-            await connection.query(consulta, [new Date(), id]);
+            await connection.query(consulta, [id]);
 
 
             if (antes) {

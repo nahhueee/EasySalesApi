@@ -1,4 +1,3 @@
-import moment from 'moment';
 
 export type TipoMovimientoCC = 'apertura' | 'venta' | 'entrega' | 'nota_credito' | 'ajuste';
 
@@ -39,16 +38,13 @@ class CuentaCorrienteRepository {
             const haber = Number(mov.haber ?? 0);
             const saldoNuevo = saldoAnterior + debe - haber;
 
-            const ahora = moment();
-
+            // Fase 3.4-A (§11.6): fecha y hora las pone MySQL, no el reloj de Node/de la PC.
             const [resultado] = await connection.query(
                 `INSERT INTO cuenta_corriente_movimientos
                     (idCliente, fecha, hora, tipo, descripcion, debe, haber, idReferencia, saldo)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES (?, CURDATE(), DATE_FORMAT(NOW(), '%H:%i'), ?, ?, ?, ?, ?, ?)`,
                 [
                     mov.idCliente,
-                    ahora.format('YYYY-MM-DD'),
-                    ahora.format('HH:mm'),
                     mov.tipo,
                     mov.descripcion,
                     debe,

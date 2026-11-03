@@ -740,10 +740,14 @@ async function BuscarPorIdempotencyKey(connection, idempotencyKey:string): Promi
 
 async function InsertVenta(connection, venta):Promise<number>{
     try {
+        // Fase 3.4-A (§11.6): fecha y hora de la venta las pone MySQL. Antes salían del body, armadas con el
+        // reloj de la PC del puesto (el informe 3.4-0 encontró 28 ventas con hora posterior a su propio pago).
+        // El usuario no elige la fecha de la venta en ningún lado: siempre es "ahora". Si el front sigue
+        // mandando venta.fecha / venta.hora, se ignoran.
         const consulta = " INSERT INTO ventas(idCaja, idCliente, fecha, hora, total, idLista, idempotencyKey) " +
-                         " VALUES(?, ?, ?, ?, ?, ?, ?) ";
+                         " VALUES(?, ?, CURDATE(), DATE_FORMAT(NOW(), '%H:%i:%s'), ?, ?, ?) ";
 
-        const parametros = [venta.idCaja, venta.cliente.id, moment(venta.fecha).format('YYYY-MM-DD'), venta.hora, venta.total, venta.idLista ?? null, venta.idempotencyKey ?? null];
+        const parametros = [venta.idCaja, venta.cliente.id, venta.total, venta.idLista ?? null, venta.idempotencyKey ?? null];
         const [resultado] = await connection.query(consulta, parametros) as [ResultSetHeader, any];
         return resultado.insertId;
 

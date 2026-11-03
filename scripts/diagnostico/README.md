@@ -55,7 +55,7 @@ node scripts/diagnostico/diagnosticar.js --db diag_cliente_a --ref diag_referenc
   niega a correr sobre cualquier otra cosa (probado incluso contra `dbeasysales`).
 - `--ref` (opcional): `diag_referencia`, para el check C2 (deriva de schema). Sin esto, C2 se
   omite.
-- `--dump` (opcional): la ruta al `.sql` original, para leer la versión de MySQL del cliente
+- `--dump` (opcional; con espacios en la ruta conviene ponerla entre comillas, aunque ahora también se tolera sin ellas): la ruta al `.sql` original, para leer la versión de MySQL del cliente
   del header de `mysqldump` (las primeras 10 líneas). El MySQL local no representa al del
   cliente.
 

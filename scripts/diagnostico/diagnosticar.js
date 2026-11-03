@@ -31,7 +31,13 @@ function parsearArgs(argv) {
     const arg = argv[i];
     if (arg === '--db') args.db = argv[++i];
     else if (arg === '--ref') args.ref = argv[++i];
-    else if (arg === '--dump') args.dump = argv[++i];
+    else if (arg === '--dump') {
+      // Una ruta con espacios sin comillas llega partida en varios argumentos: se une todo hasta el
+      // próximo "--flag" (si no, la versión de MySQL del cliente salía "no se pudo leer --dump").
+      const partes = [];
+      while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) partes.push(argv[++i]);
+      args.dump = partes.length ? partes.join(' ') : null;
+    }
   }
   if (!args.db) {
     throw new Error('Falta --db <nombre_base>. Uso: node diagnosticar.js --db diag_cliente_a [--ref diag_referencia] [--dump ruta.sql]');
