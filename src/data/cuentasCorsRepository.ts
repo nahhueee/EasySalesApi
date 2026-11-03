@@ -210,7 +210,7 @@ class CuentasCorsRepository{
                         // Insertamos detalle de la entrega
                         await connection.query(
                             "INSERT INTO ventas_entrega_detalle (idEntrega, idVenta, montoAplicado) VALUES (?, ?, ?)",
-                            [idEntrega, row.id, row.total]
+                            [idEntrega, row.id, totalAPagar]
                         );
 
                         //Insertamos metodo de pago de la entrega
