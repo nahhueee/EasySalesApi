@@ -4,6 +4,7 @@ import logger from '../logger/loggerGeneral';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 import { datosAuditoria } from '../utils/auditoria';
+import { ResumenCajaServ } from '../services/resumenCajaService';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -31,6 +32,17 @@ router.get('/obtener-caja/:id', async (req:Request, res:Response, next) => {
 
     } catch(error:any){
         next(new AppError(CodigoError.INTERNAL_ERROR, `Error al obtener la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.obtener-caja' }, error));
+    }
+});
+
+// Resumen único de la caja (Fase 3.4-A): cajón, fondo de proveedores, otros medios, info y control.
+router.get('/:id/resumen', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await ResumenCajaServ.Calcular(Number(req.params.id)));
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, `Error al calcular el resumen de la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.resumen' }, error));
     }
 });
 //#endregion

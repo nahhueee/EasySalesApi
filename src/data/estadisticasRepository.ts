@@ -64,11 +64,12 @@ class EstadisticasRepository{
                                      " COALESCE(SUM(CASE WHEN tp.nombre = 'QR' THEN vpd.monto ELSE 0 END), 0) AS qr " +
                                      " FROM ventas_pagos_detalle vpd " +
                                      " INNER JOIN ventas v ON v.id = vpd.idVenta " +
-                                     " INNER JOIN ventas_pago vpag ON v.id = vpag.idVenta " +
                                      " INNER JOIN tipos_pago tp ON tp.id = vpd.idTPago " +
                                      " INNER JOIN cajas c on c.id = v.idCaja " +
                                      " WHERE v.fechaBaja IS NULL " +
                                      " AND c.fechaBaja IS NULL " +
+                                     // Fase 3.4-A: solo el pago original de la venta; los cobros de fiado posteriores no son ventas del día.
+                                     " AND COALESCE(vpd.origen, 'venta') = 'venta' " +
                                      adicional;
 
 
@@ -97,6 +98,7 @@ class EstadisticasRepository{
                                     " INNER JOIN cajas c on c.id = v.idCaja " +
                                     " WHERE v.fechaBaja IS NULL " +
                                     " AND c.fechaBaja IS NULL " +
+                                    " AND COALESCE(vpd.origen, 'venta') = 'venta' " +
                                     adicional +
                                     " GROUP BY v.id " +
                                     " ) t;";
