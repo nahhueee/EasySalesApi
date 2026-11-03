@@ -202,8 +202,8 @@ class CuentasCorsRepository{
 
                         //Insertamos metodo de pago de la entrega
                         await connection.query(
-                            `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega)
-                            VALUES (?, ?, ?, ?)`,
+                            `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega, origen)
+                            VALUES (?, ?, ?, ?, 'cobro')`,
                             [row.id, data.idTPago, totalAPagar, idEntrega]
                         );
 
@@ -226,8 +226,8 @@ class CuentasCorsRepository{
 
                         //Insertamos metodo de pago de la entrega
                         await connection.query(
-                            `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega)
-                            VALUES (?, ?, ?, ?)`,
+                            `INSERT INTO ventas_pagos_detalle (idVenta, idTPago, monto, idEntrega, origen)
+                            VALUES (?, ?, ?, ?, 'cobro')`,
                             [row.id, data.idTPago, montoRestante, idEntrega]
                         );
 
@@ -254,7 +254,8 @@ class CuentasCorsRepository{
                     tipoMovimiento: 'ENTRADA',
                     monto: data.monto,
                     descripcion: `Cobro fiado - cliente ${data.idCliente} - entrega #${idEntrega}`,
-                    idEntrega: idEntrega
+                    idEntrega: idEntrega,
+                    origenMov: 'cobro'
                 }, connection, auditoria);
             }
 
@@ -351,7 +352,8 @@ class CuentasCorsRepository{
                         tipoMovimiento: 'SALIDA',
                         monto: movimiento.monto,
                         descripcion: `Reversión de cobro fiado - entrega #${data.idEntrega}`,
-                        idEntrega: data.idEntrega
+                        idEntrega: data.idEntrega,
+                        origenMov: 'cobro'
                     }, connection, auditoria);
                 }
             }

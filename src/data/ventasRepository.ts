@@ -757,8 +757,9 @@ async function InsertPagoVenta(connection, pago):Promise<void>{
 
 async function InsertPagoVentaDetalle(connection, pago):Promise<void>{
     try {
-        const consulta = " INSERT INTO ventas_pagos_detalle(idVenta, idTPago, monto) " +
-                         " VALUES(?, ?, ?) ";
+        // origen = 'venta': pago original de la venta (los cobros posteriores de fiado van con 'cobro').
+        const consulta = " INSERT INTO ventas_pagos_detalle(idVenta, idTPago, monto, origen) " +
+                         " VALUES(?, ?, ?, 'venta') ";
 
         const parametros = [pago.idVenta, pago.tipoPago.id, pago.monto];
         await connection.query(consulta, parametros);

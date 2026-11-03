@@ -54,8 +54,17 @@ class MovimientosRepository{
             // pagos a proveedores (Fase 2 PR6) — apunta a la fila de proveedor_cuenta_movimientos
             // (pago o su ajuste de anulación). Todos nulos en el uso existente (ABM manual de
             // movimientos de caja).
-            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle,idProveedorMovimiento) " +
-                             " VALUES(?, ?, ?, ?, ?, ?, ?) ";
+            //
+            // origen (Fase 3.4-A): clasifica el movimiento para ResumenCaja. Los callers lo pasan explícito
+            // en data.origenMov ('cobro' / 'proveedor' / 'manual'); si no viene se deduce de las referencias.
+            // Se guarda en la columna porque revertir un cobro deja las referencias en NULL (ON DELETE SET NULL).
+            // OJO: data.origen (sin Mov) es otra cosa: solo describe el evento de auditoría.
+            const origenMov = data.origenMov
+                ?? ((data.idEntrega != null || data.idVentaPagoDetalle != null) ? 'cobro'
+                  : data.idProveedorMovimiento != null ? 'proveedor'
+                  : 'manual');
+            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle,idProveedorMovimiento,origen) " +
+                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
             const parametros = [
                 data.idCaja,
                 data.tipoMovimiento.toUpperCase(),
@@ -63,7 +72,8 @@ class MovimientosRepository{
                 data.descripcion,
                 data.idEntrega ?? null,
                 data.idVentaPagoDetalle ?? null,
-                data.idProveedorMovimiento ?? null
+                data.idProveedorMovimiento ?? null,
+                origenMov
             ];
             const [resultado] = await conn.query(consulta, parametros) as [ResultSetHeader, any];
 
@@ -178,7 +188,7 @@ class MovimientosRepository{
             // ya finalizada.
             const [movRows] = await conn.query(
                 `SELECT cm.id, cm.idCaja, cm.tipoMovimiento, cm.monto, cm.descripcion,
-                        cm.idProveedorMovimiento, cm.idMovimientoCompensado, c.finalizada
+                        cm.idProveedorMovimiento, cm.idMovimientoCompensado, cm.origen, c.finalizada
                  FROM cajas_movimientos cm
                  JOIN cajas c ON c.id = cm.idCaja
                  WHERE cm.id = ?`,
@@ -225,6 +235,9 @@ class MovimientosRepository{
                 monto: movimiento.monto,
                 descripcion: `Anulación de mov. #${movimiento.id}: ${movimiento.descripcion ?? ''}`.trim(),
                 origen: 'anulacion',
+                // La compensación hereda el origen del movimiento que compensa (A2). Si el original es
+                // previo al backfill (NULL), Agregar lo deduce.
+                origenMov: movimiento.origen ?? undefined,
             }, conn, auditoria);
 
             // Marcamos el original como compensado.

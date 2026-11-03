@@ -253,7 +253,8 @@ class ProveedorCuentaRepository {
                     tipoMovimiento: 'SALIDA',
                     monto,
                     descripcion: `Pago a proveedor ${proveedor.nombre} - mov. #${pago.id}`,
-                    idProveedorMovimiento: pago.id
+                    idProveedorMovimiento: pago.id,
+                    origenMov: 'proveedor'
                 }, connection, auditoria);
             }
 
@@ -609,7 +610,8 @@ class ProveedorCuentaRepository {
                     tipoMovimiento: 'ENTRADA',
                     monto: movCaja.monto,
                     descripcion: `Anulación de pago a proveedor - mov. #${ajuste.id}`,
-                    idProveedorMovimiento: ajuste.id
+                    idProveedorMovimiento: ajuste.id,
+                    origenMov: 'proveedor'
                 }, connection, auditoria);
             }
 
