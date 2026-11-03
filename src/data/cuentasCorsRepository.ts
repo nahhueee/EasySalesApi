@@ -2,6 +2,8 @@ import moment from 'moment';
 import db from '../db';
 import { ResultSetHeader } from 'mysql2';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
+import { CajasRepo } from './cajasRepository';
+import { esDeadlock, MENSAJE_CONCURRENCIA } from '../utils/concurrencia';
 import { MovimientosRepo } from './movimientosRepository';
 import { EventosRepo } from './eventosRepository';
 import { auditoriaDesde } from '../utils/auditoria';
@@ -163,12 +165,23 @@ class CuentasCorsRepository{
             : null;
 
         try {
-            //Obtenemos el listado de ventas del cliente en estado impagas. Va dentro del try:
-            //si esta consulta falla, el finally libera la conexión (antes quedaba filtrada).
-            const resultados = await ObtenerVentasImpagas(connection, data.idCliente);
-
             //Iniciamos una transaccion
             await connection.beginTransaction();
+
+            // Orden global de locks (architecture.md §11.2): caja -> cliente -> productos. Con caja
+            // imputada, la caja es el PRIMER lock (antes del cliente), y una caja cerrada no recibe cobros.
+            if (idCajaImputada) {
+                const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(connection, idCajaImputada,
+                    `No se puede registrar el cobro: la caja #${idCajaImputada} está cerrada. Reabrila para hacer cambios.`);
+                if (cajaCerrada) { await connection.rollback(); return cajaCerrada; }
+            }
+
+            // Fase 3.4-A: se bloquea el cliente ANTES de leer sus ventas impagas y la lectura va DENTRO de la
+            // transacción. Antes se leía afuera: dos cobros simultáneos al mismo cliente veían las mismas
+            // ventas impagas y las imputaban dos veces. Con el lock, el segundo espera y ve el estado nuevo.
+            //Obtenemos el listado de ventas del cliente en estado impagas.
+            await connection.query('SELECT id FROM clientes WHERE id = ? FOR UPDATE', [data.idCliente]);
+            const resultados = await ObtenerVentasImpagas(connection, data.idCliente);
 
             //Insertamos el registro de cabecera
             const [cabecera] = await connection.query<ResultSetHeader>(
@@ -283,6 +296,7 @@ class CuentasCorsRepository{
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
             await connection.rollback();
+            if (esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally{
             connection.release();
@@ -328,6 +342,12 @@ class CuentasCorsRepository{
             //Bloqueamos la reversión si esa caja ya fue finalizada (decisión con Nahu,
             //2026-07-23): no se altera el arqueo de una caja ya cerrada, requiere ajuste manual.
             if (entregaOriginal.idCaja) {
+                // Caja inmutable (Fase 3.4-A) y primer lock de la transacción (§11.2): con lock, antes de
+                // tocar el cliente. Reabrir la caja es el camino para corregir un cobro de una caja cerrada.
+                const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(connection, entregaOriginal.idCaja,
+                    `No se puede revertir: la caja #${entregaOriginal.idCaja} a la que se imputó este cobro está cerrada. Reabrila para hacer cambios.`);
+                if (cajaCerrada) { await connection.rollback(); return cajaCerrada; }
+
                 const [movRows] = await connection.query(
                     `SELECT cm.id, cm.idCaja, cm.monto, cm.tipoMovimiento, c.finalizada
                      FROM cajas_movimientos cm
@@ -338,11 +358,6 @@ class CuentasCorsRepository{
                 const movimiento = (movRows as any)[0];
 
                 if (movimiento) {
-                    if (Number(movimiento.finalizada) === 1) {
-                        await connection.rollback();
-                        return "No se puede revertir: la caja a la que se imputó este cobro ya fue finalizada. Requiere un ajuste manual.";
-                    }
-
                     // No se borra la ENTRADA original: se compensa con una SALIDA por el mismo
                     // monto, para preservar la trazabilidad (queda el rastro de que hubo un
                     // cobro y de que se revirtió). El neto en cajas.entradas/salidas da igual
@@ -421,6 +436,7 @@ class CuentasCorsRepository{
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
             await connection.rollback();
+            if (esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally{
             connection.release();

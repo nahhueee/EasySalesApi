@@ -3,6 +3,8 @@ import { ResultSetHeader } from 'mysql2';
 import { EventosRepo } from './eventosRepository';
 import { Auditoria } from '../models/Evento';
 import { SIN_AUDITORIA } from '../utils/auditoria';
+import { CajasRepo } from './cajasRepository';
+import { esDeadlock, MENSAJE_CONCURRENCIA } from '../utils/concurrencia';
 
 class MovimientosRepository{
 
@@ -46,6 +48,17 @@ class MovimientosRepository{
 
         try {
             if(!conexionExterna) await conn.beginTransaction();
+
+            // Caja inmutable (Fase 3.4-A) y primer lock de la transacción (orden global, §11.2). Con
+            // conexión externa el caller ya la bloqueó antes de su cliente/proveedor: acá es un re-lock
+            // sin costo, y si igual está cerrada se lanza para que el caller haga rollback. Sin conexión
+            // externa (ABM manual) se conserva el contrato de devolver el texto, que el front muestra.
+            if (conexionExterna) {
+                await CajasRepo.AsegurarAbierta(conn, data.idCaja);
+            } else {
+                const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(conn, data.idCaja);
+                if (cajaCerrada) { await conn.rollback(); return cajaCerrada; }
+            }
 
             //Insertamos el movimiento
             // idEntrega / idVentaPagoDetalle: referencia opcional al cobro de fiado que originó
@@ -109,6 +122,7 @@ class MovimientosRepository{
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
             if(!conexionExterna) await conn.rollback();
+            if(!conexionExterna && esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally{
             if(!conexionExterna) conn.release();
@@ -129,6 +143,14 @@ class MovimientosRepository{
             const [movRows] = await conn.query(
                 "SELECT idCaja, tipoMovimiento, monto, idProveedorMovimiento FROM cajas_movimientos WHERE id = ?", [data.id]
             ) as [any[], any];
+
+            // Caja inmutable (Fase 3.4-A).
+            const idCajaEliminar = movRows[0]?.idCaja ?? data.idCaja;
+            if (idCajaEliminar != null) {
+                const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(conn, idCajaEliminar,
+                    `No se puede eliminar: la caja #${idCajaEliminar} de este movimiento está cerrada. Reabrila para hacer cambios.`);
+                if (cajaCerrada) { if(!conexionExterna) await conn.rollback(); return cajaCerrada; }
+            }
             if (movRows[0]?.idProveedorMovimiento != null) {
                 if(!conexionExterna) await conn.rollback();
                 return "Este movimiento corresponde a un pago a proveedor. Anulalo desde la cuenta del proveedor.";
@@ -165,6 +187,7 @@ class MovimientosRepository{
         } catch (error:any) {
             //Si ocurre un error volvemos todo para atras
             if(!conexionExterna) await conn.rollback();
+            if(!conexionExterna && esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally{
             if(!conexionExterna) conn.release();
@@ -206,9 +229,12 @@ class MovimientosRepository{
                 return "Este movimiento corresponde a un pago a proveedor. Anulalo desde la cuenta del proveedor.";
             }
 
-            if (Number(movimiento.finalizada) === 1) {
+            // Caja inmutable (Fase 3.4-A): con lock (el chequeo anterior leía `finalizada` sin bloquear).
+            const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(conn, movimiento.idCaja,
+                `No se puede anular: la caja #${movimiento.idCaja} de este movimiento está cerrada. Reabrila para hacer cambios.`);
+            if (cajaCerrada) {
                 if(!conexionExterna) await conn.rollback();
-                return "No se puede anular: la caja de este movimiento ya fue finalizada. Requiere un ajuste manual.";
+                return cajaCerrada;
             }
 
             if (movimiento.idMovimientoCompensado != null) {
@@ -261,6 +287,7 @@ class MovimientosRepository{
 
         } catch (error:any) {
             if(!conexionExterna) await conn.rollback();
+            if(!conexionExterna && esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally{
             if(!conexionExterna) conn.release();

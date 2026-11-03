@@ -86,6 +86,8 @@ router.put('/modificar', async (req:Request, res:Response, next) => {
         res.json(await CajasRepo.Modificar(req.body, usuarioId, puestoId));
 
     } catch(error:any){
+        // CAJA_CERRADA y similares: se dejan pasar tal cual, envolverlos le esconde el mensaje al usuario.
+        if (error instanceof AppError) return next(error);
         next(new AppError(CodigoError.INTERNAL_ERROR, `Error al intentar modificar la caja nro ${req.body.id}.`, 500, { modulo: 'cajasRoute.modificar' }, error));
     }
 });

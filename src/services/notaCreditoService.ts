@@ -200,30 +200,6 @@ class NotaCreditoService {
         }
       }
 
-      // Fase 3.3: reingreso opcional de mercadería. Misma transacción que la NC. VARIOS y
-      // soloPrecio los saltea StockRepo.Mover solo.
-      if (reingresarStock) {
-        if (esParcial) {
-          for (const detalle of detallesNC) {
-            await StockRepo.Mover(connection, {
-              idProducto: detalle.idProducto, delta: detalle.cantidad, motivo: 'DEVOLUCION_NC',
-              idReferencia: idNotaCredito, auditoria,
-            });
-          }
-        } else {
-          // NC total: lo vendido menos lo que ya reingresaron NCs parciales previas con reingreso.
-          const reingresado = await NotasCreditoRepo.ObtenerReingresadoPorLinea(connection, venta.id!);
-          for (const d of venta.detalles) {
-            const pendiente = Math.round(((d.cantidad ?? 0) - (reingresado[d.id!] ?? 0)) * 1000) / 1000;
-            if (pendiente <= 0) continue;
-            await StockRepo.Mover(connection, {
-              idProducto: d.producto!.id!, delta: pendiente, motivo: 'DEVOLUCION_NC',
-              idReferencia: idNotaCredito, auditoria,
-            });
-          }
-        }
-      }
-
       // Ledger: solo si la venta tiene un cliente real cargado — una venta de mostrador
       // sin cliente (consumidor final ocasional) no tiene cuenta corriente que ajustar.
       if (venta.cliente?.id) {
@@ -234,6 +210,34 @@ class NotaCreditoService {
           haber:       montoNC,
           idReferencia: idNotaCredito,
         });
+      }
+
+      // Fase 3.3: reingreso opcional de mercadería. Misma transacción que la NC. VARIOS y
+      // soloPrecio los saltea StockRepo.Mover solo.
+      // Fase 3.4-A: va DESPUÉS del ledger del cliente y en orden ascendente de idProducto (orden
+      // global de locks caja -> cliente -> productos, architecture.md §11.2).
+      if (reingresarStock) {
+        const reingresos: { idProducto: number; delta: number }[] = [];
+        if (esParcial) {
+          for (const detalle of detallesNC) {
+            reingresos.push({ idProducto: detalle.idProducto, delta: detalle.cantidad });
+          }
+        } else {
+          // NC total: lo vendido menos lo que ya reingresaron NCs parciales previas con reingreso.
+          const reingresado = await NotasCreditoRepo.ObtenerReingresadoPorLinea(connection, venta.id!);
+          for (const d of venta.detalles) {
+            const pendiente = Math.round(((d.cantidad ?? 0) - (reingresado[d.id!] ?? 0)) * 1000) / 1000;
+            if (pendiente <= 0) continue;
+            reingresos.push({ idProducto: d.producto!.id!, delta: pendiente });
+          }
+        }
+        reingresos.sort((x, y) => Number(x.idProducto) - Number(y.idProducto));
+        for (const r of reingresos) {
+          await StockRepo.Mover(connection, {
+            idProducto: r.idProducto, delta: r.delta, motivo: 'DEVOLUCION_NC',
+            idReferencia: idNotaCredito, auditoria,
+          });
+        }
       }
 
       // NC total: cerrar la venta. La NC es la anulación fiscal post-cierre.

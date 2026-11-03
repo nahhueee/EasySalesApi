@@ -1,6 +1,8 @@
 import moment from 'moment';
 import { ResultSetHeader } from 'mysql2';
 import db from '../db';
+import { CajasRepo } from './cajasRepository';
+import { esDeadlock, MENSAJE_CONCURRENCIA } from '../utils/concurrencia';
 import { MovimientosRepo } from './movimientosRepository';
 import { EventosRepo } from './eventosRepository';
 import { auditoriaDesde } from '../utils/auditoria';
@@ -203,14 +205,12 @@ class ProveedorCuentaRepository {
                 : null;
 
             if (idCajaImputada) {
-                const [cajaRows] = await connection.query(
-                    'SELECT id, finalizada FROM cajas WHERE id = ?', [idCajaImputada]
-                ) as [any[], any];
-                const caja = cajaRows[0];
-
-                if (!caja || Number(caja.finalizada) === 1) {
+                // Con lock y ANTES del lock del proveedor (orden global caja -> proveedor, §11.2; Fase 3.4-A).
+                const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(connection, idCajaImputada,
+                    `No se puede registrar el pago: la caja #${idCajaImputada} está cerrada. Reabrila para hacer cambios.`);
+                if (cajaCerrada) {
                     await connection.rollback();
-                    return "La caja seleccionada no existe o ya fue finalizada.";
+                    return cajaCerrada;
                 }
             }
 
@@ -291,6 +291,7 @@ class ProveedorCuentaRepository {
 
         } catch (error:any) {
             await connection.rollback();
+            if (esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally {
             connection.release();
@@ -583,9 +584,14 @@ class ProveedorCuentaRepository {
             ) as [any[], any];
             const movCaja = cmRows[0];
 
-            if (movCaja && Number(movCaja.finalizada) === 1) {
-                await connection.rollback();
-                return "No se puede anular: la caja a la que se imputó este pago ya fue finalizada. Requiere un ajuste manual.";
+            if (movCaja) {
+                // Caja inmutable con lock, antes del lock del proveedor (§11.2; Fase 3.4-A).
+                const cajaCerrada = await CajasRepo.IntentarAsegurarAbierta(connection, movCaja.idCaja,
+                    `No se puede anular: la caja #${movCaja.idCaja} a la que se imputó este pago está cerrada. Reabrila para hacer cambios.`);
+                if (cajaCerrada) {
+                    await connection.rollback();
+                    return cajaCerrada;
+                }
             }
 
             const ajuste = await this.RegistrarMovimiento(connection, {
@@ -637,6 +643,7 @@ class ProveedorCuentaRepository {
 
         } catch (error:any) {
             await connection.rollback();
+            if (esDeadlock(error)) return MENSAJE_CONCURRENCIA;
             throw error;
         } finally {
             connection.release();

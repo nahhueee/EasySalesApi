@@ -16,6 +16,7 @@ import { auditoriaDesde } from '../utils/auditoria';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
 import { DetallePago } from '../models/DetallePago';
 import { TipoPago } from '../models/TipoPago';
+import { CajasRepo } from './cajasRepository';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 const moment = require('moment');
@@ -218,6 +219,11 @@ class VentasRepository{
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
+            // Caja inmutable + orden global de locks (architecture.md §11.2): la caja es SIEMPRE el
+            // primer lock (antes del presupuesto y del cliente), después cliente, y al final los
+            // productos en orden ascendente de id. Una caja cerrada no acepta ventas (Fase 3.4-A).
+            if (venta.idCaja) await CajasRepo.AsegurarAbierta(connection, venta.idCaja);
+
             // Si la venta proviene de un presupuesto, validar que esté vigente
             // antes de crear la venta (FOR UPDATE evita doble conversión concurrente)
             if (venta.idPresupuesto) {
@@ -314,8 +320,15 @@ class VentasRepository{
             for (const element of  venta.detalles) {
                 element.idVenta = venta.id;
                 await InsertDetalleVenta(connection, element);
-                // Fase 3.3: todo cambio de stock pasa por StockRepo.Mover (historial + transacción).
-                // VARIOS (por código, §12.7), soloPrecio y productos inexistentes los saltea Mover.
+            };
+
+            // Fase 3.3: todo cambio de stock pasa por StockRepo.Mover (historial + transacción).
+            // VARIOS (por código, §12.7), soloPrecio y productos inexistentes los saltea Mover.
+            // Fase 3.4-A: en orden ascendente de idProducto (copia ordenada: el orden de las líneas
+            // guardadas en ventas_detalle no cambia). Dos ventas simultáneas con [A, B] y [B, A] se
+            // cruzaban por los FOR UPDATE de Mover.
+            const lineasPorProducto = [...venta.detalles].sort((a, b) => Number(a.producto!.id) - Number(b.producto!.id));
+            for (const element of lineasPorProducto) {
                 await StockRepo.Mover(connection, {
                     idProducto: element.producto!.id,
                     delta: -Number(element.cantidad),
@@ -323,7 +336,7 @@ class VentasRepository{
                     idReferencia: venta.id,
                     auditoria: auditoriaDesde(usuarioId, puestoId),
                 });
-            };
+            }
 
             //Actualizamos el total de ventas caja
             await connection.query("UPDATE cajas SET ventas = ventas + ? WHERE id = ?", [venta.total, venta.idCaja]);
@@ -438,6 +451,16 @@ class VentasRepository{
             //Iniciamos una transaccion
             await connection.beginTransaction();
 
+            // Caja primero (orden global de locks, §11.2). El idCaja sale de la BASE, nunca del body.
+            // Lectura sin lock: si la venta ya está anulada se deja pasar para que el chequeo de abajo
+            // devuelva VENTA_YA_ANULADA en vez de un error de caja cerrada.
+            const [preRows] = await connection.query("SELECT idCaja, fechaBaja FROM ventas WHERE id = ?", [venta.id]);
+            const pre = (preRows as any[])[0];
+            if (pre && pre.fechaBaja === null && pre.idCaja) {
+                await CajasRepo.AsegurarAbierta(connection, pre.idCaja,
+                    `La venta #${venta.id} pertenece a la caja #${pre.idCaja}, que está cerrada. Reabrila para anular la venta.`);
+            }
+
             //Lock + verificación (Fase 3.2-0): del body solo usamos venta.id y obs. Total, caja y
             //detalles se leen de la base. El FOR UPDATE serializa dos anulaciones simultáneas:
             //la segunda espera y, al entrar, ve fechaBaja ya seteada.
@@ -497,22 +520,6 @@ class VentasRepository{
             //Actualizamos el total de ventas caja con los valores persistidos (no los del body)
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [ventaDb.total, ventaDb.idCaja]);
 
-            //Reponemos el inventario desde ventas_detalle (no desde el body). Fase 3.3: vía StockRepo.Mover,
-            //que no toca VARIOS (por código, §12.7), soloPrecio ni productos inexistentes.
-            const [detalleRows] = await connection.query(
-                "SELECT idProducto, cantidad FROM ventas_detalle WHERE idVenta = ?",
-                [venta.id]
-            );
-            for (const d of (detalleRows as any[])) {
-                await StockRepo.Mover(connection, {
-                    idProducto: d.idProducto,
-                    delta: Number(d.cantidad),
-                    motivo: 'ANULACION_VENTA',
-                    idReferencia: Number(venta.id),
-                    auditoria: auditoriaDesde(usuarioId, puestoId),
-                });
-            }
-
             // Libreta completa (PR B, 2026-07-03): revertir exactamente lo que Agregar posteó.
             // Agregar posteó: debe=total + haber por cada pago real (no CC/SAF).
             // El reversal espejo es: haber=total + debe por cada pago real.
@@ -545,6 +552,24 @@ class VentasRepository{
                 }
             }
 
+
+            // Va DESPUÉS del ledger del cliente y en orden ascendente de idProducto (orden global de locks, §11.2;
+            // antes estaba antes del ledger y se cruzaba con Agregar, que va cliente -> productos).
+            //Reponemos el inventario desde ventas_detalle (no desde el body). Fase 3.3: vía StockRepo.Mover,
+            //que no toca VARIOS (por código, §12.7), soloPrecio ni productos inexistentes.
+            const [detalleRows] = await connection.query(
+                "SELECT idProducto, cantidad FROM ventas_detalle WHERE idVenta = ? ORDER BY idProducto ASC",
+                [venta.id]
+            );
+            for (const d of (detalleRows as any[])) {
+                await StockRepo.Mover(connection, {
+                    idProducto: d.idProducto,
+                    delta: Number(d.cantidad),
+                    motivo: 'ANULACION_VENTA',
+                    idReferencia: Number(venta.id),
+                    auditoria: auditoriaDesde(usuarioId, puestoId),
+                });
+            }
 
             // Auditoría (Fase 3.2-B): valores leídos de la base (ventaDb), no del body.
             await EventosRepo.Registrar(connection, {

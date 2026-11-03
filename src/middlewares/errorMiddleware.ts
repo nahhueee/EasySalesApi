@@ -1,5 +1,7 @@
 import { logger } from "../logger/logger";
 import { AppError } from "../logger/AppError";
+import { CodigoError } from "../logger/CodigosError";
+import { esDeadlock, MENSAJE_CONCURRENCIA } from "../utils/concurrencia";
 
 /**
  * Middleware central de manejo de errores.
@@ -10,6 +12,11 @@ import { AppError } from "../logger/AppError";
  * La severidad se auto-inyecta en el logger desde el mapa de CodigosError.
  */
 export function errorMiddleware(err, req, res, next) {
+  // Deadlock (1213): se informa como conflicto 409 en vez de un 500 genérico (Fase 3.4-A, A1).
+  if ((esDeadlock(err) || esDeadlock(err?.cause)) && err.code !== CodigoError.OPERACION_CONCURRENTE) {  // las rutas envuelven el error original en `cause`
+    err = new AppError(CodigoError.OPERACION_CONCURRENTE, MENSAJE_CONCURRENCIA, 409, err.context, err);
+  }
+
   const isAppError = err instanceof AppError;
   const status     = err.status || 500;
 

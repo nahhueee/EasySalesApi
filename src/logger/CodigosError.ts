@@ -116,6 +116,27 @@ export enum CodigoError {
   VENTA_YA_ANULADA = 'VENTA_YA_ANULADA',
 
   /**
+   * Operación sobre una caja ya cerrada (venta, anulación, movimiento, cobro, pago a proveedor,
+   * modificación). Una caja cerrada es inmutable: hay que reabrirla. Fase 3.4-A.
+   * Severidad: BAJA — regla de negocio esperada, el usuario la ve en pantalla.
+   */
+  CAJA_CERRADA = 'CAJA_CERRADA',
+
+  /**
+   * La operación chocó con otra simultánea (deadlock de InnoDB, error 1213). Reintentar a mano.
+   * Severidad: BAJA — ver utils/concurrencia.ts y architecture.md §11.2.
+   */
+  OPERACION_CONCURRENTE = 'OPERACION_CONCURRENTE',
+
+  /**
+   * Al cerrar una caja, cajas.ventas (acumulador) no coincide con la suma recalculada de sus ventas.
+   * No bloquea el cierre. Fase 3.4-A. Se loguea con logger.error (el transporte a AdminServer solo
+   * escucha nivel error) para que Nahu vea en el panel de flota qué comercios tienen desvíos.
+   * Severidad: MEDIA — hay que mirarlo, pero el comercio sigue operando.
+   */
+  CAJA_DESVIO_VENTAS = 'CAJA_DESVIO_VENTAS',
+
+  /**
    * Error interno no categorizado.
    * Causa típica: excepción inesperada, bug en código.
    * Severidad: ALTA — requiere investigación.
@@ -224,6 +245,9 @@ export const SEVERIDAD: Record<CodigoError, Severidad> = {
   [CodigoError.NOT_FOUND]:                 'BAJA',
   [CodigoError.VENTA_FACTURADA_REQUIERE_NC]: 'BAJA',
   [CodigoError.VENTA_YA_ANULADA]:          'BAJA',
+  [CodigoError.CAJA_CERRADA]:              'BAJA',
+  [CodigoError.OPERACION_CONCURRENTE]:     'BAJA',
+  [CodigoError.CAJA_DESVIO_VENTAS]:        'MEDIA',
   [CodigoError.INTERNAL_ERROR]:            'ALTA',
   [CodigoError.FRONT_ERROR]:               'MEDIA',
   // Operacionales

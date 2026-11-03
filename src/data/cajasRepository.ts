@@ -3,6 +3,8 @@ import { ResultSetHeader } from 'mysql2';
 import { Caja } from '../models/Caja';
 import { EventosRepo } from './eventosRepository';
 import { auditoriaDesde } from '../utils/auditoria';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
 const moment = require('moment');
 
 class CajasRepository{
@@ -95,6 +97,48 @@ class CajasRepository{
             throw error;
         } finally{
             connection.release();
+        }
+    }
+    //#endregion
+
+    //#region CAJA INMUTABLE (Fase 3.4-A)
+    // Caja cerrada = inmutable (decisión 3): para corregir algo hay que reabrirla.
+    // Toma el lock de la fila de la caja (FOR UPDATE) y verifica que exista, no esté dada de baja ni
+    // finalizada. Ese lock además serializa contra el cierre: no puede entrar una venta mientras se
+    // está cerrando.
+    //
+    // ORDEN GLOBAL DE LOCKS (architecture.md §11.2): caja -> cliente/proveedor -> productos (id
+    // ascendente). Esto tiene que ser el PRIMER lock de toda transacción que toca una caja; si hay
+    // caja imputada y se lo llama después del FOR UPDATE del cliente, vuelve el deadlock con
+    // ventas a cuenta corriente. Sin caja involucrada no se bloquea ninguna.
+    // Debe llamarse con la conexión de una transacción abierta por el caller.
+    async AsegurarAbierta(connection: any, idCaja: number | string, mensaje?: string): Promise<void> {
+        const [rows] = await connection.query(
+            "SELECT finalizada, fechaBaja FROM cajas WHERE id = ? FOR UPDATE", [idCaja]
+        ) as [any[], any];
+        const caja = rows[0];
+
+        if (!caja || caja.fechaBaja != null) {
+            throw new AppError(CodigoError.CAJA_CERRADA, `La caja #${idCaja} no existe o fue eliminada.`, 409,
+                { modulo: 'cajasRepository.AsegurarAbierta', idCaja });
+        }
+        if (Number(caja.finalizada) === 1) {
+            throw new AppError(CodigoError.CAJA_CERRADA,
+                mensaje ?? `La caja #${idCaja} está cerrada. Reabrila para hacer cambios.`, 409,
+                { modulo: 'cajasRepository.AsegurarAbierta', idCaja });
+        }
+    }
+
+    // Variante para los flujos que conservan el contrato histórico de devolver un texto en vez de
+    // lanzar (EntregaDinero, reversiones, pagos a proveedor, ABM de movimientos): devuelve el mensaje
+    // si la caja no está abierta, o null si está abierta. El caller hace rollback y retorna el mensaje.
+    async IntentarAsegurarAbierta(connection: any, idCaja: number | string, mensaje?: string): Promise<string | null> {
+        try {
+            await this.AsegurarAbierta(connection, idCaja, mensaje);
+            return null;
+        } catch (error: any) {
+            if (error instanceof AppError && error.code === CodigoError.CAJA_CERRADA) return error.message;
+            throw error;
         }
     }
     //#endregion
@@ -193,6 +237,9 @@ class CajasRepository{
         try {
             // Transacción (Fase 3.2-B): se lee la fila ANTES del UPDATE para el snapshot "antes".
             await connection.beginTransaction();
+
+            // Una caja cerrada no se edita (ni inicial, ni fondo, ni cajero): hay que reabrirla.
+            await this.AsegurarAbierta(connection, data.id, `La caja #${data.id} está cerrada. Reabrila para modificarla.`);
 
             const [antesRows] = await connection.query(
                 "SELECT idResponsable, fecha, inicial, fondoProveedores FROM cajas WHERE id = ? FOR UPDATE", [data.id]
