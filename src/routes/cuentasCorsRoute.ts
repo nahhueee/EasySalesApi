@@ -97,27 +97,5 @@ router.put('/revertir-entrega', async (req:Request, res:Response) => {
     }
 });
 
-router.put('/actualizar-pago', async (req:Request, res:Response) => {
-    try{
-        const { usuarioId, puestoId } = datosAuditoria(req);
-        res.json(await CuentasRepo.ActualizarEstadoPago(req.body, usuarioId, puestoId));
-
-    } catch(error:any){
-        let msg = "No se pudo actualizar el estado de pago.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
-router.get('/revertir-pago/:idVenta', async (req:Request, res:Response) => {
-    try{
-        const { usuarioId, puestoId } = datosAuditoria(req);
-        res.json(await CuentasRepo.RevertirEstadoPago(req.params.idVenta, usuarioId, puestoId));
-
-    } catch(error:any){
-        let msg = "No se pudo revertir el pago de la venta.";
-        logger.error(msg + " " + error.message);
-        res.status(500).send(msg);
-    }
-});
 // Export the router
 export default router; 
