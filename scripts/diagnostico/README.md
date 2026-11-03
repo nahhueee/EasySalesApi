@@ -87,7 +87,7 @@ las aplicadas después. Los avisos de la migration de reconciliación quedan en
 ## 4. Leer el informe
 
 El `## Resumen` de arriba de todo se puede leer en 30 segundos: cuenta hallazgos críticos,
-hallazgos y errores, y da el estado (`OK` / `HALLAZGO` / `ERROR`) de cada check C1 a C10.
+hallazgos y errores, y da el estado (`OK` / `HALLAZGO` / `ERROR`) de cada check C1 a C12.
 El detalle de cada check está más abajo, en su propia sección.
 
 **Nunca hay datos de clientes en el informe** — solo conteos, tipos, nombres de tabla/columna
@@ -109,12 +109,13 @@ nadie fuera de este flujo, revisarlo una vez a mano.
 | C9 | Pre-conciliación de caja: NULL/0 en `ventas.total`, diferencia entre `cajas.ventas` y la suma real por caja finalizada. Solo mide — qué debería ir en `cajas.ventas` es una decisión de negocio pendiente (3.4). |
 | C10 | Stock: productos con cantidad negativa, decimales fuera de KG, `soloPrecio` inconsistente, volumen de `ventas_detalle` por año. |
 | C11 | Todas las FKs existentes (tabla, columna, padre, `DELETE_RULE`) y cuáles de las declaradas por migrations (`relaciones.conFk`) faltan en esta base. |
+| C12 | Caja (Fase 3.4-0, ver `documentos/handoff_fase3_4_0_diagnostico_caja.md`): C12.1 clasifica `ventas_pagos_detalle` en pago original vs. cobro de fiado (R0-R4, backfill de la migration `20260319122913` aparte, dudosos con muestra de ids); C12.2 efectivo por caja con la fórmula actual (`TotalesXTipoPago`) vs. la nueva; C12.3 `cajas.ventas` vs. recalculado (difA con el criterio de C9, difB con el de la 3.4) y atribución a NC totales / anuladas; C12.4 pagos a proveedor vs. fondo y pagos sin movimiento de caja. Solo mide. |
 
 ## Archivos
 
 - `relaciones.js`: la lista declarativa de relaciones (legacy sin FK, con FK ya declarada por
   migration, de auditoría sin FK por diseño, y polimórficas). Reusable en Fase 3.5.
 - `crear-referencia.js`: construye `diag_referencia` desde cero.
-- `diagnosticar.js`: corre los checks C1-C11 y escribe el informe.
+- `diagnosticar.js`: corre los checks C1-C12 y escribe el informe.
 - `validar-3-1a.js` / `PRUEBAS_3_1A.md`: validación automatizada de la migration 3.1-A sobre una copia.
 - `migrar.js`: corre `knex migrate:latest`/`down` sobre una base `diag_*` (Fase 3.1).

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // scripts/diagnostico/diagnosticar.js
 //
-// Fase 3.0 — corre los checks C1-C11 (ver documentos/handoff_fase3_0_diagnostico_schema.md)
+// Fase 3.0 — corre los checks C1-C12 (ver documentos/handoff_fase3_0_diagnostico_schema.md;
+// C12 es de la 3.4-0, ver documentos/handoff_fase3_4_0_diagnostico_caja.md)
 // contra una base "diag_*" (backup real restaurado, o diag_referencia) y escribe un informe
 // en markdown. Solo lectura: únicamente SELECT e information_schema.
 //
@@ -885,6 +886,467 @@ async function checkC11(conn, ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// C12 — Caja (Fase 3.4-0, ver documentos/handoff_fase3_4_0_diagnostico_caja.md)
+// ---------------------------------------------------------------------------
+// Mide, sobre backups reales, cuánto explica cada causa conocida de que las cajas no cierren
+// (K1 cobros de fiado en la caja de la venta original, K2 NC total que no descuenta
+// cajas.ventas, K3 bugs históricos de anulación) y cómo distinguir en datos viejos un cobro
+// posterior de un pago original en ventas_pagos_detalle. Solo SELECT.
+
+const FECHA_DEPLOY_3_2_0 = '2026-10-21';  // deploy del fix de anulación (3.2-0)
+const UMBRAL_BACKFILL = 10;               // filas de ventas distintas con la MISMA fecha exacta
+const TOLERANCIA = 0.01;
+const SEG_10_MIN = 600;
+
+function redondear2(n) {
+  return Math.round(Number(n || 0) * 100) / 100;
+}
+
+// Fragmentos SQL compartidos por C12.1-C12.3. Si falta una tabla/columna (instalación vieja),
+// la regla correspondiente se reemplaza por una constante 0 en vez de romper la query.
+function fragmentosCaja(ctx) {
+  const tiene = (t, c) => tablaYColumnaExisten(ctx.columnas, t, c);
+  const tieneEntrega = tiene('ventas_pagos_detalle', 'idEntrega');
+  const tieneIdCaja = tiene('ventas_pagos_detalle', 'idCaja');
+  const tieneLedger = tiene('cuenta_corriente_movimientos', 'idReferencia') && tiene('cuenta_corriente_movimientos', 'descripcion');
+  const tieneNc = tiene('notas_credito', 'esParcial');
+
+  // R3: el pago completo (ActualizarEstadoPago) escribe en el ledger tipo='ajuste',
+  // descripcion='Pago manual de venta', idReferencia=idVenta, haber=total. NO es tipo='entrega'
+  // con idReferencia=idVenta como suponía el handoff: EntregaDinero escribe tipo='entrega' pero
+  // con idReferencia=idEntrega (esas filas ya son R1). Además se exige que sea la ÚLTIMA fila de
+  // ventas_pagos_detalle de la venta, porque la fila del pago original puede tener el mismo
+  // monto (misma desambiguación que usa cuentasCorsRepository.ObtenerCobrosCaja).
+  const joinLedger = tieneLedger
+    ? `LEFT JOIN (SELECT idReferencia, haber FROM cuenta_corriente_movimientos
+                   WHERE tipo = 'ajuste' AND descripcion = 'Pago manual de venta'
+                   GROUP BY idReferencia, haber) l3
+         ON l3.idReferencia = vpd.idVenta AND l3.haber = vpd.monto
+       LEFT JOIN (SELECT idVenta, MAX(id) AS maxId FROM ventas_pagos_detalle GROUP BY idVenta) lm
+         ON lm.idVenta = vpd.idVenta`
+    : '';
+  const joinNc = tieneNc
+    ? 'LEFT JOIN (SELECT DISTINCT idVenta FROM notas_credito WHERE esParcial = 0) nct ON nct.idVenta = v.id'
+    : '';
+
+  const r1 = tieneEntrega ? '(vpd.idEntrega IS NOT NULL)' : '0';
+  const r2 = tieneIdCaja ? '(vpd.idCaja IS NOT NULL)' : '0';
+  const r3 = tieneLedger ? 'COALESCE(l3.idReferencia IS NOT NULL AND vpd.id = lm.maxId, 0)' : '0';
+  const r3lax = tieneLedger ? '(l3.idReferencia IS NOT NULL)' : '0';
+  return {
+    tieneEntrega, tieneIdCaja, tieneLedger, tieneNc,
+    joinLedger, joinNc, r1, r2, r3, r3lax,
+    r123: `(${r1} OR ${r2} OR ${r3})`,
+    ncTotal: tieneNc ? '(nct.idVenta IS NOT NULL)' : '0',
+  };
+}
+
+function tramoDe(bucket) {
+  return ({
+    antes: 'antes de la venta (< -1 min)',
+    m1: '< 1 min',
+    m10: '1 – 10 min',
+    h1: '10 min – 1 h',
+    d1: '1 h – 1 día',
+    mas: '> 1 día',
+    sin_dato: 'sin fecha/hora comparable',
+  })[bucket] || bucket;
+}
+
+const ORDEN_TRAMOS = ['antes', 'm1', 'm10', 'h1', 'd1', 'mas', 'sin_dato'];
+
+async function checkC12_1(conn, ctx, f) {
+  const R = ctx.reporte;
+  R.linea('### C12.1 Clasificación de `ventas_pagos_detalle`');
+  R.linea('');
+  if (!tablaYColumnaExisten(ctx.columnas, 'ventas_pagos_detalle', 'idVenta') || !tablaYColumnaExisten(ctx.columnas, 'ventas', 'id')) {
+    R.linea('`ventas_pagos_detalle` o `ventas` no existen en esta base — sección omitida.');
+    R.linea('');
+    return;
+  }
+  R.linea('Reglas (una fila puede caer en varias):');
+  R.linea('- R1: `idEntrega IS NOT NULL`' + (f.tieneEntrega ? '' : ' — **columna inexistente en esta base**'));
+  R.linea('- R2: `idCaja IS NOT NULL`' + (f.tieneIdCaja ? '' : ' — **columna inexistente en esta base**'));
+  R.linea('- R3: ledger `cuenta_corriente_movimientos` con `tipo=\'ajuste\'`, `descripcion=\'Pago manual de venta\'`, `idReferencia = vpd.idVenta`, `haber = vpd.monto`, y `vpd` es la última fila de esa venta (ver comentario en `fragmentosCaja`)' + (f.tieneLedger ? '' : ' — **ledger inexistente en esta base**'));
+  R.linea('- R4: `vpd.fecha` posterior en más de 10 min a `TIMESTAMP(v.fecha, v.hora)` (se excluyen las filas del backfill)');
+  R.linea('- R0: ninguna de las anteriores (presunto pago original)');
+  R.linea('');
+
+  // Backfill de la migration 20260319122913: el INSERT ... SELECT corre con una sola NOW(),
+  // así que todas sus filas comparten fecha exacta y no tienen idEntrega/idCaja (esas columnas
+  // se agregaron después). Se detectan como "fecha exacta compartida por >= UMBRAL_BACKFILL
+  // ventas distintas, sin marcas". Se contrasta con knex_migrations.migration_time.
+  const sinMarcas = [f.tieneEntrega ? 'vpd.idEntrega IS NULL' : '1=1', f.tieneIdCaja ? 'vpd.idCaja IS NULL' : '1=1'].join(' AND ');
+  const candidatas = await filas(conn,
+    `SELECT DATE_FORMAT(vpd.fecha, '%Y-%m-%d %H:%i:%s') AS f, COUNT(*) AS filas, COUNT(DISTINCT vpd.idVenta) AS ventas
+     FROM ventas_pagos_detalle vpd
+     WHERE vpd.fecha IS NOT NULL AND ${sinMarcas}
+     GROUP BY vpd.fecha
+     HAVING COUNT(DISTINCT vpd.idVenta) >= ${UMBRAL_BACKFILL}
+     ORDER BY vpd.fecha`);
+
+  let migracionTime = null;
+  try {
+    const mig = await filas(conn,
+      "SELECT DATE_FORMAT(migration_time, '%Y-%m-%d %H:%i:%s') AS t FROM knex_migrations WHERE name LIKE '20260319122913%' LIMIT 1");
+    migracionTime = mig[0] ? mig[0].t : null;
+  } catch (err) {
+    R.linea(`(no pude leer knex_migrations: ${err.message})`);
+  }
+
+  if (candidatas.length === 0) {
+    R.linea(`Backfill de la migration \`20260319122913_ventas_pagos_detalle\`: no se detectaron filas (ninguna fecha exacta compartida por ${UMBRAL_BACKFILL}+ ventas sin marcas).`);
+  } else {
+    R.linea(`Backfill de la migration \`20260319122913_ventas_pagos_detalle\` (migration_time en knex_migrations: ${migracionTime || 'no registrada'}). Fechas exactas compartidas por ${UMBRAL_BACKFILL}+ ventas distintas, sin idEntrega/idCaja:`);
+    R.linea('');
+    R.tabla(['Fecha exacta', 'Filas', 'Ventas distintas', 'Distancia a migration_time'],
+      candidatas.map(c => {
+        let dist = 'n/d';
+        if (migracionTime) {
+          const horas = Math.abs(Date.parse(c.f.replace(' ', 'T') + 'Z') - Date.parse(migracionTime.replace(' ', 'T') + 'Z')) / 3600000;
+          dist = `${horas.toFixed(1)} h${horas <= 24 ? ' (coincide)' : ' (NO coincide — revisar)'}`;
+        }
+        return [c.f, c.filas, c.ventas, dist];
+      }));
+  }
+  const fechasBackfill = candidatas.map(c => c.f);
+  const backfillSql = fechasBackfill.length > 0
+    ? `(vpd.fecha IN (${fechasBackfill.map(x => conn.escape(x)).join(',')}) AND ${sinMarcas})`
+    : '0';
+
+  const base = `
+    SELECT COALESCE(YEAR(v.fecha), YEAR(vpd.fecha)) AS anio, vpd.id AS id,
+           ${f.r1} AS r1, ${f.r2} AS r2, ${f.r3} AS r3, ${f.r3lax} AS r3lax, ${backfillSql} AS backfill,
+           TIMESTAMPDIFF(SECOND, TIMESTAMP(v.fecha, COALESCE(NULLIF(v.hora, ''), '00:00:00')), vpd.fecha) AS difSeg
+    FROM ventas_pagos_detalle vpd
+    LEFT JOIN ventas v ON v.id = vpd.idVenta
+    ${f.joinLedger}`;
+
+  const agrupado = await filas(conn, `
+    SELECT anio, r1, r2, r3, r3lax, backfill,
+           CASE WHEN difSeg IS NULL THEN 'sin_dato'
+                WHEN difSeg < -60 THEN 'antes'
+                WHEN difSeg < 60 THEN 'm1'
+                WHEN difSeg <= ${SEG_10_MIN} THEN 'm10'
+                WHEN difSeg <= 3600 THEN 'h1'
+                WHEN difSeg <= 86400 THEN 'd1'
+                ELSE 'mas' END AS tramo,
+           COUNT(*) AS n
+    FROM (${base}) t
+    GROUP BY anio, r1, r2, r3, r3lax, backfill, tramo`);
+
+  const porAnio = new Map();
+  const combos = new Map();
+  const tramosTodas = new Map();
+  const tramosDudosas = new Map();
+  let total = 0, dudosas = 0, r3Lax = 0, r3Estricta = 0, backfillN = 0;
+  const sumar = (m, k, n) => m.set(k, (m.get(k) || 0) + n);
+
+  for (const g of agrupado) {
+    const n = Number(g.n);
+    const backfill = Number(g.backfill) === 1;
+    const r1 = Number(g.r1) === 1, r2 = Number(g.r2) === 1, r3 = Number(g.r3) === 1;
+    const r4 = !backfill && ['h1', 'd1', 'mas'].includes(g.tramo);
+    const r0 = !r1 && !r2 && !r3 && !r4;
+    const dudosa = r4 && !r1 && !r2 && !r3;
+    const anio = g.anio ?? 'sin fecha';
+
+    if (!porAnio.has(anio)) porAnio.set(anio, { total: 0, r1: 0, r2: 0, r3: 0, r4: 0, r0: 0, backfill: 0, dudosas: 0 });
+    const a = porAnio.get(anio);
+    a.total += n;
+    if (r1) a.r1 += n;
+    if (r2) a.r2 += n;
+    if (r3) a.r3 += n;
+    if (r4) a.r4 += n;
+    if (r0) a.r0 += n;
+    if (backfill) a.backfill += n;
+    if (dudosa) a.dudosas += n;
+
+    total += n;
+    if (backfill) backfillN += n;
+    if (dudosa) dudosas += n;
+    if (Number(g.r3lax) === 1) r3Lax += n;
+    if (r3) r3Estricta += n;
+
+    const clave = [r1 && 'R1', r2 && 'R2', r3 && 'R3', r4 && 'R4'].filter(Boolean).join('+') || 'R0';
+    sumar(combos, clave, n);
+    if (!backfill) sumar(tramosTodas, g.tramo, n);
+    if (dudosa) sumar(tramosDudosas, g.tramo, n);
+  }
+
+  R.linea(`Filas totales en \`ventas_pagos_detalle\`: ${total}`);
+  R.linea('');
+  R.linea('**Conteo por clase y por año** (no excluyentes; "R0" incluye las filas de backfill; "Backfill" se cuenta aparte):');
+  R.linea('');
+  R.tabla(['Año', 'Total', 'R1', 'R2', 'R3', 'R4', 'R0', 'Backfill', 'Dudosas (R4 sin R1/R2/R3)'],
+    [...porAnio.entries()].sort((x, y) => String(x[0]).localeCompare(String(y[0])))
+      .map(([anio, a]) => [anio, a.total, a.r1, a.r2, a.r3, a.r4, a.r0, a.backfill, a.dudosas]));
+
+  R.linea('**Solapamientos entre reglas:**');
+  R.linea('');
+  R.tabla(['Combinación', 'Filas'], [...combos.entries()].sort((x, y) => y[1] - x[1]).map(([k, n]) => [k, n]));
+
+  R.linea('**Distribución de `vpd.fecha − (v.fecha + v.hora)`** (sin backfill). "Dudosas" = R4 sin R1/R2/R3:');
+  R.linea('');
+  R.tabla(['Tramo', 'Todas las filas', 'Dudosas'],
+    ORDEN_TRAMOS.filter(t => tramosTodas.has(t) || tramosDudosas.has(t)).map(t => [tramoDe(t), tramosTodas.get(t) || 0, tramosDudosas.get(t) || 0]));
+
+  R.linea(`R3 estricta (última fila de la venta): ${r3Estricta} · R3 laxa (cualquier fila con mismo idVenta+monto en el ledger): ${r3Lax}` +
+    (r3Lax !== r3Estricta ? ` — la diferencia (${r3Lax - r3Estricta}) son filas de pago original con el mismo monto que un pago manual posterior.` : ''));
+  R.linea('');
+
+  if (backfillN > 0) {
+    R.linea(`Filas de backfill (fecha = momento de la migration, no de la venta; R4 las clasificaría mal): ${backfillN}`);
+    R.linea('');
+  }
+
+  if (dudosas > 0) {
+    const muestra = await filas(conn, `
+      SELECT id FROM (${base}) t
+      WHERE backfill = 0 AND r1 = 0 AND r2 = 0 AND r3 = 0 AND difSeg > ${SEG_10_MIN}
+      ORDER BY id LIMIT 20`);
+    R.linea(`Muestra de ids dudosos (máx. 20): ${muestra.map(m => m.id).join(', ')}`);
+    R.linea('');
+    R.hallazgo(`${dudosas} fila(s) de \`ventas_pagos_detalle\` son R4 sin R1/R2/R3: >10 min después de la venta pero sin marca que las identifique como cobro. Son los casos dudosos para la regla de la migration 3.4-A.`);
+  }
+}
+
+async function checkC12_2(conn, ctx, f) {
+  const R = ctx.reporte;
+  R.linea('### C12.2 Efectivo por caja: fórmula actual vs. fórmula nueva');
+  R.linea('');
+  const requeridas = [['cajas', 'finalizada'], ['ventas', 'idCaja'], ['ventas_pagos_detalle', 'monto'], ['ventas_pago', 'idVenta'], ['tipos_pago', 'nombre']];
+  const faltan = requeridas.filter(([t, c]) => !tablaYColumnaExisten(ctx.columnas, t, c)).map(([t, c]) => `${t}.${c}`);
+  if (faltan.length > 0) {
+    R.linea(`Faltan ${faltan.join(', ')} en esta base — sección omitida.`);
+    R.linea('');
+    return;
+  }
+
+  // efectivoActual replica estadisticasRepository.TotalesXTipoPago filtrando por caja:
+  // v.fechaBaja IS NULL y c.fechaBaja IS NULL, mismos JOINs (incluido ventas_pago).
+  // efectivoNuevo: excluye R1/R2/R3 y cuenta la venta si no tiene baja o tiene NC total.
+  const porCaja = await filas(conn, `
+    SELECT c.id AS idCaja, DATE_FORMAT(c.fecha, '%Y-%m') AS mes,
+           COALESCE(SUM(CASE WHEN v.fechaBaja IS NULL THEN vpd.monto END), 0) AS efectivoActual,
+           COALESCE(SUM(CASE WHEN (v.fechaBaja IS NULL OR ${f.ncTotal}) AND NOT ${f.r123} THEN vpd.monto END), 0) AS efectivoNuevo,
+           COALESCE(SUM(CASE WHEN v.fechaBaja IS NULL AND ${f.r123} THEN vpd.monto END), 0) AS cobrosExcluidos,
+           COALESCE(SUM(CASE WHEN v.fechaBaja IS NOT NULL AND ${f.ncTotal} AND NOT ${f.r123} THEN vpd.monto END), 0) AS ncRecuperado
+    FROM cajas c
+    INNER JOIN ventas v ON v.idCaja = c.id
+    INNER JOIN ventas_pagos_detalle vpd ON vpd.idVenta = v.id
+    INNER JOIN ventas_pago vpag ON vpag.idVenta = v.id
+    INNER JOIN tipos_pago tp ON tp.id = vpd.idTPago AND tp.nombre = 'EFECTIVO'
+    ${f.joinLedger}
+    ${f.joinNc}
+    WHERE c.finalizada = 1 AND c.fechaBaja IS NULL
+    GROUP BY c.id, c.fecha`);
+  const finalizadasPorMes = await filas(conn, `
+    SELECT DATE_FORMAT(fecha, '%Y-%m') AS mes, COUNT(*) AS n
+    FROM cajas WHERE finalizada = 1 AND fechaBaja IS NULL GROUP BY mes`);
+  const [{ bajas }] = await filas(conn, 'SELECT COUNT(*) AS bajas FROM cajas WHERE finalizada = 1 AND fechaBaja IS NOT NULL');
+
+  const porMes = new Map();
+  for (const m of finalizadasPorMes) porMes.set(m.mes ?? 'sin fecha', { cajas: Number(m.n), difieren: 0, sumaAbs: 0, cobros: 0, nc: 0 });
+  const totalCajas = finalizadasPorMes.reduce((acc, m) => acc + Number(m.n), 0);
+
+  let difieren = 0, sumaAbs = 0, identidadRota = 0;
+  for (const c of porCaja) {
+    const actual = redondear2(c.efectivoActual);
+    const nuevo = redondear2(c.efectivoNuevo);
+    const dif = redondear2(nuevo - actual);
+    // nuevo = actual − cobrosExcluidos + ncRecuperado: si no cierra, la query está mal.
+    if (Math.abs(redondear2(actual - c.cobrosExcluidos + Number(c.ncRecuperado)) - nuevo) > TOLERANCIA) identidadRota++;
+    if (Math.abs(dif) < TOLERANCIA) continue;
+    difieren++;
+    sumaAbs += Math.abs(dif);
+    const mes = c.mes ?? 'sin fecha';
+    if (!porMes.has(mes)) porMes.set(mes, { cajas: 0, difieren: 0, sumaAbs: 0, cobros: 0, nc: 0 });
+    const m = porMes.get(mes);
+    m.difieren++;
+    m.sumaAbs += Math.abs(dif);
+    m.cobros += Number(c.cobrosExcluidos);
+    m.nc += Number(c.ncRecuperado);
+  }
+
+  R.linea(`Cajas finalizadas analizadas (sin baja): ${totalCajas}${Number(bajas) > 0 ? ` · finalizadas dadas de baja, excluidas igual que en \`TotalesXTipoPago\`: ${bajas}` : ''}`);
+  R.linea(`- cajas donde \`efectivoNuevo\` ≠ \`efectivoActual\`: ${difieren}`);
+  R.linea(`- suma absoluta de diferencias: ${redondear2(sumaAbs).toFixed(2)}`);
+  R.linea('');
+  R.tabla(['Mes', 'Cajas finalizadas', 'Difieren', 'Suma abs. dif.', 'Cobros excluidos (K1)', 'NC total recuperadas (K2)'],
+    [...porMes.entries()].sort((x, y) => String(x[0]).localeCompare(String(y[0])))
+      .map(([mes, m]) => [mes, m.cajas, m.difieren, m.sumaAbs.toFixed(2), m.cobros.toFixed(2), m.nc.toFixed(2)]));
+  R.linea('Las dos últimas columnas suman, por mes, lo que explica cada causa en las cajas que difieren: `nuevo = actual − cobros excluidos + NC total recuperadas`.');
+  R.linea('');
+  if (identidadRota > 0) {
+    R.hallazgo(`${identidadRota} caja(s) donde \`nuevo ≠ actual − cobros + NC\`: error de la propia query de diagnóstico, no de los datos. No confiar en esta sección hasta revisarlo.`, { critico: true });
+  }
+  if (difieren > 0) {
+    R.hallazgo(`${difieren} caja(s) finalizada(s) donde el efectivo cambia con la fórmula nueva.`);
+  }
+}
+
+async function checkC12_3(conn, ctx, f) {
+  const R = ctx.reporte;
+  R.linea('### C12.3 Acumulador `cajas.ventas` vs. recalculado');
+  R.linea('');
+  const requeridas = [['cajas', 'ventas'], ['cajas', 'finalizada'], ['ventas', 'total'], ['ventas', 'idCaja']];
+  const faltan = requeridas.filter(([t, c]) => !tablaYColumnaExisten(ctx.columnas, t, c)).map(([t, c]) => `${t}.${c}`);
+  if (faltan.length > 0) {
+    R.linea(`Faltan ${faltan.join(', ')} en esta base — sección omitida.`);
+    R.linea('');
+    return;
+  }
+
+  R.linea('Se miden dos diferencias, porque la regla del handoff y la de C9 responden preguntas distintas:');
+  R.linea('- **difA** = `cajas.ventas` − suma de ventas **sin baja** (criterio de C9). Acá K2 aparece como suma de NC totales y la anulación sin descontar como suma de anuladas.');
+  R.linea('- **difB** = `cajas.ventas` − suma de ventas **sin baja o con NC total** (regla nueva de la 3.4). Si el código fuera consistente debería dar 0; lo que quede es acumulador roto (p. ej. doble anulación → negativo).');
+  R.linea('');
+
+  const cajas = await filas(conn, `
+    SELECT c.id AS idCaja, DATE_FORMAT(c.fecha, '%Y-%m') AS mes, DATE_FORMAT(c.fecha, '%Y-%m-%d') AS dia,
+           COALESCE(c.ventas, 0) AS declarado,
+           COALESCE(SUM(CASE WHEN v.fechaBaja IS NULL THEN v.total END), 0) AS sinBaja,
+           COALESCE(SUM(CASE WHEN v.fechaBaja IS NOT NULL AND ${f.ncTotal} THEN v.total END), 0) AS sumNc,
+           COALESCE(SUM(CASE WHEN v.fechaBaja IS NOT NULL AND NOT ${f.ncTotal} THEN v.total END), 0) AS sumAnuladas
+    FROM cajas c
+    LEFT JOIN ventas v ON v.idCaja = c.id
+    ${f.joinNc}
+    WHERE c.finalizada = 1 AND c.fechaBaja IS NULL
+    GROUP BY c.id, c.fecha, c.ventas`);
+
+  const porMes = new Map();
+  const nuevo = () => ({ cajas: 0, difA: 0, a: 0, b: 0, amb: 0, ab: 0, c: 0, difB: 0, sumaAbsB: 0 });
+  const posDeploy = { cajas: 0, difB: 0, difA_c: 0 };
+  const tot = nuevo();
+  let difBPositivas = 0, difBNegativas = 0;
+
+  for (const c of cajas) {
+    const declarado = Number(c.declarado), sinBaja = Number(c.sinBaja);
+    const sumNc = Number(c.sumNc), sumAnul = Number(c.sumAnuladas);
+    const difA = redondear2(declarado - sinBaja);
+    const difB = redondear2(declarado - (sinBaja + sumNc));
+    const mes = c.mes ?? 'sin fecha';
+    if (!porMes.has(mes)) porMes.set(mes, nuevo());
+    const m = porMes.get(mes);
+    const post = c.dia && c.dia > FECHA_DEPLOY_3_2_0;
+
+    for (const acc of [m, tot]) acc.cajas++;
+    if (post) posDeploy.cajas++;
+
+    let categoriaA = null;
+    if (Math.abs(difA) > TOLERANCIA) {
+      const a = sumNc > 0 && Math.abs(difA - sumNc) <= TOLERANCIA;
+      const b = sumAnul > 0 && Math.abs(difA - sumAnul) <= TOLERANCIA;
+      const ab = sumNc > 0 && sumAnul > 0 && Math.abs(difA - (sumNc + sumAnul)) <= TOLERANCIA;
+      categoriaA = a && b ? 'amb' : a ? 'a' : b ? 'b' : ab ? 'ab' : 'c';
+      for (const acc of [m, tot]) { acc.difA++; acc[categoriaA]++; }
+      if (post && categoriaA === 'c') posDeploy.difA_c++;
+    }
+    if (Math.abs(difB) > TOLERANCIA) {
+      for (const acc of [m, tot]) { acc.difB++; acc.sumaAbsB += Math.abs(difB); }
+      if (difB > 0) difBPositivas++; else difBNegativas++;
+      if (post) posDeploy.difB++;
+    }
+  }
+
+  R.linea(`Cajas finalizadas analizadas (sin baja): ${tot.cajas}`);
+  R.linea(`- con difA ≠ 0: ${tot.difA} → explicadas por (a) suma de NC totales: ${tot.a} · (b) suma de anuladas: ${tot.b} · (a) y (b) dan el mismo monto, ambigua: ${tot.amb} · (a)+(b) juntas: ${tot.ab} · (c) ninguna: ${tot.c}`);
+  R.linea(`- con difB ≠ 0: ${tot.difB} (positivas: ${difBPositivas}, negativas: ${difBNegativas}) · suma absoluta: ${redondear2(tot.sumaAbsB).toFixed(2)}`);
+  R.linea('');
+  R.tabla(['Mes', 'Cajas', 'difA ≠ 0', '(a) NC', '(b) anuladas', '(a)+(b) / ambigua', '(c) ninguna', 'difB ≠ 0', 'Suma abs. difB'],
+    [...porMes.entries()].sort((x, y) => String(x[0]).localeCompare(String(y[0])))
+      .map(([mes, m]) => [mes, m.cajas, m.difA, m.a, m.b, m.ab + m.amb, m.c, m.difB, m.sumaAbsB.toFixed(2)]));
+  R.linea(`Después del ${FECHA_DEPLOY_3_2_0} (deploy 3.2-0, cajas con fecha posterior): ${posDeploy.cajas} caja(s) finalizada(s) · con difB ≠ 0: ${posDeploy.difB} · con difA sin explicación (c): ${posDeploy.difA_c}`);
+  R.linea('');
+
+  if (tot.c > 0) {
+    R.hallazgo(`${tot.c} caja(s) con diferencia en \`cajas.ventas\` que ni las NC totales ni las anuladas explican exactamente (tolerancia ${TOLERANCIA}).`);
+  }
+  if (posDeploy.difB > 0) {
+    R.hallazgo(`${posDeploy.difB} caja(s) con fecha posterior al ${FECHA_DEPLOY_3_2_0} tienen \`cajas.ventas\` inconsistente incluso con la regla nueva: el problema sigue después del fix 3.2-0.`, { critico: true });
+  }
+}
+
+async function checkC12_4(conn, ctx) {
+  const R = ctx.reporte;
+  R.linea('### C12.4 Proveedores y fondo');
+  R.linea('');
+  if (!tablaYColumnaExisten(ctx.columnas, 'proveedor_cuenta_movimientos', 'idCaja')) {
+    R.linea('`proveedor_cuenta_movimientos` no existe en esta base (módulo de proveedores no instalado) — sección omitida.');
+    R.linea('');
+    return;
+  }
+
+  if (tablaYColumnaExisten(ctx.columnas, 'cajas', 'fondoProveedores')) {
+    const [fondo] = await filas(conn, `
+      SELECT COUNT(*) AS conFondo,
+             SUM(CASE WHEN c.fondoProveedores = 0 THEN 1 ELSE 0 END) AS enCero,
+             SUM(CASE WHEN COALESCE(p.pagado, 0) > c.fondoProveedores THEN 1 ELSE 0 END) AS superan
+      FROM cajas c
+      LEFT JOIN (SELECT idCaja, SUM(haber) AS pagado FROM proveedor_cuenta_movimientos
+                 WHERE tipo = 'pago' AND anulado = 0 AND idCaja IS NOT NULL GROUP BY idCaja) p ON p.idCaja = c.id
+      WHERE c.fondoProveedores IS NOT NULL`);
+    R.linea(`Cajas con \`fondoProveedores\` no nulo: ${fondo.conFondo || 0} (de las cuales en 0: ${fondo.enCero || 0}) · con pagos que superan el fondo: ${fondo.superan || 0}`);
+  } else {
+    R.linea('`cajas.fondoProveedores` no existe en esta base.');
+  }
+  R.linea('');
+
+  const pagos = await filas(conn, `
+    SELECT YEAR(fecha) AS anio,
+           SUM(CASE WHEN idCaja IS NOT NULL THEN 1 ELSE 0 END) AS conCaja,
+           SUM(CASE WHEN idCaja IS NULL THEN 1 ELSE 0 END) AS sinCaja,
+           COALESCE(SUM(CASE WHEN idCaja IS NOT NULL THEN haber END), 0) AS montoConCaja,
+           COALESCE(SUM(CASE WHEN idCaja IS NULL THEN haber END), 0) AS montoSinCaja
+    FROM proveedor_cuenta_movimientos
+    WHERE tipo = 'pago' AND anulado = 0
+    GROUP BY YEAR(fecha) ORDER BY anio`);
+  R.linea('Pagos a proveedor (`tipo = \'pago\'`, no anulados) con y sin `idCaja`:');
+  R.linea('');
+  R.tabla(['Año', 'Con idCaja', 'Sin idCaja', 'Monto con idCaja', 'Monto sin idCaja'],
+    pagos.map(p => [p.anio ?? 'sin fecha', p.conCaja || 0, p.sinCaja || 0, Number(p.montoConCaja).toFixed(2), Number(p.montoSinCaja).toFixed(2)]));
+
+  if (!tablaYColumnaExisten(ctx.columnas, 'cajas_movimientos', 'idProveedorMovimiento')) {
+    R.linea('`cajas_movimientos.idProveedorMovimiento` no existe en esta base — no se puede buscar pagos sin movimiento de caja.');
+    R.linea('');
+    return;
+  }
+  const huerfanos = await filas(conn, `
+    SELECT pcm.id, YEAR(pcm.fecha) AS anio
+    FROM proveedor_cuenta_movimientos pcm
+    WHERE pcm.tipo = 'pago' AND pcm.anulado = 0 AND pcm.idCaja IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM cajas_movimientos cm WHERE cm.idProveedorMovimiento = pcm.id)
+    ORDER BY pcm.id`);
+  R.linea(`Pagos con \`idCaja\` y sin \`cajas_movimientos\` correspondiente (bug viejo de \`idCajaContexto\` string): ${huerfanos.length}`);
+  if (huerfanos.length > 0) {
+    const porAnio = new Map();
+    for (const h of huerfanos) porAnio.set(h.anio ?? 'sin fecha', (porAnio.get(h.anio ?? 'sin fecha') || 0) + 1);
+    R.linea('');
+    R.tabla(['Año', 'Pagos sin movimiento de caja'], [...porAnio.entries()].map(([a, n]) => [a, n]));
+    R.linea(`Muestra de ids (máx. 20): ${huerfanos.slice(0, 20).map(h => h.id).join(', ')}`);
+    R.linea('');
+    R.hallazgo(`${huerfanos.length} pago(s) a proveedor imputado(s) a una caja que nunca generó su SALIDA en \`cajas_movimientos\`: el arqueo de esa caja no los refleja.`);
+  }
+  R.linea('');
+}
+
+async function checkC12(conn, ctx) {
+  const f = fragmentosCaja(ctx);
+  const partes = [['C12.1', checkC12_1], ['C12.2', checkC12_2], ['C12.3', checkC12_3], ['C12.4', checkC12_4]];
+  for (const [id, fn] of partes) {
+    // Una query que falla se registra y se sigue con la próxima parte: que falte algo es un hallazgo, no un crash.
+    try {
+      await fn(conn, ctx, f);
+    } catch (err) {
+      ctx.reporte.error(`${id}: ${err.message}`);
+      console.error(`  ${id} falló (se sigue con la próxima parte): ${err.message}`);
+    }
+    ctx.reporte.linea('');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -900,6 +1362,7 @@ const CHECKS = [
   ['C9', 'Pre-conciliación de caja', checkC9],
   ['C10', 'Stock', checkC10],
   ['C11', 'Foreign keys existentes', checkC11],
+  ['C12', 'Caja (3.4-0)', checkC12],
 ];
 
 async function main() {
