@@ -86,7 +86,8 @@ class ResumenCajaService {
 
             //#region Medios de pago (solo el pago original de la venta)
             const [mediosRows] = await conn.query(
-                `SELECT UPPER(tp.nombre) AS medio, COUNT(DISTINCT v.id) AS cantidadVentas, COALESCE(SUM(vpd.monto), 0) AS total
+                `SELECT UPPER(tp.nombre) AS medio, MAX(tp.icono) AS icono, MAX(tp.color) AS color,
+                        COUNT(DISTINCT v.id) AS cantidadVentas, COALESCE(SUM(vpd.monto), 0) AS total
                  FROM ventas_pagos_detalle vpd
                  INNER JOIN ventas v ON v.id = vpd.idVenta
                  INNER JOIN tipos_pago tp ON tp.id = vpd.idTPago
@@ -95,12 +96,13 @@ class ResumenCajaService {
             ) as [any[], any];
 
             let ventasEfectivo = 0, saldoAFavorUsado = 0;
-            const otrosMedios: { medio: string; cantidadVentas: number; total: number }[] = [];
+            const otrosMedios: { medio: string; icono: string | null; color: string | null; cantidadVentas: number; total: number }[] = [];
             for (const m of mediosRows) {
                 if (m.medio === MEDIO_EFECTIVO) ventasEfectivo = r2(m.total);
                 else if (m.medio === MEDIO_SAF) saldoAFavorUsado = r2(m.total);
                 else if (m.medio !== MEDIO_CC)
-                    otrosMedios.push({ medio: m.medio, cantidadVentas: Number(m.cantidadVentas), total: r2(m.total) });
+                    otrosMedios.push({ medio: m.medio, icono: m.icono ?? null, color: m.color ?? null,
+                                       cantidadVentas: Number(m.cantidadVentas), total: r2(m.total) });
             }
 
             // Fiado = lo que la venta no cubrió con pagos originales (por venta, solo si es > 0).

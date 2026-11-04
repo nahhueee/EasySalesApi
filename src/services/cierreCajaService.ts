@@ -27,7 +27,7 @@ class CierreCajaService {
     // Cierra la caja. Todo en una sola transacción: el lock de la fila (AsegurarAbierta) impide que
     // entre una venta mientras se cierra, así que el resumen que se guarda es exactamente lo que quedó.
     async Cerrar(idCaja: number, data: { efectivoContado?: any; observacion?: any }, usuarioId?: number | string | null, puestoId?: string | null)
-        : Promise<{ idCierre: number; resumen: any }> {
+        : Promise<{ idCierre: number; esperado: number; contado: number | null; diferencia: number | null; resumen: any }> {
 
         //#region Validaciones de entrada
         const sinContar = data?.efectivoContado === undefined || data?.efectivoContado === null || data?.efectivoContado === '';
@@ -51,6 +51,8 @@ class CierreCajaService {
         const auditoria = auditoriaDesde(usuarioId, puestoId);
         let resumen: any;
         let idCierre = 0;
+        let esperado = 0;
+        let diferencia: number | null = null;
 
         try {
             await connection.beginTransaction();
@@ -60,8 +62,8 @@ class CierreCajaService {
             resumen = await ResumenCajaServ.Calcular(idCaja, connection);
             resumen.caja.finalizada = true;                       // la foto se guarda ya como cerrada
 
-            const esperado = resumen.cajon.esperado;
-            const diferencia = contado != null ? r2(contado - esperado) : null;
+            esperado = resumen.cajon.esperado;
+            diferencia = contado != null ? r2(contado - esperado) : null;
             const fondo = resumen.fondo;
 
             const [ins] = await connection.query<ResultSetHeader>(
@@ -126,7 +128,9 @@ class CierreCajaService {
             });
         }
 
-        return { idCierre, resumen };
+        // esperado/contado/diferencia son los mismos valores que quedaron en cajas_cierres: la pantalla
+        // los muestra tal cual, no los recalcula.
+        return { idCierre, esperado, contado, diferencia, resumen };
     }
 
     // Reabre la caja. Solo ADMINISTRADOR o ENCARGADO, con motivo obligatorio (decisión 4).
