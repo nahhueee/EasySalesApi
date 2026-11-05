@@ -1,5 +1,6 @@
 import db from '../db';
 import { ProveedorCuentaRepo } from '../data/proveedorCuentaRepository';
+import { ParametrosComercio } from '../services/parametrosComercioService';
 
 // Guard de rol en el backend — hoy el resto del sistema (EntregaDinero, ActualizarEstadoPago,
 // RevertirEstadoPago en cuentasCorsRepository.ts) valida permisos SOLO en el frontend
@@ -37,6 +38,18 @@ export async function ObtenerCargoBackend(usuarioId: string | null): Promise<str
     } finally {
         connection.release();
     }
+}
+
+// Fase 3.4-P: arqueo ciego. true = un EMPLEADO sin permiso de "ver resumen de caja" (Preferencias,
+// ahora a nivel comercio): cierra sin ver el esperado ni la diferencia. ENCARGADO y ADMINISTRADOR
+// nunca cierran a ciegas. Ante la duda (usuario ausente o no resuelto) => true, ciego.
+// OJO: igual que Reabrir, el usuario viene del header x-usuario-id (el backend todavía no tiene auth
+// real; deuda conocida, ver arriba): es un control de operación, no una barrera de seguridad.
+// En esta fase solo se crea el helper: aplicarlo en cerrar, /resumen e impresión es de 3.4-B y 3.4-C.
+export async function EsArqueoCiego(usuarioId: string | null): Promise<boolean> {
+    const cargo = await ObtenerCargoBackend(usuarioId);
+    if (!cargo) return true;
+    return cargo === 'EMPLEADO' && !(await ParametrosComercio.ObtenerBool('resumenCaja'));
 }
 
 // Registrar pago a proveedor (decisión 2026-08-10, ajuste sobre PR6, corregido el mismo día):

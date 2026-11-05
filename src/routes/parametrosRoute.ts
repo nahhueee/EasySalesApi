@@ -7,6 +7,54 @@ const path = require('path');
 const fs = require('fs/promises'); 
 const router : Router  = Router();
 import config from '../conf/app.config';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
+import { ParametrosComercio } from '../services/parametrosComercioService';
+import { datosAuditoria } from '../utils/auditoria';
+import { TienePermisoBackend } from '../utils/permisos';
+
+// ─── Fase 3.4-P: configuración del comercio (Preferencias), igual para todas las PCs ─────────────
+// Las rutas genéricas de abajo (/obtener/:clave y /actualizar) NO se tocan: las usan proveedores y repuestos.
+router.get('/comercio', async (req:Request, res:Response, next) => {
+    try{
+        res.json(await ParametrosComercio.Obtener());
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al intentar obtener la configuración del comercio.', 500, { modulo: 'parametrosRoute.comercio.obtener' }, error));
+    }
+});
+
+// Solo ADMINISTRADOR, igual que la pantalla Preferencias (herramientas-bar: Cargo == 'ADMINISTRADOR').
+// OJO: el usuario viene del header x-usuario-id (deuda conocida, ver utils/permisos.ts).
+router.put('/comercio', async (req:Request, res:Response, next) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+
+        if (!(await TienePermisoBackend(usuarioId, ['ADMINISTRADOR']))) {
+            throw new AppError(CodigoError.VALIDACION, 'Solo un administrador puede cambiar la configuración del comercio.', 403,
+                { modulo: 'parametrosRoute.comercio.guardar' });
+        }
+
+        res.json(await ParametrosComercio.Guardar(req.body?.valores, usuarioId, puestoId));
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al intentar guardar la configuración del comercio.', 500, { modulo: 'parametrosRoute.comercio.guardar' }, error));
+    }
+});
+
+// Cualquier terminal: solo puede llenar claves "sin migrar", nunca pisa un valor ya guardado.
+router.post('/comercio/importar', async (req:Request, res:Response, next) => {
+    try{
+        const { usuarioId, puestoId } = datosAuditoria(req);
+        res.json(await ParametrosComercio.Importar(req.body?.valores, usuarioId, puestoId));
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al intentar importar la configuración del comercio.', 500, { modulo: 'parametrosRoute.comercio.importar' }, error));
+    }
+});
 
 router.get('/obtener/:clave', async (req:Request, res:Response) => {
     try{ 
