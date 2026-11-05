@@ -6,6 +6,7 @@ import { CodigoError } from '../logger/CodigosError';
 import { datosAuditoria } from '../utils/auditoria';
 import { ResumenCajaServ } from '../services/resumenCajaService';
 import { CierreCajaServ } from '../services/cierreCajaService';
+import { EsArqueoCiego } from '../utils/permisos';
 const router : Router  = Router();
 
 //#region OBTENER
@@ -37,8 +38,17 @@ router.get('/obtener-caja/:id', async (req:Request, res:Response, next) => {
 });
 
 // Resumen único de la caja (Fase 3.4-A): cajón, fondo de proveedores, otros medios, info y control.
+// Arqueo ciego (3.4-B): un EMPLEADO sin permiso de "ver resumen de caja" no lo puede pedir (403).
+// OJO: igual que Reabrir, el usuario viene del header x-usuario-id (el backend todavía no tiene auth real;
+// deuda conocida): es un control de operación, no una barrera de seguridad.
 router.get('/:id/resumen', async (req:Request, res:Response, next) => {
     try{
+        const { usuarioId } = datosAuditoria(req);
+        if (await EsArqueoCiego(usuarioId)) {
+            throw new AppError(CodigoError.VALIDACION, 'No tenés permiso para ver el resumen de la caja.', 403,
+                { modulo: 'cajasRoute.resumen', idCaja: Number(req.params.id) });
+        }
+
         res.json(await ResumenCajaServ.Calcular(Number(req.params.id)));
 
     } catch(error:any){
@@ -53,7 +63,11 @@ router.get('/:id/resumen', async (req:Request, res:Response, next) => {
 router.put('/:id/cerrar', async (req:Request, res:Response, next) => {
     try{
         const { usuarioId, puestoId } = datosAuditoria(req);
-        res.json(await CierreCajaServ.Cerrar(Number(req.params.id), req.body ?? {}, usuarioId, puestoId));
+        // Se decide antes de cerrar. Si es ciego, la respuesta no lleva esperado, diferencia ni resumen:
+        // que no viajen por la red, no solo que el front no los muestre (mismo criterio que /resumen).
+        const ciego = await EsArqueoCiego(usuarioId);
+        const cierre = await CierreCajaServ.Cerrar(Number(req.params.id), req.body ?? {}, usuarioId, puestoId);
+        res.json(ciego ? { idCierre: cierre.idCierre, contado: cierre.contado } : cierre);
 
     } catch(error:any){
         if (error instanceof AppError) return next(error);
