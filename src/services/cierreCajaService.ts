@@ -8,7 +8,8 @@ import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 import { logger } from '../logger/logger';
 import { auditoriaDesde } from '../utils/auditoria';
-import { TienePermisoBackend } from '../utils/permisos';
+import { TienePermisoBackend, EsArqueoCiego } from '../utils/permisos';
+import type { ResumenCajaImpresion } from './comprobanteService';
 
 // Fase 3.4-A (handoff §5.2, §5.3, §5.4): cierre con arqueo opcional y reapertura con motivo.
 // Vive en un service y no en CajasRepo para no cerrar un ciclo de imports
@@ -207,6 +208,152 @@ class CierreCajaService {
         } catch (error: any) {
             if (error instanceof AppError && error.status && error.status < 500) return error.message;
             throw error;
+        }
+    }
+
+    // ── Fase 3.4-C: impresión del resumen ─────────────────────────────────────────────────────────
+
+    // Arma lo que se imprime (handoff 3.4-C §2 y §3.2). Una caja CERRADA se imprime desde la foto
+    // guardada al cerrar (cajas_cierres.resumen), nunca recalculada: cada cierre tiene su papel.
+    // Arqueo ciego: el recorte se hace ACÁ, antes del builder, para que el PDF ni siquiera reciba
+    // esperado, diferencia, cajón, fondo ni información. EsArqueoCiego sale del header x-usuario-id:
+    // control de operación, no seguridad real (deuda conocida, igual que Reabrir).
+    async ArmarImpresion(idCaja: number, idCierre?: number | null, usuarioId?: string | null): Promise<ResumenCajaImpresion> {
+
+        const connection = await db.getConnection();
+        try {
+            const [cajaRows] = await connection.query(
+                'SELECT id, finalizada FROM cajas WHERE id = ? AND fechaBaja IS NULL', [idCaja]
+            ) as [any[], any];
+            if (!cajaRows[0]) {
+                throw new AppError(CodigoError.NOT_FOUND, `La caja #${idCaja} no existe.`, 404,
+                    { modulo: 'cierreCajaService.ArmarImpresion', idCaja });
+            }
+            const cerrada = Number(cajaRows[0].finalizada) === 1;
+            const ciego = await EsArqueoCiego(usuarioId ?? null);
+
+            // Ids de los cierres de esta caja, del más viejo al último (para numerar "cierre N de M").
+            const [idsRows] = await connection.query(
+                'SELECT id FROM cajas_cierres WHERE idCaja = ? ORDER BY fecha ASC, id ASC', [idCaja]
+            ) as [any[], any];
+            const ids: number[] = idsRows.map((r: any) => Number(r.id));
+
+            // Qué cierre se imprime. Un idCierre que no es de esta caja: 404 si la caja está cerrada;
+            // con la caja abierta se ignora (caja reabierta: sigue valiendo imprimir el parcial).
+            let objetivo: number | null = null;
+            if (idCierre != null) {
+                if (ids.includes(Number(idCierre))) objetivo = Number(idCierre);
+                else if (cerrada) {
+                    throw new AppError(CodigoError.NOT_FOUND, `El cierre #${idCierre} no pertenece a la caja #${idCaja}.`, 404,
+                        { modulo: 'cierreCajaService.ArmarImpresion', idCaja, idCierre });
+                }
+            } else if (cerrada && ids.length) {
+                objetivo = ids[ids.length - 1];
+            }
+
+            const impreso = moment().format('DD/MM/YYYY HH:mm');
+
+            //#region Cierre guardado (foto)
+            if (objetivo != null) {
+                const [filas] = await connection.query(
+                    `SELECT ci.id, ci.fecha, ci.efectivoEsperado, ci.efectivoContado, ci.diferencia, ci.resumen, ci.observacion,
+                            u.nombre AS usuario, pu.nombre AS puesto
+                     FROM cajas_cierres ci
+                     LEFT JOIN usuarios u ON u.id = ci.idUsuario
+                     LEFT JOIN puestos pu ON pu.id = ci.idPuesto
+                     WHERE ci.id = ? AND ci.idCaja = ?`, [objetivo, idCaja]
+                ) as [any[], any];
+                const fila = filas[0];
+                // MySQL devuelve el JSON ya parseado; por si algún driver/versión lo devuelve como texto.
+                const foto = typeof fila.resumen === 'string' ? JSON.parse(fila.resumen) : fila.resumen;
+                const posicion = ids.indexOf(objetivo);
+
+                const aNumero = (v: any) => (v == null ? null : Number(v));
+                const cierre = {
+                    fecha: moment(fila.fecha).format('DD/MM/YYYY'),
+                    hora: moment(fila.fecha).format('HH:mm'),
+                    usuario: fila.usuario ?? null,
+                    puesto: fila.puesto ?? null,
+                    esperado: aNumero(fila.efectivoEsperado),
+                    contado: aNumero(fila.efectivoContado),
+                    diferencia: aNumero(fila.diferencia),
+                    observacion: fila.observacion ?? null,
+                };
+
+                return {
+                    modo: 'cierre',
+                    ciego,
+                    reimpresion: posicion < ids.length - 1 ? { numero: posicion + 1, total: ids.length } : null,
+                    resumen: ciego ? this.ResumenCiego(foto) : foto,
+                    cierre: ciego ? { ...cierre, esperado: null, diferencia: null } : cierre,
+                    impreso,
+                };
+            }
+            //#endregion
+
+            // Sin foto: caja abierta (parcial) o cerrada antes de la 3.4-A (sin filas en cajas_cierres).
+            // Un ciego no tiene nada que imprimir ahí (sin contado ni firmas el ticket quedaría vacío):
+            // mismo criterio que GET /:id/resumen.
+            if (ciego) {
+                throw new AppError(CodigoError.VALIDACION, 'No tenés permiso para imprimir el resumen de esta caja.', 403,
+                    { modulo: 'cierreCajaService.ArmarImpresion', idCaja });
+            }
+
+            const resumen = await ResumenCajaServ.Calcular(idCaja);
+            return { modo: cerrada ? 'sinCierre' : 'parcial', ciego: false, reimpresion: null, resumen, cierre: null, impreso };
+
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Lo mínimo de la caja que un ticket ciego necesita (número, cajero, apertura). Nada de importes.
+    private ResumenCiego(foto: any): any {
+        const c = foto?.caja ?? {};
+        return { caja: { id: c.id, responsable: c.responsable, apertura: c.apertura, historica: c.historica } };
+    }
+
+    // GET /cajas/:id/cierres: sin la columna `resumen` (es pesada). En arqueo ciego salen en null todos los
+    // importes que el ticket ciego tampoco muestra (esperado, diferencia y fondo): que no viajen por la red.
+    async ObtenerCierres(idCaja: number, usuarioId?: string | null): Promise<any[]> {
+
+        const connection = await db.getConnection();
+        try {
+            const [cajaRows] = await connection.query(
+                'SELECT id FROM cajas WHERE id = ? AND fechaBaja IS NULL', [idCaja]
+            ) as [any[], any];
+            if (!cajaRows[0]) {
+                throw new AppError(CodigoError.NOT_FOUND, `La caja #${idCaja} no existe.`, 404,
+                    { modulo: 'cierreCajaService.ObtenerCierres', idCaja });
+            }
+            const ciego = await EsArqueoCiego(usuarioId ?? null);
+
+            const [filas] = await connection.query(
+                `SELECT ci.id, ci.fecha, ci.efectivoEsperado, ci.efectivoContado, ci.diferencia, ci.fondoAsignado,
+                        ci.fondoPagado, ci.observacion, u.nombre AS usuario, pu.nombre AS puesto
+                 FROM cajas_cierres ci
+                 LEFT JOIN usuarios u ON u.id = ci.idUsuario
+                 LEFT JOIN puestos pu ON pu.id = ci.idPuesto
+                 WHERE ci.idCaja = ?
+                 ORDER BY ci.fecha DESC, ci.id DESC`, [idCaja]
+            ) as [any[], any];
+
+            const num = (v: any) => (v == null ? null : Number(v));
+            return filas.map((f: any) => ({
+                id: f.id,
+                fecha: moment(f.fecha).format('YYYY-MM-DD HH:mm:ss'),
+                usuario: f.usuario ?? null,
+                puesto: f.puesto ?? null,
+                efectivoEsperado: ciego ? null : num(f.efectivoEsperado),
+                efectivoContado: num(f.efectivoContado),
+                diferencia: ciego ? null : num(f.diferencia),
+                fondoAsignado: ciego ? null : num(f.fondoAsignado),
+                fondoPagado: ciego ? null : num(f.fondoPagado),
+                observacion: f.observacion ?? null,
+            }));
+
+        } finally {
+            connection.release();
         }
     }
 }

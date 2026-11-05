@@ -1588,6 +1588,31 @@ export class ComprobanteService {
     return this.conRespaldoSinLogo(parametros, p => this.renderNotaCredito(nc, p));
   }
 
+  /**
+   * PDF del resumen de caja (Fase 3.4-C). `datos` lo arma CierreCajaServ.ArmarImpresion (ya recortado
+   * si es arqueo ciego); `papel` pisa al del parámetro cuando se pide explícitamente (ej: A4 para vista previa).
+   */
+  async generarResumenCajaPDF(datos: ResumenCajaImpresion, parametros: ParametrosComprobante, papel?: string): Promise<Buffer> {
+    const p = { ...parametros, papel: papel ?? parametros.papel };
+    return this.conRespaldoSinLogo(p, x => this.renderResumenCaja(datos, x));
+  }
+
+  private async renderResumenCaja(datos: ResumenCajaImpresion, parametros: ParametrosComprobante): Promise<Buffer> {
+    const [fecha, hora] = datos.impreso.split(' ');
+    const comprobante: ComprobanteData = {
+      papel:            parametros.papel,
+      margenIzq:        parametros.margenIzq,
+      margenDer:        parametros.margenDer,
+      nombreLocal:      parametros.nomLocal,
+      descripcionLocal: parametros.desLocal,
+      ...resolverPersonalizacion(parametros),
+      fechaVenta:       fecha,
+      horaVenta:        hora,
+      filasTabla:       [],
+    };
+    return generarBufferPDF(buildDocResumenCaja(comprobante, datos));
+  }
+
   private async renderNotaCredito(nc: NotaCreditoImpresion, parametros: ParametrosComprobante): Promise<Buffer> {
     const comprobante  = this.mapearComprobanteNotaCredito(nc, parametros);
     const facturaAFIP  = await this.mapearNotaCredito(nc);
@@ -1652,6 +1677,343 @@ export class ComprobanteService {
       qr:                  nc.qr,
     };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESUMEN DE CAJA (Fase 3.4-C)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lo arma CierreCajaServ.ArmarImpresion. El builder no consulta nada: si el pedido es de un arqueo
+ * ciego, `resumen` y `cierre` llegan YA recortados (sin esperado, diferencia, cajón, fondo ni info),
+ * así que acá no hay nada que filtrar ni nada que pueda filtrarse por error.
+ */
+export interface ResumenCajaImpresion {
+  modo: 'parcial' | 'cierre' | 'sinCierre';
+  ciego: boolean;
+  /** "cierre 1 de 2": solo si se imprime un cierre que no es el último de la caja. */
+  reimpresion: { numero: number; total: number } | null;
+  /** Salida de ResumenCajaServ.Calcular o su foto JSON (cajas_cierres.resumen). Se lee defensivamente. */
+  resumen: any;
+  cierre: {
+    fecha: string;                 // DD/MM/AAAA
+    hora: string;                  // HH:mm
+    usuario: string | null;
+    puesto: string | null;
+    esperado: number | null;       // null en arqueo ciego
+    contado: number | null;
+    diferencia: number | null;     // null en arqueo ciego o si se cerró sin contar
+    observacion: string | null;
+  } | null;
+  impreso: string;                 // 'DD/MM/AAAA HH:mm' del servidor
+}
+
+type FilaCaja = { label: string; valor: string; negrita?: boolean };
+
+const SIGNO_MENOS = '−';
+
+/**
+ * Monto de caja: "$ 216.900,00". SIEMPRE 2 decimales y sin depender del papel ni de ICU (es plata
+ * contada; formatearMoneda() usa 1 decimal en térmicas). Negativos: "−$ 1.500,00".
+ */
+function montoCaja(valor: unknown, comoEgreso = false): string {
+  const bruto = Number(valor ?? 0);
+  const n = Number.isFinite(bruto) ? bruto : 0;
+  const [entero, decimales] = Math.abs(n).toFixed(2).split('.');
+  const miles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${(comoEgreso || n < 0) && n !== 0 ? SIGNO_MENOS : ''}$ ${miles},${decimales}`;
+}
+
+/** 'YYYY-MM-DD' (como la guarda la foto del resumen) -> 'DD/MM/AAAA'. Otro formato se deja como viene. */
+function fechaCajaCorta(fecha: unknown): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha ?? ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(fecha ?? '');
+}
+
+/** Agrega la fila solo si el monto no es cero (las líneas en cero no se imprimen). */
+function sumarFilaCaja(filas: FilaCaja[], label: string, valor: unknown, comoEgreso = false): void {
+  const n = Number(valor ?? 0);
+  if (Number.isFinite(n) && n !== 0) filas.push({ label, valor: montoCaja(n, comoEgreso) });
+}
+
+function seccionCajonCaja(d: ResumenCajaImpresion): { filas: FilaCaja[]; notas: string[] } {
+  const filas: FilaCaja[] = [];
+  const notas: string[] = [];
+  const c = d.resumen?.cajon ?? {};
+
+  if (!d.ciego) {
+    sumarFilaCaja(filas, 'Cambio inicial', c.cambioInicial);
+    sumarFilaCaja(filas, 'Ventas en efectivo', c.ventasEfectivo);
+    sumarFilaCaja(filas, 'Cobros imputados', c.cobrosImputados);
+    sumarFilaCaja(filas, 'Ingresos', c.ingresos);
+    sumarFilaCaja(filas, 'Egresos', c.egresos, true);
+    sumarFilaCaja(filas, 'Pagos a proveedores', c.pagosProveedorSinFondo, true);
+    sumarFilaCaja(filas, 'Excedente proveedores', c.excedenteProveedores, true);
+    filas.push({ label: 'ESPERADO', valor: montoCaja(d.cierre?.esperado ?? c.esperado), negrita: true });
+  }
+
+  const cierre = d.cierre;
+  if (d.modo === 'cierre' && cierre) {
+    if (cierre.contado != null) {
+      filas.push({ label: 'CONTADO', valor: montoCaja(cierre.contado), negrita: true });
+      if (!d.ciego && cierre.diferencia != null) {
+        const dif = Number(cierre.diferencia);
+        filas.push({
+          label: dif < 0 ? 'FALTANTE' : dif > 0 ? 'SOBRANTE' : 'JUSTO',
+          valor: montoCaja(Math.abs(dif)),
+          negrita: true,
+        });
+      }
+    } else {
+      notas.push('Se cerró sin contar el efectivo');
+    }
+  }
+  return { filas, notas };
+}
+
+function seccionFondoCaja(d: ResumenCajaImpresion): { filas: FilaCaja[]; notas: string[] } | null {
+  const f = d.resumen?.fondo;
+  if (d.ciego || !f) return null;
+
+  const filas: FilaCaja[] = [{ label: 'Asignado', valor: montoCaja(f.asignado) }];
+  const notas: string[] = [];
+  sumarFilaCaja(filas, 'Pagos', f.pagado, true);
+  filas.push({ label: 'Disponible', valor: montoCaja(f.disponible), negrita: true });
+  if (Number(f.excedente ?? 0) > 0) {
+    filas.push({ label: 'Excedente', valor: montoCaja(f.excedente, true) });
+    notas.push('El excedente salió del cajón');
+  }
+  return { filas, notas };
+}
+
+function seccionMediosCaja(d: ResumenCajaImpresion, esA4: boolean): FilaCaja[] {
+  if (d.ciego) return [];
+  const medios: any[] = Array.isArray(d.resumen?.otrosMedios) ? d.resumen.otrosMedios : [];
+  return medios.map(m => ({
+    label: esA4 && m.cantidadVentas != null ? `${m.medio} (${m.cantidadVentas} ventas)` : String(m.medio ?? ''),
+    valor: montoCaja(m.total),
+  }));
+}
+
+function seccionInfoCaja(d: ResumenCajaImpresion): FilaCaja[] {
+  if (d.ciego) return [];
+  const i = d.resumen?.info ?? {};
+  const filas: FilaCaja[] = [];
+
+  // Si la foto no trae el dato, no se inventa un 0 (en un cierre sería engañoso).
+  if (i.totalVendido != null) {
+    filas.push({ label: `Total vendido (${Number(i.cantidadVentas ?? 0)})`, valor: montoCaja(i.totalVendido) });
+  }
+  sumarFilaCaja(filas, 'Fiado', i.fiado);
+  sumarFilaCaja(filas, 'Saldo a favor usado', i.saldoAFavorUsado);
+
+  const fuera = i.cobrosFueraDeCaja;
+  if (fuera && (Number(fuera.cantidad ?? 0) > 0 || Number(fuera.total ?? 0) !== 0)) {
+    filas.push({ label: `Cobros fuera de caja (${Number(fuera.cantidad ?? 0)})`, valor: montoCaja(fuera.total) });
+  }
+  const nc = i.notasCredito;
+  if (nc && Number(nc.cantidad ?? 0) > 0) {
+    filas.push({ label: `Notas de crédito (${Number(nc.cantidad)})`, valor: montoCaja(nc.total) });
+  }
+  const an = i.anulaciones;
+  if (an && Number(an.cantidad ?? 0) > 0) {
+    filas.push({ label: `Anulaciones (${Number(an.cantidad)})`, valor: montoCaja(an.total) });
+  }
+  return filas;
+}
+
+/** Título + subtítulos según el modo (ver tabla de reglas del handoff 3.4-C §2). */
+function tituloResumenCaja(d: ResumenCajaImpresion): { titulo: string; subtitulos: string[] } {
+  let titulo: string;
+  const subtitulos: string[] = [];
+
+  if (d.modo === 'parcial') {
+    titulo = 'RESUMEN PARCIAL — CAJA ABIERTA';
+    subtitulos.push(`Impreso ${d.impreso}`);
+  } else if (d.modo === 'cierre') {
+    titulo = 'CIERRE DE CAJA';
+    if (d.reimpresion) subtitulos.push(`REIMPRESIÓN — cierre ${d.reimpresion.numero} de ${d.reimpresion.total}`);
+  } else {
+    titulo = 'RESUMEN DE CAJA';
+    subtitulos.push('Cerrada antes del registro de cierres: sin arqueo');
+  }
+  if (d.resumen?.caja?.historica && !d.ciego) {
+    subtitulos.push('Caja anterior al nuevo cálculo: el total vendido sale del acumulador');
+  }
+  return { titulo, subtitulos };
+}
+
+/** Líneas "Caja / Cajero / Apertura / Cierre / Cerró" (las que no aplican no se incluyen). */
+function datosCabeceraCaja(d: ResumenCajaImpresion): { label: string; valor: string }[] {
+  const caja = d.resumen?.caja ?? {};
+  const lineas: { label: string; valor: string }[] = [
+    { label: 'Caja', valor: `#${caja.id ?? ''}` },
+    { label: 'Cajero', valor: String(caja.responsable ?? '—') },
+  ];
+  if (caja.apertura?.fecha) {
+    lineas.push({ label: 'Apertura', valor: `${fechaCajaCorta(caja.apertura.fecha)} ${String(caja.apertura.hora ?? '').slice(0, 5)}`.trim() });
+  }
+  if (d.modo === 'cierre' && d.cierre) {
+    lineas.push({ label: 'Cierre', valor: `${d.cierre.fecha} ${d.cierre.hora}`.trim() });
+    const quien = [d.cierre.usuario, d.cierre.puesto].filter(Boolean).join(' · ');
+    if (quien) lineas.push({ label: 'Cerró', valor: quien });
+  }
+  return lineas;
+}
+
+const LAYOUT_SIN_BORDES = {
+  hLineWidth: () => 0, vLineWidth: () => 0,
+  paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 1, paddingBottom: () => 1,
+};
+
+/** Tabla etiqueta-izquierda / monto-derecha, sin bordes. */
+function tablaFilasCaja(filas: FilaCaja[], tamano: number, tamanoNegrita: number): object {
+  return {
+    table: {
+      widths: ['*', 'auto'],
+      body: filas.map(f => [
+        { text: f.label, bold: !!f.negrita, fontSize: f.negrita ? tamanoNegrita : tamano },
+        { text: f.valor, bold: !!f.negrita, fontSize: f.negrita ? tamanoNegrita : tamano, alignment: 'right' },
+      ]),
+    },
+    layout: LAYOUT_SIN_BORDES,
+    margin: [0, 0, 0, 2],
+  };
+}
+
+/** Bloque: título de sección + tabla + notas. Vacío si no hay nada que mostrar. */
+function bloqueSeccionCaja(titulo: string, filas: FilaCaja[], notas: string[], tamano: number, tamanoNegrita: number): object[] {
+  if (!filas.length && !notas.length) return [];
+  return [
+    { text: titulo, bold: true, fontSize: tamano, margin: [0, 6, 0, 2] },
+    ...(filas.length ? [tablaFilasCaja(filas, tamano, tamanoNegrita)] : []),
+    ...notas.map(n => ({ text: n, italics: true, fontSize: tamano - 1, margin: [0, 1, 0, 1] })),
+  ];
+}
+
+/** Recuadro de firma, mismo patrón que buildObservaciones (widths ['*'], alto fijo). */
+function recuadroFirmaCaja(titulo: string, tamano: number): object {
+  return {
+    stack: [
+      { text: titulo, fontSize: tamano, bold: true, margin: [0, 6, 0, 2] },
+      {
+        table: { widths: ['*'], heights: [34], body: [['']] },
+        layout: { hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#000000', vLineColor: () => '#000000' },
+      },
+    ],
+  };
+}
+
+function bloqueObservacionCaja(d: ResumenCajaImpresion, tamano: number): object[] {
+  const obs = d.cierre?.observacion?.trim();
+  if (!obs) return [];
+  return [
+    { text: 'OBSERVACIÓN', bold: true, fontSize: tamano, margin: [0, 6, 0, 2] },
+    { text: obs, fontSize: tamano },
+  ];
+}
+
+function buildDocResumenCaja(comprobante: ComprobanteData, d: ResumenCajaImpresion): object {
+  const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
+  return comprobante.papel === 'A4'
+    ? buildDocResumenCajaA4(comprobante, d, configuracionPapel)
+    : buildDocResumenCajaTicket(comprobante, d, configuracionPapel);
+}
+
+/** 58mm / 80mm: una columna, alto 'auto' (un solo rollo, un solo corte). Sin detalle de anulaciones ni cobros. */
+function buildDocResumenCajaTicket(comprobante: ComprobanteData, d: ResumenCajaImpresion, cfg: ConfiguracionPapel): object {
+  const normal  = cfg.fontSizes.normal;
+  const grande  = cfg.fontSizes.total;
+  const { titulo, subtitulos } = tituloResumenCaja(d);
+
+  // buildEncabezado devuelve, en térmicas, un array cuyo último elemento es la línea de fecha/hora:
+  // se descarta porque el pie ya dice "Impreso ..." (no repetir la hora en un ticket angosto).
+  const encabezado = (buildEncabezado(comprobante, cfg) as unknown as object[]).slice(0, -1);
+
+  const cajon = seccionCajonCaja(d);
+  const fondo = seccionFondoCaja(d);
+  const medios = seccionMediosCaja(d, false);
+  const info = seccionInfoCaja(d);
+
+  return {
+    pageSize:    cfg.pageSize,
+    pageMargins: [comprobante.margenIzq, 4, comprobante.margenDer, 4],
+    content: [
+      ...encabezado,
+      buildSeparador(comprobante, cfg),
+      { text: titulo, bold: true, alignment: 'center', fontSize: cfg.fontSizes.titulo - 2, margin: [0, 2, 0, 2] },
+      ...subtitulos.map(s => ({ text: s, alignment: 'center', fontSize: normal - 1, margin: [0, 0, 0, 1] })),
+      buildSeparador(comprobante, cfg),
+      tablaFilasCaja(datosCabeceraCaja(d).map(l => ({ label: l.label, valor: l.valor })), normal, normal),
+      ...bloqueSeccionCaja('CAJÓN (EFECTIVO)', cajon.filas, cajon.notas, normal, grande),
+      ...(fondo ? bloqueSeccionCaja('FONDO PROVEEDORES', fondo.filas, fondo.notas, normal, normal) : []),
+      ...bloqueSeccionCaja('OTROS MEDIOS', medios, [], normal, normal),
+      ...bloqueSeccionCaja('INFORMACIÓN', info, [], normal, normal),
+      ...bloqueObservacionCaja(d, normal),
+      ...(d.modo === 'cierre' ? [recuadroFirmaCaja('Cajero', normal), recuadroFirmaCaja('Encargado', normal)] : []),
+      { text: `Impreso ${d.impreso} · EasySales`, alignment: 'center', fontSize: normal - 1, margin: [0, 8, 0, 0] },
+    ],
+    defaultStyle: { font: 'Roboto' },
+  };
+}
+
+/** A4: más aire, cajón y fondo en dos columnas, y tablas de anulaciones y cobros fuera de caja. */
+function buildDocResumenCajaA4(comprobante: ComprobanteData, d: ResumenCajaImpresion, cfg: ConfiguracionPapel): object {
+  const t = 10;       // tamaño base A4 para filas (el 12 de cfg.normal queda grande para tablas de montos)
+  const { titulo, subtitulos } = tituloResumenCaja(d);
+
+  const cajon = seccionCajonCaja(d);
+  const fondo = seccionFondoCaja(d);
+  const medios = seccionMediosCaja(d, true);
+  const info = seccionInfoCaja(d);
+
+  const datos = datosCabeceraCaja(d);
+  const mitad = Math.ceil(datos.length / 2);
+  const columnaDatos = (ls: { label: string; valor: string }[]) => ({ width: '*', stack: ls.map(l => labelValor(l.label, l.valor)) });
+
+  const anulaciones: any[] = d.ciego ? [] : (d.resumen?.info?.anulaciones?.items ?? []);
+  const cobrosFuera: any[] = d.ciego ? [] : (d.resumen?.info?.cobrosFueraDeCaja?.items ?? []);
+  const encabezadoTabla = (...textos: string[]) => textos.map(x => ({ text: x, bold: true, fontSize: t, fillColor: '#eeeeee' }));
+
+  const bloqueTabla = (tituloTabla: string, widths: any[], header: object[], filas: object[][]): object[] => filas.length ? [
+    { text: tituloTabla, bold: true, fontSize: t, margin: [0, 10, 0, 2] },
+    { table: { headerRows: 1, dontBreakRows: true, widths, body: [header, ...filas] }, layout: layoutLineas() },
+  ] : [];
+
+  return {
+    pageSize:    cfg.pageSize,
+    pageMargins: [10, 10, 10, 10],
+    content: [
+      buildEncabezado(comprobante, cfg, false, { titulo }),
+      ...subtitulos.map(s => ({ text: s, alignment: 'center', bold: true, fontSize: t, margin: [0, 4, 0, 0] })),
+      { columns: [columnaDatos(datos.slice(0, mitad)), columnaDatos(datos.slice(mitad))], margin: [0, 8, 0, 0] },
+      {
+        columns: [
+          { width: '*', stack: bloqueSeccionCaja('CAJÓN (EFECTIVO)', cajon.filas, cajon.notas, t, 12) },
+          { width: '*', stack: fondo ? bloqueSeccionCaja('FONDO PROVEEDORES', fondo.filas, fondo.notas, t, t) : [] },
+        ],
+        columnGap: 24,
+      },
+      ...bloqueSeccionCaja('OTROS MEDIOS', medios, [], t, t),
+      ...bloqueSeccionCaja('INFORMACIÓN', info, [], t, t),
+      ...bloqueTabla('ANULACIONES', [50, 45, 90, '*'], encabezadoTabla('Venta #', 'Hora', 'Total', 'Usuario'),
+        anulaciones.map(a => [
+          { text: `#${a.idVenta}`, fontSize: t }, { text: a.hora ?? '', fontSize: t },
+          { text: montoCaja(a.total), fontSize: t, alignment: 'right' }, { text: a.usuario ?? '', fontSize: t },
+        ])),
+      ...bloqueTabla('COBROS FUERA DE CAJA', [45, '*', 90, 90], encabezadoTabla('Hora', 'Cliente', 'Medio', 'Monto'),
+        cobrosFuera.map(c => [
+          { text: c.hora ? String(c.hora).slice(0, 5) : '', fontSize: t }, { text: c.cliente ?? '', fontSize: t },
+          { text: c.metodo ?? '', fontSize: t }, { text: montoCaja(c.monto), fontSize: t, alignment: 'right' },
+        ])),
+      ...bloqueObservacionCaja(d, t),
+      ...(d.modo === 'cierre'
+        ? [{ columns: [recuadroFirmaCaja('Cajero', t), recuadroFirmaCaja('Encargado', t)], columnGap: 24, margin: [0, 10, 0, 0] }]
+        : []),
+      { text: `Impreso ${d.impreso} · EasySales`, alignment: 'center', fontSize: t - 1, margin: [0, 12, 0, 0] },
+    ],
+    defaultStyle: { font: 'Roboto' },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
