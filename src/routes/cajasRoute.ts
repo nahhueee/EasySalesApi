@@ -56,6 +56,20 @@ router.get('/:id/resumen', async (req:Request, res:Response, next) => {
         next(new AppError(CodigoError.INTERNAL_ERROR, `Error al calcular el resumen de la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.resumen' }, error));
     }
 });
+
+// Cierres de una caja (Fase 3.4-C): uno por cada vez que se cerró (una caja reabierta tiene varios).
+// En arqueo ciego esperado, diferencia y fondo salen en null (ver CierreCajaServ.ObtenerCierres).
+router.get('/:id/cierres', async (req:Request, res:Response, next) => {
+    try{
+        const { usuarioId } = datosAuditoria(req);
+        res.json(await CierreCajaServ.ObtenerCierres(Number(req.params.id), usuarioId));
+
+    } catch(error:any){
+        if (error instanceof AppError) return next(error);
+        next(new AppError(CodigoError.INTERNAL_ERROR, `Error al obtener los cierres de la caja nro ${req.params.id}.`, 500, { modulo: 'cajasRoute.cierres' }, error));
+    }
+});
+
 //#endregion
 
 //#region ABM

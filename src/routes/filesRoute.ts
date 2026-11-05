@@ -11,6 +11,10 @@ import { LeerPrimerasFilas, ProcesarListaPrecios } from '../services/importacion
 import { ParametrosRepo, normalizarParametrosImpresion } from '../data/parametrosRepository';
 import { ProductosRepo } from '../data/productosRepository';
 import { ComprobanteService } from '../services/comprobanteService';
+import { CierreCajaServ } from '../services/cierreCajaService';
+import { AppError } from '../logger/AppError';
+import { CodigoError } from '../logger/CodigosError';
+import { datosAuditoria } from '../utils/auditoria';
 const ComprobanteServ = new ComprobanteService();
 
 //#region IMPRESION DE PDFS
@@ -149,6 +153,95 @@ router.post('/ver-comprobante-nota-credito', async (req: Request, res: Response)
     res.status(500).send(msg);
   }
 });
+
+// Resumen de caja (Fase 3.4-C). Body: { idCaja, idCierre?, papel? }. Lo que se imprime lo decide
+// CierreCajaServ.ArmarImpresion (foto del cierre / parcial / arqueo ciego); acá solo se valida y se entrega.
+// Errores con AppError ({code, message}), como cajasRoute (no el res.status(500).send de las rutas viejas).
+const PAPELES_RESUMEN = ['58mm', '80mm', 'A4'];
+
+function leerPedidoResumenCaja(req: Request): { idCaja: number; idCierre: number | null; papel: string | undefined } {
+  const { idCaja, idCierre, papel } = req.body ?? {};
+  const modulo = 'filesRoute.resumen-caja';
+
+  const caja = Number(idCaja);
+  if (!Number.isInteger(caja) || caja <= 0) {
+    throw new AppError(CodigoError.VALIDACION, 'El número de caja no es válido.', 400, { modulo, idCaja });
+  }
+  let cierre: number | null = null;
+  if (idCierre !== undefined && idCierre !== null && idCierre !== '') {
+    cierre = Number(idCierre);
+    if (!Number.isInteger(cierre) || cierre <= 0) {
+      throw new AppError(CodigoError.VALIDACION, 'El número de cierre no es válido.', 400, { modulo, idCierre });
+    }
+  }
+  if (papel !== undefined && papel !== null && !PAPELES_RESUMEN.includes(papel)) {
+    throw new AppError(CodigoError.VALIDACION, `Papel no válido. Usá ${PAPELES_RESUMEN.join(', ')}.`, 400, { modulo, papel });
+  }
+  return { idCaja: caja, idCierre: cierre, papel: papel ?? undefined };
+}
+
+// Papel: el pedido, si no el de los parámetros, si no 80mm.
+async function generarResumenCajaPDF(req: Request): Promise<{ pdf: Buffer; parametros: any }> {
+  const { idCaja, idCierre, papel } = leerPedidoResumenCaja(req);
+  const { usuarioId } = datosAuditoria(req);
+
+  const parametros = await ParametrosRepo.ObtenerParametrosImpresion();
+  if (!parametros) {
+    throw new AppError(CodigoError.VALIDACION, 'Todavía no hay parámetros de impresión configurados.', 400,
+      { modulo: 'filesRoute.resumen-caja' });
+  }
+  const datos = await CierreCajaServ.ArmarImpresion(idCaja, idCierre, usuarioId);
+  const pdf = await ComprobanteServ.generarResumenCajaPDF(datos, parametros, papel ?? parametros.papel ?? '80mm');
+  return { pdf, parametros };
+}
+
+router.post('/imprimir-resumen-caja', async (req: Request, res: Response, next) => {
+  let tempPath: string | null = null;
+  try {
+    const { pdf, parametros } = await generarResumenCajaPDF(req);
+
+    const carpeta = path.join(__dirname, '..', 'temp');
+    fs.mkdirSync(carpeta, { recursive: true });
+    tempPath = path.join(carpeta, `impresion_${uuid()}.pdf`);
+    fs.writeFileSync(tempPath, pdf);
+
+    try {
+      await printer.print(tempPath, {
+        printer: parametros.impresora,
+        orientation: 'portrait',
+        scale: 'noscale'
+      });
+    } catch (errorImpresion: any) {
+      logger.error(`Resumen de caja: falló la impresión en "${parametros.impresora}". ${errorImpresion?.message ?? errorImpresion}`);
+      throw new AppError(CodigoError.INTERNAL_ERROR,
+        `No se pudo imprimir en la impresora configurada (${parametros.impresora ?? 'sin nombre'}). Revisá que esté encendida y conectada.`,
+        500, { modulo: 'filesRoute.imprimir-resumen-caja' }, errorImpresion);
+    }
+
+    res.status(200).json('OK');
+
+  } catch (error: any) {
+    if (error instanceof AppError) return next(error);
+    next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al generar el resumen de caja.', 500, { modulo: 'filesRoute.imprimir-resumen-caja' }, error));
+  } finally {
+    if (tempPath) { try { fs.unlinkSync(tempPath); } catch { /* ya no está: nada que borrar */ } }
+  }
+});
+
+router.post('/ver-resumen-caja', async (req: Request, res: Response, next) => {
+  try {
+    const { pdf } = await generarResumenCajaPDF(req);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename=resumen-caja.pdf');
+    res.send(pdf);
+
+  } catch (error: any) {
+    if (error instanceof AppError) return next(error);
+    next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al generar el resumen de caja.', 500, { modulo: 'filesRoute.ver-resumen-caja' }, error));
+  }
+});
+
 //#endregion
 
 //#region IMPORTACION DE EXCEL

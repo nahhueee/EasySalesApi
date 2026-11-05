@@ -37,3 +37,4 @@ vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 - [correccion] se eliminan las rutas sin uso de pago manual y reversión de pago de una venta (borraban el efectivo original de ventas mixtas)
 - [correccion] al cobrar una venta que ya tenía entrega parcial, el detalle guardaba el total de la venta y no lo realmente aplicado; revertir ese cobro dejaba la venta sin su entrega previa
 - [mejora] La configuración de Preferencias (permisos y módulos) ahora es la misma en todas las computadoras del comercio. El tema y el modo oscuro siguen siendo por computadora.
+- [mejora] impresión del resumen de caja (ticket 58/80mm y A4), reimpresión por cierre y GET /cajas/:id/cierres (3.4-C)
