@@ -71,3 +71,19 @@ _(sin entradas registradas para esta versión)_
 **Correcciones**
 - fix lost update del stock: el modal de producto y "agregar cantidad" ya no pisan la cantidad con un valor viejo (Modificar no escribe cantidad si no se tocó; aniadir recibe delta)
 
+## 2.9.1 — 2026-11-05
+
+**Mejoras**
+- caja: el cierre guarda un resumen completo (efectivo esperado del cajón, fondo de proveedores separado, otros medios, NC y anulaciones) y admite arqueo opcional con diferencia
+- caja cerrada inmutable: ventas, anulaciones, movimientos, cobros y pagos a proveedor se rechazan sobre una caja cerrada; reabrir pide ADMINISTRADOR/ENCARGADO y motivo
+- el cobro de un fiado ya no se cuenta en la caja de la venta original ni en las estadísticas del día (pagos de venta vs cobros marcados con origen)
+- hora de la venta y de los movimientos de cuenta corriente tomada del servidor MySQL, no del reloj de la PC
+- La configuración de Preferencias (permisos y módulos) ahora es la misma en todas las computadoras del comercio. El tema y el modo oscuro siguen siendo por computadora.
+- impresión del resumen de caja (ticket 58/80mm y A4), reimpresión por cierre y GET /cajas/:id/cierres (3.4-C)
+
+**Correcciones**
+- posible deadlock entre una venta a cuenta corriente y un cobro simultáneo del mismo cliente (orden de locks caja → cliente → productos)
+- dos cobros simultáneos al mismo cliente podían imputarse dos veces a la misma venta
+- se eliminan las rutas sin uso de pago manual y reversión de pago de una venta (borraban el efectivo original de ventas mixtas)
+- al cobrar una venta que ya tenía entrega parcial, el detalle guardaba el total de la venta y no lo realmente aplicado; revertir ese cobro dejaba la venta sin su entrega previa
+
