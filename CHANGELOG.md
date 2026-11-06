@@ -87,3 +87,8 @@ _(sin entradas registradas para esta versión)_
 - se eliminan las rutas sin uso de pago manual y reversión de pago de una venta (borraban el efectivo original de ventas mixtas)
 - al cobrar una venta que ya tenía entrega parcial, el detalle guardaba el total de la venta y no lo realmente aplicado; revertir ese cobro dejaba la venta sin su entrega previa
 
+## 2.9.2 — 2026-11-06
+
+**Correcciones**
+- fix editar producto / añadir stock fallaba en bases latin1: la descripcion del evento de stock llevaba el caracter flecha (no entra en latin1), ahora texto ASCII
+
