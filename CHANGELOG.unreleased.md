@@ -28,3 +28,4 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
+- [correccion] fix editar producto / añadir stock fallaba en bases latin1: la descripcion del evento de stock llevaba el caracter flecha (no entra en latin1), ahora texto ASCII

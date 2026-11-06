@@ -668,7 +668,7 @@ class ProductosRepository{
                             entidadId: Number(data.id),
                             datosAntes: { cantidad: actual },
                             datosDespues: { cantidad: mov.cantidadResultante },
-                            descripcion: `Ajuste de stock de ${data.nombre.toUpperCase()}: ${actual} → ${mov.cantidadResultante}`,
+                            descripcion: `Ajuste de stock de ${data.nombre.toUpperCase()}: ${actual} a ${mov.cantidadResultante}`,
                             auditoria,
                         });
                     }
@@ -814,7 +814,7 @@ class ProductosRepository{
                         entidadId: Number(data.idProducto),
                         datosAntes: { cantidad: actual },
                         datosDespues: { cantidad: mov.cantidadResultante, delta },
-                        descripcion: `Ingreso de stock de ${rows[0].nombre}: ${delta > 0 ? '+' : ''}${delta} (${actual} → ${mov.cantidadResultante})`,
+                        descripcion: `Ingreso de stock de ${rows[0].nombre}: ${delta > 0 ? '+' : ''}${delta} (${actual} a ${mov.cantidadResultante})`,
                         auditoria,
                     });
                 }
