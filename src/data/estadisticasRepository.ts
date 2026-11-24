@@ -3,6 +3,7 @@ import db from '../db';
 import { DatoVentaCaja } from '../models/DatoVentasCaja';
 import { FiltroEstadistica } from '../models/estadisticas/FiltroEstadistica';
 import { TotalAcumulado } from '../models/estadisticas/TotalAcumulado';
+import { MEDIO_SENIA } from '../utils/mediosPago';
 
 class EstadisticasRepository{
 
@@ -99,12 +100,14 @@ class EstadisticasRepository{
                                     " WHERE v.fechaBaja IS NULL " +
                                     " AND c.fechaBaja IS NULL " +
                                     " AND COALESCE(vpd.origen, 'venta') = 'venta' " +
+                                    // La seña ya cobrada no es un medio de esta venta: no la vuelve "COMBINADO".
+                                    " AND tp.nombre <> ? " +
                                     adicional +
                                     " GROUP BY v.id " +
                                     " ) t;";
 
 
-            const [resultCantidad] = await connection.query(consultaCantidad, paramsAdicional);
+            const [resultCantidad] = await connection.query(consultaCantidad, [MEDIO_SENIA, ...paramsAdicional]);
             //#endregion
 
            return {

@@ -728,6 +728,8 @@ class ProductosRepository{
                     UNION ALL
                     SELECT 1 FROM presupuestos_detalle WHERE idProducto = ?
                     UNION ALL
+                    SELECT 1 FROM pedidos_detalle WHERE idProducto = ?
+                    UNION ALL
                     SELECT 1 FROM notas_credito_detalle WHERE idProducto = ?
                     UNION ALL
                     SELECT 1 FROM importaciones_costos_detalle WHERE idProducto = ?
@@ -736,7 +738,7 @@ class ProductosRepository{
                     -- movimiento (venta, anulación, NC, ajuste, ingreso) es historia que se preserva.
                     SELECT 1 FROM productos_movimientos WHERE idProducto = ? AND motivo NOT IN ('ALTA', 'SALDO_INICIAL')
                 ) AS tieneReferencias`,
-                [id, id, id, id, id, id]
+                [id, id, id, id, id, id, id]
             );
 
             if (refs[0].tieneReferencias) {

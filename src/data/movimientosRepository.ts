@@ -75,9 +75,11 @@ class MovimientosRepository{
             const origenMov = data.origenMov
                 ?? ((data.idEntrega != null || data.idVentaPagoDetalle != null) ? 'cobro'
                   : data.idProveedorMovimiento != null ? 'proveedor'
+                  : data.idPedidoPago != null ? 'pedido'
                   : 'manual');
-            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle,idProveedorMovimiento,origen) " +
-                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?) ";
+            // idPedidoPago: seña de un pedido (PR B de pedidos). Se anula desde el pedido, no desde el ABM manual.
+            const consulta = " INSERT INTO cajas_movimientos(idCaja,tipoMovimiento,monto,descripcion,idEntrega,idVentaPagoDetalle,idProveedorMovimiento,idPedidoPago,origen) " +
+                             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) ";
             const parametros = [
                 data.idCaja,
                 data.tipoMovimiento.toUpperCase(),
@@ -86,6 +88,7 @@ class MovimientosRepository{
                 data.idEntrega ?? null,
                 data.idVentaPagoDetalle ?? null,
                 data.idProveedorMovimiento ?? null,
+                data.idPedidoPago ?? null,
                 origenMov
             ];
             const [resultado] = await conn.query(consulta, parametros) as [ResultSetHeader, any];
@@ -101,6 +104,7 @@ class MovimientosRepository{
             const origen = data.origen
                 ?? ((data.idEntrega != null || data.idVentaPagoDetalle != null) ? 'cobro_fiado'
                   : data.idProveedorMovimiento != null ? 'proveedor'
+                  : data.idPedidoPago != null ? 'pedido'
                   : 'manual');
             await EventosRepo.Registrar(conn, {
                 accion: 'CAJA_MOVIMIENTO_CREAR',
@@ -141,7 +145,7 @@ class MovimientosRepository{
             // contra la base, no contra lo que mande el front, porque el front puede tener bugs
             // y la base no puede quedar inconsistente (handoff_proveedores_fase2.md, PR6).
             const [movRows] = await conn.query(
-                "SELECT idCaja, tipoMovimiento, monto, idProveedorMovimiento FROM cajas_movimientos WHERE id = ?", [data.id]
+                "SELECT idCaja, tipoMovimiento, monto, idProveedorMovimiento, idPedidoPago FROM cajas_movimientos WHERE id = ?", [data.id]
             ) as [any[], any];
 
             // Caja inmutable (Fase 3.4-A).
@@ -154,6 +158,10 @@ class MovimientosRepository{
             if (movRows[0]?.idProveedorMovimiento != null) {
                 if(!conexionExterna) await conn.rollback();
                 return "Este movimiento corresponde a un pago a proveedor. Anulalo desde la cuenta del proveedor.";
+            }
+            if (movRows[0]?.idPedidoPago != null) {
+                if(!conexionExterna) await conn.rollback();
+                return "Este movimiento corresponde a una seña de pedido. Anulala desde el pedido.";
             }
 
             //Eliminamos el movimiento
@@ -211,7 +219,7 @@ class MovimientosRepository{
             // ya finalizada.
             const [movRows] = await conn.query(
                 `SELECT cm.id, cm.idCaja, cm.tipoMovimiento, cm.monto, cm.descripcion,
-                        cm.idProveedorMovimiento, cm.idMovimientoCompensado, cm.origen, c.finalizada
+                        cm.idProveedorMovimiento, cm.idPedidoPago, cm.idMovimientoCompensado, cm.origen, c.finalizada
                  FROM cajas_movimientos cm
                  JOIN cajas c ON c.id = cm.idCaja
                  WHERE cm.id = ?`,
@@ -227,6 +235,10 @@ class MovimientosRepository{
             if (movimiento.idProveedorMovimiento != null) {
                 if(!conexionExterna) await conn.rollback();
                 return "Este movimiento corresponde a un pago a proveedor. Anulalo desde la cuenta del proveedor.";
+            }
+            if (movimiento.idPedidoPago != null) {
+                if(!conexionExterna) await conn.rollback();
+                return "Este movimiento corresponde a una seña de pedido. Anulala desde el pedido.";
             }
 
             // Caja inmutable (Fase 3.4-A): con lock (el chequeo anterior leía `finalizada` sin bloquear).

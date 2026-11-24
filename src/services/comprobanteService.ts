@@ -5,6 +5,8 @@ import { FacturacionServ } from "./facturacionService";
 import { Venta } from "../models/Venta";
 import { Presupuesto } from "../models/Presupuesto";
 import { DetallePresupuesto } from "../models/DetallePresupuesto";
+import { Pedido } from "../models/Pedido";
+import { DetallePedido } from "../models/DetallePedido";
 import logger from "../logger/loggerGeneral";
 import { rutaLogo } from "./logoService";
 import { ventaMuestra, presupuestoMuestra, detallesPresupuestoMuestra, TOTAL_MUESTRA } from "./comprobanteMuestra";
@@ -231,6 +233,19 @@ interface PresupuestoComprobante {
   validezHasta: string;
   cliente:      string | undefined;
   total:        number;
+}
+
+/**
+ * Datos de pedido normalizados para buildDocPedido().
+ * Un pedido no es una factura: el comprobante lleva la leyenda "no válido como factura".
+ */
+interface PedidoComprobante {
+  numero:               number;
+  cliente:              string | undefined;
+  telefono:             string | undefined;
+  fechaEntregaEstimada: string | undefined;
+  observaciones:        string | undefined;
+  total:                number;
 }
 
 /**
@@ -992,6 +1007,59 @@ function buildDocPresupuesto(comprobante: ComprobanteData, presupuesto: Presupue
 }
 
 /**
+ * Documento de pedido: encabezado del local + datos del pedido (número, cliente o contacto, entrega estimada)
+ * + tabla de productos + total + observaciones + leyenda "no válido como factura".
+ * Mismo esqueleto que buildDocPresupuesto(): un pedido no tiene pago ni factura.
+ */
+function buildDocPedido(comprobante: ComprobanteData, pedido: PedidoComprobante): object {
+  const configuracionPapel = obtenerConfiguracionPapel(comprobante.papel);
+  const alineacion = comprobante.papel === 'A4' ? 'left' : 'center';
+  const fuente = configuracionPapel.fontSizes.normal;
+
+  return {
+    pageSize: configuracionPapel.pageSize,
+    pageMargins: comprobante.papel === 'A4'
+      ? [comprobante.margenIzq || 15, 15, comprobante.margenDer || 15, 15]
+      : [comprobante.margenIzq, 4, comprobante.margenDer, 4],
+
+    content: [
+      buildEncabezado(comprobante, configuracionPapel, false, { titulo: 'PEDIDO', numero: pedido.numero }),
+      ...(comprobante.papel === 'A4' ? [] : [buildSeparador(comprobante, configuracionPapel)]),
+      // En A4 el número ya va en el encabezado
+      comprobante.papel === 'A4' ? null : {
+        text:      `Pedido N° ${pedido.numero}`,
+        alignment: alineacion,
+        bold:      true,
+        fontSize:  fuente,
+        margin:    [0, 2, 0, 0],
+      },
+      pedido.cliente
+        ? { text: `Cliente: ${pedido.cliente}`, fontSize: fuente, margin: [0, 2, 0, 0] }
+        : null,
+      pedido.telefono
+        ? { text: `Teléfono: ${pedido.telefono}`, fontSize: fuente }
+        : null,
+      pedido.fechaEntregaEstimada
+        ? { text: `Entrega estimada: ${pedido.fechaEntregaEstimada}`, fontSize: fuente, margin: [0, 0, 0, 2] }
+        : null,
+      buildTabla(comprobante, configuracionPapel),
+      filaAlineadaDerecha(`TOTAL: $${formatearMoneda(pedido.total, configuracionPapel)}`, configuracionPapel, 'total'),
+      pedido.observaciones
+        ? { text: `Observaciones: ${pedido.observaciones}`, fontSize: fuente, margin: [0, 4, 0, 0] }
+        : null,
+      ...buildMensajeExtra(comprobante, configuracionPapel),
+      {
+        text:      'Comprobante de pedido. No válido como factura.',
+        italics:   true,
+        alignment: alineacion,
+        fontSize:  Math.max(configuracionPapel.fontSizes.normal - 2, 6),
+        margin:    [0, 6, 0, 0],
+      },
+    ].filter(Boolean),
+  };
+}
+
+/**
  * Dispatcher de factura: delega a A4 o a la versión térmica según el papel configurado.
  * El layout A4 es sustancialmente diferente (3 columnas, tabla receptor, pie con QR+CAE).
  */
@@ -1519,6 +1587,44 @@ export class ComprobanteService {
   }
 
   /**
+   * Genera el PDF de un pedido (comprobante no fiscal). Mismo flujo que generarPresupuestoPDF.
+   */
+  async generarPedidoPDF(pedido: Pedido, detalles: DetallePedido[], parametros: ParametrosComprobante): Promise<Buffer> {
+    return this.conRespaldoSinLogo(parametros, p => this.renderPedido(pedido, detalles, p));
+  }
+
+  private async renderPedido(pedido: Pedido, detalles: DetallePedido[], parametros: ParametrosComprobante): Promise<Buffer> {
+    const configuracionPapel = obtenerConfiguracionPapel(parametros.papel);
+    const fecha = new Date(pedido.fecha!);
+    const esCF = Number(pedido.idCliente) === 1;
+
+    const comprobante: ComprobanteData = {
+      papel:            parametros.papel,
+      margenIzq:        parametros.margenIzq,
+      margenDer:        parametros.margenDer,
+      nombreLocal:      parametros.nomLocal,
+      descripcionLocal: parametros.desLocal,
+      ...resolverPersonalizacion(parametros),
+      fechaVenta:       fecha.toLocaleDateString('es-ES'),
+      horaVenta:        '',
+      // buildFilasDetallePresupuesto acepta el mismo shape de detalle (nomProd, cantidad, precio, total)
+      filasTabla:       buildFilasDetallePresupuesto(detalles as any, configuracionPapel),
+    };
+
+    // Consumidor final: el pedido lleva su contacto libre; cliente registrado: el nombre y teléfono salen del cliente.
+    const datos: PedidoComprobante = {
+      numero:               pedido.id!,
+      cliente:              esCF ? (pedido.contactoNombre || undefined) : pedido.cliente?.nombre,
+      telefono:             esCF ? (pedido.contactoTelefono || undefined) : (pedido.cliente?.telefono || undefined),
+      fechaEntregaEstimada: pedido.fechaEntregaEstimada ? new Date(pedido.fechaEntregaEstimada).toLocaleDateString('es-ES') : undefined,
+      observaciones:        pedido.observaciones || undefined,
+      total:                pedido.total ?? 0,
+    };
+
+    return generarBufferPDF(buildDocPedido(comprobante, datos));
+  }
+
+  /**
    * Normaliza la venta + parámetros en un ComprobanteData listo para los builders.
    * También pre-construye las filas de la tabla mientras el cfg está disponible.
    */
@@ -1745,6 +1851,7 @@ function seccionCajonCaja(d: ResumenCajaImpresion): { filas: FilaCaja[]; notas: 
     sumarFilaCaja(filas, 'Cambio inicial', c.cambioInicial);
     sumarFilaCaja(filas, 'Ventas en efectivo', c.ventasEfectivo);
     sumarFilaCaja(filas, 'Cobros imputados', c.cobrosImputados);
+    sumarFilaCaja(filas, 'Señas de pedidos', c.senias);   // snapshots viejos no la traen
     sumarFilaCaja(filas, 'Ingresos', c.ingresos);
     sumarFilaCaja(filas, 'Egresos', c.egresos, true);
     sumarFilaCaja(filas, 'Pagos a proveedores', c.pagosProveedorSinFondo, true);

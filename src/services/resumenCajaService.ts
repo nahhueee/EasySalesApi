@@ -27,6 +27,7 @@ const VPD_VENTA = `COALESCE(vpd.origen, 'venta') = 'venta'`;
 const MOV_ORIGEN = `COALESCE(cm.origen, CASE
         WHEN cm.idEntrega IS NOT NULL OR cm.idVentaPagoDetalle IS NOT NULL THEN 'cobro'
         WHEN cm.idProveedorMovimiento IS NOT NULL THEN 'proveedor'
+        WHEN cm.idPedidoPago IS NOT NULL THEN 'pedido'
         ELSE 'manual' END)`;
 
 function r2(n: any): number {
@@ -131,6 +132,8 @@ class ResumenCajaService {
             const cobrosImputados = r2(mov('cobro', 'ENTRADA') - mov('cobro', 'SALIDA'));
             const ingresos = r2(mov('manual', 'ENTRADA'));
             const egresos = r2(mov('manual', 'SALIDA'));
+            // Señas de pedidos cobradas en efectivo, netas de anulaciones y devoluciones (SALIDA).
+            const senias = r2(mov('pedido', 'ENTRADA') - mov('pedido', 'SALIDA'));
             // Pagado a proveedores, neto de anulaciones (que entran como ENTRADA compensatoria).
             const proveedoresPagado = r2(mov('proveedor', 'SALIDA') - mov('proveedor', 'ENTRADA'));
             //#endregion
@@ -171,7 +174,7 @@ class ResumenCajaService {
             //#endregion
 
             const cambioInicial = r2(Number(caja.inicial ?? 0) - (fondoAsignado ?? 0));
-            const esperado = r2(cambioInicial + ventasEfectivo + cobrosImputados + ingresos - egresos
+            const esperado = r2(cambioInicial + ventasEfectivo + cobrosImputados + senias + ingresos - egresos
                                 - pagosProveedorSinFondo - excedenteProveedores);
 
             //#region Info
@@ -224,6 +227,7 @@ class ResumenCajaService {
                     cambioInicial,
                     ventasEfectivo,
                     cobrosImputados,
+                    senias,
                     ingresos,
                     egresos,
                     pagosProveedorSinFondo,

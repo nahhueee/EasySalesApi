@@ -30,6 +30,7 @@ export const CLAVES_COMERCIO: Readonly<Record<string, boolean>> = {
     iva: false,
     listasPrecios: false,
     presupuestos: false,
+    pedidos: false,
     vencimientos: false,
     precioEditableVenta: false,
     edicionResultadoUnico: false,

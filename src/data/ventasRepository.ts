@@ -11,6 +11,7 @@ import { ObjTicketFactura } from '../models/ObjTicketFactura';
 import { ParametrosRepo } from './parametrosRepository';
 import { EventosRepo } from './eventosRepository';
 import { StockRepo } from './stockRepository';
+import { PedidosRepo } from './pedidosRepository';
 import { Auditoria } from '../models/Evento';
 import { auditoriaDesde } from '../utils/auditoria';
 import { CuentaCorrienteRepo } from './cuentaCorrienteRepository';
@@ -236,6 +237,21 @@ class VentasRepository{
                 }
             }
 
+            // Si la venta es la entrega de un pedido, bloquearlo y validar que siga activo (pendiente / en proceso /
+            // listo). Orden de locks: caja -> presupuesto/pedido -> cliente -> productos. El FOR UPDATE evita la
+            // doble entrega concurrente: la segunda venta espera, ve 'entregado' y falla.
+            let pedidoAEntregar: any = null;
+            if (venta.idPedido) {
+                if (venta.idPresupuesto) {
+                    throw new AppError(CodigoError.VALIDACION, 'Una venta no puede provenir de un pedido y de un presupuesto a la vez.',
+                        400, { modulo: 'VentasRepo.Agregar' });
+                }
+                pedidoAEntregar = await PedidosRepo.BloquearParaEntrega(connection, venta.idPedido);
+            }
+            // Seña: el monto aplicado sale de la base, bajo el lock del pedido (no del front). También rechaza el
+            // medio SEÑA en ventas que no vienen de un pedido.
+            await PedidosRepo.ValidarSeniaEnVenta(connection, pedidoAEntregar, venta);
+
             //Insertamos la venta. venta.id se asigna acá (insertId de AUTO_INCREMENT) y
             //se usa de acá en adelante para detalles, factura y cuenta corriente — no mover
             //ningún uso de venta.id por encima de esta línea.
@@ -348,6 +364,11 @@ class VentasRepository{
                      WHERE id = ?`,
                     [venta.id, venta.idPresupuesto]
                 );
+            }
+
+            // Si la venta es la entrega de un pedido: pasa a 'entregado' en la misma transacción.
+            if (pedidoAEntregar) {
+                await PedidosRepo.MarcarEntregado(connection, pedidoAEntregar, venta.id, auditoriaDesde(usuarioId, puestoId));
             }
 
             // Auditoría (Fase 3.2-B): dentro de la transacción, con su misma conexión. Se registra
@@ -516,6 +537,10 @@ class VentasRepository{
 
             //Damos de baja la venta
             await connection.query("UPDATE ventas SET fechaBaja = NOW(), obsBaja = ? WHERE id = ?", [obs, venta.id]);
+
+            // Si esta venta era la entrega de un pedido, el pedido vuelve a 'listo' (orden de locks: caja -> pedido -> cliente).
+            // La nota de crédito NO pasa por acá: no toca el pedido.
+            await PedidosRepo.RevertirEntregaPorVenta(connection, Number(venta.id), auditoriaDesde(usuarioId, puestoId));
 
             //Actualizamos el total de ventas caja con los valores persistidos (no los del body)
             await connection.query("UPDATE cajas SET ventas = ventas - ? WHERE id = ?", [ventaDb.total, ventaDb.idCaja]);

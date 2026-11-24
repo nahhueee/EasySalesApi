@@ -174,8 +174,10 @@ class ClientesRepository{
                     SELECT 1 FROM cuenta_corriente_movimientos WHERE idCliente = ?
                     UNION ALL
                     SELECT 1 FROM presupuestos WHERE idCliente = ?
+                    UNION ALL
+                    SELECT 1 FROM pedidos WHERE idCliente = ?
                 ) AS tieneReferencias`,
-                [id, id, id, id]
+                [id, id, id, id, id]
             );
 
             if (refs[0].tieneReferencias) {

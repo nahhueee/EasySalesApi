@@ -13,6 +13,7 @@ export class Venta {
     fechaBaja?: Date;
     obsBaja?: string;
     idPresupuesto?: number;    // Si la venta proviene de un presupuesto
+    idPedido?: number;         // Si la venta es la entrega de un pedido
     idLista?: number;          // Lista de precios efectivamente usada en la venta (null = Minorista)
     idempotencyKey?: string;   // Clave generada por el front para deduplicar reintentos (ver ventasRepository.Agregar)
     nombreLista?: string;      // Solo lectura (JOIN a listas_precio): para mostrar en el comprobante interno, ver Fase 4

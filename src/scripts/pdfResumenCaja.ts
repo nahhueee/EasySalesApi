@@ -29,7 +29,7 @@ function ejemplo(): ResumenCajaImpresion {
     impreso: '04/11/2026 23:50',
     resumen: {
       caja: { id: 12, responsable: 'María', apertura: { fecha: '2026-10-26', hora: '08:00:00' }, historica: false },
-      cajon: { cambioInicial: 20000, ventasEfectivo: 180000, cobrosImputados: 25000, ingresos: 5000, egresos: 8000,
+      cajon: { cambioInicial: 20000, ventasEfectivo: 180000, cobrosImputados: 25000, senias: 12000, ingresos: 5000, egresos: 8000,
                pagosProveedorSinFondo: 0, excedenteProveedores: 5100, esperado: 216900 },
       fondo: { asignado: 50000, pagado: 55100, disponible: 0, excedente: 5100, pagos: [] },
       otrosMedios: [{ medio: 'DÉBITO', cantidadVentas: 14, total: 98000 }, { medio: 'TRANSFERENCIA', cantidadVentas: 3, total: 41500 }],

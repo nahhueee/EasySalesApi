@@ -71,6 +71,18 @@ const conFk = [
   { hija: 'presupuestos', columna: 'idCliente', padre: 'clientes', columnaPadre: 'id', nota: null },
   { hija: 'presupuestos', columna: 'idVentaGenerada', padre: 'ventas', columnaPadre: 'id', nota: null },
   { hija: 'presupuestos_detalle', columna: 'idPresupuesto', padre: 'presupuestos', columnaPadre: 'id', nota: null },
+  // 20261123120000_pedidos.js (cajas.id es INT con signo: idCaja va sin unsigned)
+  { hija: 'pedidos', columna: 'idCliente', padre: 'clientes', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos', columna: 'idCaja', padre: 'cajas', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos', columna: 'idVentaGenerada', padre: 'ventas', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos_detalle', columna: 'idPedido', padre: 'pedidos', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos_detalle', columna: 'idProducto', padre: 'productos', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos_estados_historial', columna: 'idPedido', padre: 'pedidos', columnaPadre: 'id', nota: null },
+  // 20261123120100_pedidos_senia.js
+  { hija: 'pedidos_pagos', columna: 'idPedido', padre: 'pedidos', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos_pagos', columna: 'idTipoPago', padre: 'tipos_pago', columnaPadre: 'id', nota: null },
+  { hija: 'pedidos_pagos', columna: 'idCaja', padre: 'cajas', columnaPadre: 'id', nota: null },
+  { hija: 'cajas_movimientos', columna: 'idPedidoPago', padre: 'pedidos_pagos', columnaPadre: 'id', nota: 'ON DELETE SET NULL' },
   // 20260626120000_notas_credito.js
   { hija: 'notas_credito', columna: 'idVenta', padre: 'ventas', columnaPadre: 'id', nota: null },
   { hija: 'notas_credito_detalle', columna: 'idNotaCredito', padre: 'notas_credito', columnaPadre: 'id', nota: null },

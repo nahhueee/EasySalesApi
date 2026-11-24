@@ -13,11 +13,12 @@ export type AccionEvento =
     | 'PROVEEDOR_AJUSTE'
     | 'USUARIO_BAJA' | 'USUARIO_ELIMINAR'
     | 'STOCK_AJUSTE' | 'STOCK_INGRESO'
-    | 'PARAMETROS_COMERCIO_ACTUALIZAR' | 'PARAMETROS_COMERCIO_IMPORTAR';
+    | 'PARAMETROS_COMERCIO_ACTUALIZAR' | 'PARAMETROS_COMERCIO_IMPORTAR'
+    | 'PEDIDO_CREAR' | 'PEDIDO_EDITAR' | 'PEDIDO_ESTADO' | 'PEDIDO_CANCELAR' | 'PEDIDO_ENTREGAR'|'PEDIDO_PAGO'|'PEDIDO_PAGO_ANULAR';
 
 export type EntidadEvento =
     | 'ventas' | 'notas_credito' | 'cajas' | 'cajas_movimientos'
-    | 'cuenta_corriente' | 'proveedores' | 'usuarios' | 'productos' | 'parametros';
+    | 'cuenta_corriente' | 'proveedores' | 'usuarios' | 'productos' | 'parametros' | 'pedidos';
 
 /** Quién y desde dónde. null = "no se sabe" (nunca se completa con session.json). */
 export interface Auditoria {
