@@ -30,27 +30,40 @@ describe('Resumen de caja con señas de pedidos', () => {
     expect(cierre.body).toMatchObject({ esperado: 1300, contado: 1300, diferencia: 0 });
   });
 
-  test('CA-28: seña por otro medio (transferencia) NO suma al efectivo esperado', async () => {
+  // CA-28 (§2.10, 2026-11-24; resuelve el GAP): la seña por otro medio entra en "Otros medios" de la caja donde se
+  // cobró, en la misma fila que las ventas de ese medio, y NO en el efectivo esperado.
+  test('CA-28: seña por transferencia suma a "Otros medios" de su caja y NO al efectivo esperado', async () => {
     const idCaja = await crearCaja(false, 1000);
     await crearPedido({ idCaja, senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja } });
 
     const r = await resumen(idCaja);
-    expect(r.cajon.esperado).toBe(1000);
+    expect(r.cajon).toMatchObject({ senias: 0, esperado: 1000 });
+    expect(r.otrosMedios).toEqual([expect.objectContaining({ medio: 'TRANSFERENCIA', cantidadVentas: 0, cantidadSenias: 1, total: 200 })]);
     const cierre = await cerrarConContado(idCaja, 1000);
     expect(cierre.body).toMatchObject({ esperado: 1000, diferencia: 0 });
   });
 
-  // GAP CA-28 (reportado 2026-11-24, sin corregir): el criterio pide que la seña por otro medio "aparezca en la
-  // línea" Señas de pedidos. Hoy esa línea (cajon.senias) sale SOLO de los movimientos de caja en efectivo, y la
-  // seña por transferencia no aparece en ninguna parte del resumen. Falta definir dónde tiene que verse (no puede
-  // sumarse a cajon.senias porque esa línea entra en el esperado). Este test afirma el comportamiento ACTUAL.
-  test('CA-28 (GAP): la seña por transferencia no aparece en el resumen', async () => {
+  test('CA-28: una seña por transferencia anulada no suma', async () => {
     const idCaja = await crearCaja(false, 1000);
-    await crearPedido({ idCaja, senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja } });
+    const id = await crearPedido({ idCaja, senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja } });
+    const [pago] = await pagos(id);
+    expect((await api.put(`/pedidos/pagos/anular/${pago.id}`)).status).toBe(200);
 
     const r = await resumen(idCaja);
-    expect(r.cajon.senias).toBe(0);              // GAP CA-28: la seña de $200 por transferencia debería verse
-    expect(r.otrosMedios).toEqual([]);           // GAP CA-28: (dónde: a definir por Nahu)
+    expect(r.otrosMedios).toEqual([]);
+    expect(r.cajon.esperado).toBe(1000);
+  });
+
+  test('CA-28: ventas y señas del mismo medio van en la misma fila, con cantidades separadas', async () => {
+    const idCaja = await crearCaja(false, 1000);
+    await crearPedido({ idCaja, senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja } });
+    expect((await api.post('/ventas/agregar', ventaPayload({ idCaja, idCliente: CONSUMIDOR_FINAL,
+      items: [{ idProducto: IDS.productoSimple, cantidad: 5, precio: 100 }],
+      pagos: [{ idTipoPago: TP.TRANSFERENCIA, monto: 500 }] }))).status).toBe(200);
+
+    const r = await resumen(idCaja);
+    expect(r.otrosMedios).toEqual([expect.objectContaining({ medio: 'TRANSFERENCIA', cantidadVentas: 1, cantidadSenias: 1, total: 700 })]);
+    expect(r.cajon.esperado).toBe(1000);
   });
 
   test('CA-29: seña devuelta al cancelar resta del efectivo esperado de la caja de la devolución', async () => {
@@ -96,12 +109,38 @@ describe('Resumen de caja con señas de pedidos', () => {
 
     const r2 = await resumen(caja2);
     expect(r2.cajon).toMatchObject({ ventasEfectivo: 700, senias: 0, esperado: 1200 });
-    expect(r2.info).toMatchObject({ totalVendido: 1000, cantidadVentas: 1, fiado: 0 });
-    // La parte cubierta por la seña figura como medio informativo de la venta (no suma al cajón).
-    expect(r2.otrosMedios).toEqual([expect.objectContaining({ medio: 'SEÑA', cantidadVentas: 1, total: 300 })]);
+    // Actualizado 2026-11-24 (handoff_pedidos.md §2.10, CA-31): lo aplicado con seña sale de "Otros medios" (no es
+    // plata del posnet ni del banco) y va a la línea informativa info.aplicadoSenias. Antes: otrosMedios = [SEÑA 300].
+    expect(r2.info).toMatchObject({ totalVendido: 1000, cantidadVentas: 1, fiado: 0, aplicadoSenias: 300 });
+    expect(r2.otrosMedios).toEqual([]);
 
     expect((await cerrarConContado(caja1, 1300)).body).toMatchObject({ esperado: 1300, diferencia: 0 });
     expect((await cerrarConContado(caja2, 1200)).body).toMatchObject({ esperado: 1200, diferencia: 0 });
+  });
+
+  test('CA-33: "Aplicado de señas" queda fuera del esperado y el total del resumen cuadra', async () => {
+    const cajaSenia = await crearCaja(false, 0);
+    const idCaja = await crearCaja(false, 0);
+    const id = await crearPedidoConSenia(300, { idCaja: cajaSenia });
+    // Entrega: SEÑA 300 + EFECTIVO 400 + TARJETA 300 = 1000.
+    expect((await entregar({ idPedido: id, idCaja, pagos: [
+      { idTipoPago: TP.SENIA, monto: 300 }, { idTipoPago: TP.EFECTIVO, monto: 400 }, { idTipoPago: TP.TARJETA, monto: 300 }] })).status).toBe(200);
+    // Venta CF por QR 500 y venta fiada de 200 al cliente 3.
+    const vender = (o: Parameters<typeof ventaPayload>[0]) => api.post('/ventas/agregar', ventaPayload({ idCaja, ...o }));
+    expect((await vender({ idCliente: CONSUMIDOR_FINAL, items: [{ idProducto: IDS.productoSimple, cantidad: 5, precio: 100 }],
+                           pagos: [{ idTipoPago: TP.QR, monto: 500 }] })).status).toBe(200);
+    expect((await vender({ idCliente: IDS.clienteSinSaldo, items: [{ idProducto: IDS.productoSimple, cantidad: 2, precio: 100 }],
+                           pagos: [{ idTipoPago: TP.CC, monto: 0 }], realizado: false })).status).toBe(200);
+
+    const r = await resumen(idCaja);
+    expect(r.info.aplicadoSenias).toBe(300);
+    expect(r.otrosMedios.map((m: any) => [m.medio, m.total]).sort()).toEqual([['QR', 500], ['TARJETA', 300]]);
+    expect(r.cajon.esperado).toBe(400);
+
+    const sumaOtros = r.otrosMedios.reduce((s: number, m: any) => s + m.total, 0);
+    expect(r.cajon.ventasEfectivo + sumaOtros + r.info.aplicadoSenias + r.info.fiado + r.info.saldoAFavorUsado)
+      .toBe(r.info.totalVendido);
+    expect(r.info.totalVendido).toBe(1700);
   });
 });
 
@@ -142,10 +181,15 @@ describe('CA-32: una caja sin pedidos da el mismo resumen que antes de Pedidos (
 
     // Se cargó de verdad la versión de antes de Pedidos (no tiene la línea senias).
     expect(base.cajon).not.toHaveProperty('senias');
-    // Lo único nuevo es la línea senias (en 0); todo lo demás, idéntico.
+    // Lo único nuevo son cajon.senias e info.aplicadoSenias (en 0) y otrosMedios[].cantidadSenias (en 0, §2.10);
+    // todo lo demás, idéntico.
     expect(hoy.cajon.senias).toBe(0);
+    expect(hoy.info.aplicadoSenias).toBe(0);
+    expect(hoy.otrosMedios.every((m: any) => m.cantidadSenias === 0)).toBe(true);
     const { senias: _s, ...cajonSinSenias } = hoy.cajon;
-    expect({ ...hoy, cajon: cajonSinSenias }).toEqual(base);
+    const { aplicadoSenias: _a, ...infoSinAplicado } = hoy.info;
+    const otrosSinSenias = hoy.otrosMedios.map(({ cantidadSenias: _c, ...m }: any) => m);
+    expect({ ...hoy, cajon: cajonSinSenias, info: infoSinAplicado, otrosMedios: otrosSinSenias }).toEqual(base);
 
     // Y los números son los esperables: 2000 + 1000 efectivo + 200 - 50.
     expect(hoy.cajon).toMatchObject({ ventasEfectivo: 1000, ingresos: 200, egresos: 50, esperado: 3150 });

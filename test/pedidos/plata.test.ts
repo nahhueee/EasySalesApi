@@ -3,7 +3,7 @@
 // verifican como DELTA (antes/después) porque la caja abierta del seed la comparten todos los tests.
 import { api, crearPedido, crearPedidoConSenia, entregar } from '../helpers/api';
 import {
-  caja, contar, crearCaja, cerrarCaja, historial, movimientosDePedido, pagos, pedido, q, q1, saldoCC, senaNeta,
+  caja, contar, crearCaja, cerrarCaja, historial, insertar, movimientosDePedido, pagos, pedido, q, q1, saldoCC, senaNeta,
 } from '../helpers/db';
 import { IDS, TP } from '../helpers/ids';
 
@@ -31,12 +31,14 @@ describe('Seña al crear el pedido', () => {
     expect(await pedido(id)).toMatchObject({ estado: 'pendiente', total: '1000.00' });
   });
 
-  test('seña por TRANSFERENCIA: pago sin caja y SIN movimiento de caja', async () => {
+  // Actualizado 2026-11-24 por cambio de regla (handoff_pedidos.md §2.10, CA-09): toda seña queda en la caja donde
+  // se cobró, con cualquier medio. Antes se esperaba idCaja = NULL para los medios que no son efectivo.
+  test('seña por TRANSFERENCIA: queda en la caja donde se cobró, SIN movimiento de caja', async () => {
     const antes = await caja(CAJA);
     const id = await crearPedido({ senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja: CAJA } });
 
     const [pago] = await pagos(id);
-    expect(pago).toMatchObject({ tipo: 'pago', idTipoPago: TP.TRANSFERENCIA, idCaja: null });
+    expect(pago).toMatchObject({ tipo: 'pago', idTipoPago: TP.TRANSFERENCIA, idCaja: CAJA });
     expect(await movimientosDePedido(id)).toHaveLength(0);
     expect((await caja(CAJA)).entradas).toBe(antes.entradas);
     expect(await senaNeta(id)).toBe(200);
@@ -45,6 +47,9 @@ describe('Seña al crear el pedido', () => {
   test.each([
     ['efectivo sin caja', 400, { monto: 300, idTipoPago: TP.EFECTIVO, idCaja: null }],
     ['efectivo en caja cerrada', 409, { monto: 300, idTipoPago: TP.EFECTIVO, idCaja: IDS.cajaCerrada }],
+    // §2.10 (2026-11-24): cualquier medio exige caja, y abierta.
+    ['transferencia sin caja', 400, { monto: 300, idTipoPago: TP.TRANSFERENCIA, idCaja: null }],
+    ['transferencia en caja cerrada', 409, { monto: 300, idTipoPago: TP.TRANSFERENCIA, idCaja: IDS.cajaCerrada }],
     ['seña mayor al total', 400, { monto: 1500, idTipoPago: TP.EFECTIVO, idCaja: CAJA }],
     ['medio CUENTA CORRIENTE', 400, { monto: 300, idTipoPago: TP.CC, idCaja: CAJA }],
     ['medio SEÑA', 400, { monto: 300, idTipoPago: TP.SENIA, idCaja: CAJA }],
@@ -115,6 +120,50 @@ describe('Anular pago a cuenta', () => {
     expect(res.body.message).toMatch(/cerrada/i);
     expect((await pagos(id))[0].anulado).toBe(0);
     expect(await movimientosDePedido(id)).toHaveLength(1);
+  });
+
+  // CA-13.B (§2.10, 2026-11-24): la anulación decide por el MEDIO y por el MOVIMIENTO.
+  test('efectivo sin su ENTRADA (dato inconsistente): 409 y nada cambia, nunca sigue en silencio', async () => {
+    const id = await crearPedidoConSenia(300);
+    const [pago] = await pagos(id);
+    await q('DELETE FROM cajas_movimientos WHERE idPedidoPago = ?', [pago.id]);   // simula la inconsistencia
+    const movsAntes = await contar('cajas_movimientos');
+
+    const res = await api.put(`/pedidos/pagos/anular/${pago.id}`);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('No se encontró el movimiento de caja del pago.');
+    expect((await pagos(id))[0].anulado).toBe(0);
+    expect(await contar('cajas_movimientos')).toBe(movsAntes);
+  });
+
+  test('otro medio: anula sin buscar ni compensar movimientos de caja', async () => {
+    const idCaja = await crearCaja(false);
+    const id = await crearPedido({ idCaja, senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja } });
+    const [pago] = await pagos(id);
+    // ENTRADA falsa con el idPedidoPago de este pago: si la anulación buscara movimiento, la compensaría.
+    const idFalsa = await insertar(
+      `INSERT INTO cajas_movimientos (idCaja, tipoMovimiento, monto, descripcion, idPedidoPago, origen)
+       VALUES (?, 'ENTRADA', 200, 'falsa (test)', ?, 'pedido')`, [idCaja, pago.id]);
+    const cajaAntes = await caja(idCaja);
+
+    const res = await api.put(`/pedidos/pagos/anular/${pago.id}`);
+    expect(res.status).toBe(200);
+    expect((await pagos(id))[0].anulado).toBe(1);
+    expect((await q1<any>('SELECT idMovimientoCompensado FROM cajas_movimientos WHERE id = ?', [idFalsa])).idMovimientoCompensado).toBeNull();
+    expect(await contar('cajas_movimientos', "idCaja = ? AND tipoMovimiento = 'SALIDA'", [idCaja])).toBe(0);
+    expect(await caja(idCaja)).toEqual(cajaAntes);
+  });
+
+  test('otro medio con la caja donde se cobró cerrada: 409 y nada cambia', async () => {
+    const idCaja = await crearCaja(false);
+    const id = await crearPedido({ idCaja, senia: { monto: 200, idTipoPago: TP.TRANSFERENCIA, idCaja } });
+    const [pago] = await pagos(id);
+    await cerrarCaja(idCaja);
+
+    const res = await api.put(`/pedidos/pagos/anular/${pago.id}`);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/cerrada/i);
+    expect((await pagos(id))[0].anulado).toBe(0);
   });
 
   test('un pago ya anulado no se anula dos veces (409)', async () => {

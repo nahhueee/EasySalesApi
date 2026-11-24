@@ -13,7 +13,7 @@ export type DestinoSenia = 'devuelta' | 'retenida';
 export interface SeniaInicial {
     monto: number;
     idTipoPago: number;
-    idCaja?: number | null;   // obligatoria si el medio es EFECTIVO
+    idCaja?: number | null;   // caja donde se cobra: obligatoria con cualquier medio (handoff §2.10)
 }
 
 export class Pedido {

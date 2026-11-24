@@ -3,6 +3,7 @@ import db from '../db';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 import { CuentasRepo } from '../data/cuentasCorsRepository';
+import { MEDIO_SENIA as MEDIO_SENIA_CONST } from '../utils/mediosPago';
 
 // Fase 3.4-A: ÚNICO lugar donde se calcula una caja (ver documentos/handoff_fase3_4a_caja_backend.md §4).
 // La pantalla de caja, el cierre con arqueo y la impresión leen de acá; nadie más suma ventas ni
@@ -12,6 +13,8 @@ const MIGRATION_VENTAS_TOTAL = '20260622091000_ventas_total.js';
 const MEDIO_EFECTIVO = 'EFECTIVO';
 const MEDIO_CC = 'CUENTA CORRIENTE';
 const MEDIO_SAF = 'SALDO A FAVOR';
+// Seña ya cobrada aplicada en la venta de entrega (no es plata de esta caja). Misma constante que el resto del back.
+const MEDIO_SENIA = MEDIO_SENIA_CONST.toUpperCase();
 
 // Corte de cajas históricas: el día en que cada instalación corrió la migration que rellenó
 // ventas.total. Se lee una vez y se cachea. undefined = todavía no leído; null = no hay registro
@@ -96,14 +99,38 @@ class ResumenCajaService {
                  GROUP BY UPPER(tp.nombre)`, [idCaja]
             ) as [any[], any];
 
-            let ventasEfectivo = 0, saldoAFavorUsado = 0;
-            const otrosMedios: { medio: string; icono: string | null; color: string | null; cantidadVentas: number; total: number }[] = [];
+            let ventasEfectivo = 0, saldoAFavorUsado = 0, aplicadoSenias = 0;
+            const otrosMedios: { medio: string; icono: string | null; color: string | null; cantidadVentas: number;
+                                 cantidadSenias: number; total: number }[] = [];
             for (const m of mediosRows) {
                 if (m.medio === MEDIO_EFECTIVO) ventasEfectivo = r2(m.total);
                 else if (m.medio === MEDIO_SAF) saldoAFavorUsado = r2(m.total);
+                // handoff_pedidos §2.10: lo aplicado con seña no es plata del posnet ni del banco -> línea informativa.
+                else if (m.medio === MEDIO_SENIA) aplicadoSenias = r2(m.total);
                 else if (m.medio !== MEDIO_CC)
                     otrosMedios.push({ medio: m.medio, icono: m.icono ?? null, color: m.color ?? null,
-                                       cantidadVentas: Number(m.cantidadVentas), total: r2(m.total) });
+                                       cantidadVentas: Number(m.cantidadVentas), cantidadSenias: 0, total: r2(m.total) });
+            }
+
+            // Señas de pedidos cobradas en ESTA caja por un medio que no es efectivo (§2.10): suman a "Otros medios"
+            // en la fila de su medio. Las de efectivo van al cajón por sus movimientos (cajon.senias). Sin anuladas;
+            // las devoluciones son siempre en efectivo.
+            const [seniasRows] = await conn.query(
+                `SELECT UPPER(tp.nombre) AS medio, MAX(tp.icono) AS icono, MAX(tp.color) AS color,
+                        COUNT(*) AS cantidad, COALESCE(SUM(pp.monto), 0) AS total
+                 FROM pedidos_pagos pp INNER JOIN tipos_pago tp ON tp.id = pp.idTipoPago
+                 WHERE pp.idCaja = ? AND pp.tipo = 'pago' AND pp.anulado = 0 AND UPPER(tp.nombre) <> ?
+                 GROUP BY UPPER(tp.nombre)`, [idCaja, MEDIO_EFECTIVO]
+            ) as [any[], any];
+            for (const s of seniasRows) {
+                const fila = otrosMedios.find(o => o.medio === s.medio);
+                if (fila) {
+                    fila.cantidadSenias = Number(s.cantidad);
+                    fila.total = r2(fila.total + Number(s.total));
+                } else {
+                    otrosMedios.push({ medio: s.medio, icono: s.icono ?? null, color: s.color ?? null,
+                                       cantidadVentas: 0, cantidadSenias: Number(s.cantidad), total: r2(s.total) });
+                }
             }
 
             // Fiado = lo que la venta no cubrió con pagos originales (por venta, solo si es > 0).
@@ -241,6 +268,7 @@ class ResumenCajaService {
                     cantidadVentas,
                     fiado,
                     saldoAFavorUsado,
+                    aplicadoSenias,
                     cobrosFueraDeCaja: cobrosFuera,
                     notasCredito: { cantidad: Number(ncRows[0].cantidad), total: r2(ncRows[0].total) },
                     anulaciones: { cantidad: anulItems.length, total: r2(anulItems.reduce((s: number, i: any) => s + i.total, 0)), items: anulItems },

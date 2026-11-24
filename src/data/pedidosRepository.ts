@@ -276,17 +276,21 @@ class PedidosRepository {
             throw errorValidacion(`"${medio.nombre}" no se puede usar para cobrar una seña.`);
         }
         const esEfectivo = esMedio(medio.nombre, MEDIO_EFECTIVO);
+        // §2.10 (2026-11-24): toda seña pertenece a la caja donde se cobró, con cualquier medio. Que haya movimiento
+        // de efectivo lo decide el medio (esEfectivo), no la caja.
         const idCaja = senia.idCaja != null && Number(senia.idCaja) !== 0 ? Number(senia.idCaja) : null;
-        if (esEfectivo && !idCaja) {
-            throw errorValidacion('Para cobrar una seña en efectivo tenés que tener una caja abierta.');
+        if (!idCaja) {
+            throw errorValidacion(esEfectivo
+                ? 'Para cobrar una seña en efectivo tenés que tener una caja abierta.'
+                : 'Para cobrar una seña tenés que tener una caja abierta.');
         }
-        return { monto, medio, esEfectivo, idCaja: esEfectivo ? idCaja : null };
+        return { monto, medio, esEfectivo, idCaja };
     }
 
-    // Inserta el pago y, si es efectivo, su movimiento de caja (origen 'pedido'). La caja ya debe estar bloqueada
-    // y abierta por el caller (orden de locks) y el pedido bloqueado.
+    // Inserta el pago (con la caja donde se cobró, cualquier medio) y, solo si es efectivo, su movimiento de caja
+    // (origen 'pedido'). La caja ya debe estar bloqueada y abierta por el caller (orden de locks) y el pedido bloqueado.
     private async insertarPago(connection: any, idPedido: number, tipo: 'pago' | 'devolucion', medio: { id: number },
-                               monto: number, idCaja: number | null, auditoria: Auditoria): Promise<number> {
+                               monto: number, idCaja: number | null, esEfectivo: boolean, auditoria: Auditoria): Promise<number> {
         const [res]: [ResultSetHeader, any] = await connection.query(
             `INSERT INTO pedidos_pagos (idPedido, idUsuario, tipo, idTipoPago, monto, idCaja)
              VALUES (?, ?, ?, ?, ?, ?)`,
@@ -294,7 +298,7 @@ class PedidosRepository {
         );
         const idPago = res.insertId;
 
-        if (idCaja) {
+        if (esEfectivo && idCaja) {
             await MovimientosRepo.Agregar({
                 idCaja,
                 tipoMovimiento: tipo === 'pago' ? 'ENTRADA' : 'SALIDA',
@@ -344,7 +348,7 @@ class PedidosRepository {
 
             const auditoriaPedido = { usuarioId: idUsuario, puestoId: auditoria.puestoId };
             if (senia) {
-                const idPago = await this.insertarPago(connection, idPedido, 'pago', senia.medio, senia.monto, senia.idCaja, auditoriaPedido);
+                const idPago = await this.insertarPago(connection, idPedido, 'pago', senia.medio, senia.monto, senia.idCaja, senia.esEfectivo, auditoriaPedido);
                 await EventosRepo.Registrar(connection, {
                     accion: 'PEDIDO_PAGO',
                     entidad: 'pedidos',
@@ -718,7 +722,7 @@ class PedidosRepository {
                     if (!idCajaDev) throw errorValidacion('Para devolver la seña tenés que tener una caja abierta.', 400, { idPedido: id });
                     const [efe]: any = await connection.query('SELECT id, nombre FROM tipos_pago WHERE nombre = ?', [MEDIO_EFECTIVO]);
                     if (!efe[0]) throw errorValidacion('No se encontró el medio de pago EFECTIVO.');
-                    idPagoDev = await this.insertarPago(connection, id, 'devolucion', efe[0], senaNeta, idCajaDev, auditoria);
+                    idPagoDev = await this.insertarPago(connection, id, 'devolucion', efe[0], senaNeta, idCajaDev, true, auditoria);
                     await EventosRepo.Registrar(connection, {
                         accion: 'PEDIDO_PAGO',
                         entidad: 'pedidos',
@@ -782,7 +786,7 @@ class PedidosRepository {
                 throw errorValidacion(`El pago ($${senia.monto}) supera el saldo del pedido ($${saldo}).`, 400, { idPedido: id });
             }
 
-            const idPago = await this.insertarPago(connection, id, 'pago', senia.medio, senia.monto, senia.idCaja, auditoria);
+            const idPago = await this.insertarPago(connection, id, 'pago', senia.medio, senia.monto, senia.idCaja, senia.esEfectivo, auditoria);
             await EventosRepo.Registrar(connection, {
                 accion: 'PEDIDO_PAGO',
                 entidad: 'pedidos',
@@ -805,7 +809,8 @@ class PedidosRepository {
     }
 
     // Anula un pago a cuenta: lo marca anulado (no se borra) y, si fue en efectivo, compensa en la caja de origen
-    // con un movimiento inverso. La caja de origen tiene que seguir abierta.
+    // con un movimiento inverso. La caja donde se cobró tiene que seguir abierta, con cualquier medio (§2.10: caja
+    // cerrada = inmutable, misma regla que ventas y movimientos de caja).
     async AnularPago(idPago: number, auditoria: Auditoria): Promise<void> {
         const connection = await db.getConnection();
         try {
@@ -835,16 +840,21 @@ class PedidosRepository {
                 [auditoria.usuarioId, idPago]
             );
 
-            if (pago.idCaja) {
+            // §2.10 (2026-11-24): decide el MEDIO, no la caja (que ahora tiene todo pago).
+            //  - efectivo + ENTRADA original encontrada -> se compensa con una SALIDA;
+            //  - efectivo sin ENTRADA -> inconsistencia: error, nunca seguir en silencio;
+            //  - otro medio -> no hubo movimiento de efectivo: no se busca ni se compensa.
+            const medio = await this.medioPorId(connection, Number(pago.idTipoPago));
+            if (esMedio(medio.nombre, MEDIO_EFECTIVO)) {
                 const [movs]: any = await connection.query(
-                    `SELECT id, monto FROM cajas_movimientos
+                    `SELECT id, idCaja, monto FROM cajas_movimientos
                      WHERE idPedidoPago = ? AND tipoMovimiento = 'ENTRADA' AND idMovimientoCompensado IS NULL
                      ORDER BY id LIMIT 1 FOR UPDATE`, [idPago]
                 );
                 if (!movs[0]) throw errorValidacion('No se encontró el movimiento de caja del pago.', 409, { idPago });
 
                 const idInverso = await MovimientosRepo.Agregar({
-                    idCaja: pago.idCaja,
+                    idCaja: movs[0].idCaja,
                     tipoMovimiento: 'SALIDA',
                     monto: movs[0].monto,
                     descripcion: `Anulación de seña pedido #${pedido.id}`,

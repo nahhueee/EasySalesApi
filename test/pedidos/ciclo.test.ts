@@ -279,13 +279,14 @@ describe('Pagos sobre pedidos terminales y montos inválidos', () => {
   test('pago a cuenta en un pedido cancelado -> 409', async () => {
     const id = await crearPedido();
     expect((await api.put(`/pedidos/cancelar/${id}`, {})).status).toBe(200);
-    expect((await api.post(`/pedidos/pagos/${id}`, { monto: 100, idTipoPago: TP.TRANSFERENCIA })).status).toBe(409);
+    // Payload con caja desde 2026-11-24 (handoff_pedidos.md §2.10: todo medio exige caja); lo que se prueba es el estado cancelado.
+    expect((await api.post(`/pedidos/pagos/${id}`, { monto: 100, idTipoPago: TP.TRANSFERENCIA, idCaja: IDS.cajaAbierta })).status).toBe(409);
     expect(await contar('pedidos_pagos', 'idPedido = ?', [id])).toBe(0);
   });
 
   test.each([[0], [-50]])('pago a cuenta con monto %d -> 400', async (monto) => {
     const id = await crearPedido();
-    expect((await api.post(`/pedidos/pagos/${id}`, { monto, idTipoPago: TP.TRANSFERENCIA })).status).toBe(400);
+    expect((await api.post(`/pedidos/pagos/${id}`, { monto, idTipoPago: TP.TRANSFERENCIA, idCaja: IDS.cajaAbierta })).status).toBe(400);
     expect(await contar('pedidos_pagos', 'idPedido = ?', [id])).toBe(0);
   });
 

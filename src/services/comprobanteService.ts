@@ -1896,10 +1896,16 @@ function seccionFondoCaja(d: ResumenCajaImpresion): { filas: FilaCaja[]; notas: 
 function seccionMediosCaja(d: ResumenCajaImpresion, esA4: boolean): FilaCaja[] {
   if (d.ciego) return [];
   const medios: any[] = Array.isArray(d.resumen?.otrosMedios) ? d.resumen.otrosMedios : [];
-  return medios.map(m => ({
-    label: esA4 && m.cantidadVentas != null ? `${m.medio} (${m.cantidadVentas} ventas)` : String(m.medio ?? ''),
-    valor: montoCaja(m.total),
-  }));
+  return medios.map(m => {
+    // Desde handoff_pedidos §2.10 la fila puede sumar señas cobradas por ese medio (cantidadSenias; fotos viejas no la traen).
+    const partes: string[] = [];
+    if (m.cantidadVentas) partes.push(`${m.cantidadVentas} ventas`);
+    if (m.cantidadSenias) partes.push(`${m.cantidadSenias} ${m.cantidadSenias === 1 ? 'seña' : 'señas'}`);
+    return {
+      label: esA4 && partes.length ? `${m.medio} (${partes.join(' · ')})` : String(m.medio ?? ''),
+      valor: montoCaja(m.total),
+    };
+  });
 }
 
 function seccionInfoCaja(d: ResumenCajaImpresion): FilaCaja[] {
@@ -1913,6 +1919,7 @@ function seccionInfoCaja(d: ResumenCajaImpresion): FilaCaja[] {
   }
   sumarFilaCaja(filas, 'Fiado', i.fiado);
   sumarFilaCaja(filas, 'Saldo a favor usado', i.saldoAFavorUsado);
+  sumarFilaCaja(filas, 'Aplicado de señas', i.aplicadoSenias);   // informativo, fuera del efectivo (§2.10)
 
   const fuera = i.cobrosFueraDeCaja;
   if (fuera && (Number(fuera.cantidad ?? 0) > 0 || Number(fuera.total ?? 0) !== 0)) {

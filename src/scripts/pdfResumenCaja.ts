@@ -32,9 +32,9 @@ function ejemplo(): ResumenCajaImpresion {
       cajon: { cambioInicial: 20000, ventasEfectivo: 180000, cobrosImputados: 25000, senias: 12000, ingresos: 5000, egresos: 8000,
                pagosProveedorSinFondo: 0, excedenteProveedores: 5100, esperado: 216900 },
       fondo: { asignado: 50000, pagado: 55100, disponible: 0, excedente: 5100, pagos: [] },
-      otrosMedios: [{ medio: 'DÉBITO', cantidadVentas: 14, total: 98000 }, { medio: 'TRANSFERENCIA', cantidadVentas: 3, total: 41500 }],
+      otrosMedios: [{ medio: 'DÉBITO', cantidadVentas: 14, total: 98000 }, { medio: 'TRANSFERENCIA', cantidadVentas: 3, cantidadSenias: 2, total: 41500 }],
       info: {
-        totalVendido: 340000, cantidadVentas: 52, fiado: 12000, saldoAFavorUsado: 3000,
+        totalVendido: 340000, cantidadVentas: 52, fiado: 12000, saldoAFavorUsado: 3000, aplicadoSenias: 5000,
         cobrosFueraDeCaja: { cantidad: 2, total: 9000, items: [{ hora: '10:20:00', cliente: 'Juan Pérez', metodo: 'TRANSFERENCIA', monto: 5000 }, { hora: '17:05:00', cliente: 'Lucía Gómez', metodo: 'DÉBITO', monto: 4000 }] },
         notasCredito: { cantidad: 1, total: 2500 },
         anulaciones: { cantidad: 2, total: 7800, items: [{ idVenta: 1021, hora: '11:02', total: 4300, usuario: 'María' }, { idVenta: 1044, hora: '15:40', total: 3500, usuario: 'Pedro' }] },

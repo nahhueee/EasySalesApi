@@ -66,7 +66,8 @@ describe('Editar pedido: cambio de cliente y seña', () => {
   // La API solo genera devoluciones al CANCELAR (y un pedido cancelado ya no se edita). Para probar el
   // cálculo "pago - devolución = 0" sobre un pedido activo, la devolución se inserta por SQL.
   test('con pago y devolución que se compensan (seña neta 0), cambiar el cliente funciona', async () => {
-    const id = await crearPedido({ senia: { monto: 300, idTipoPago: TP.TRANSFERENCIA, idCaja: null } });
+    // Actualizado 2026-11-24 (handoff_pedidos.md §2.10): una seña por transferencia ahora exige caja; antes iba con idCaja null.
+    const id = await crearPedido({ senia: { monto: 300, idTipoPago: TP.TRANSFERENCIA, idCaja: IDS.cajaAbierta } });
     await q(`INSERT INTO pedidos_pagos (idPedido, idUsuario, tipo, idTipoPago, monto, idCaja)
              VALUES (?, ?, 'devolucion', ?, 300, NULL)`, [id, IDS.usuarioAdmin, TP.EFECTIVO]);
 
