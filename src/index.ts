@@ -79,9 +79,14 @@ if(config.esServer){
     host = "0.0.0.0";
 }
 
-server.listen(app.get('port'), host, () => {
-    console.log('server ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
-});
+// En tests (Jest, NODE_ENV=test) se importa `app` con supertest: sin listen ni crons (ver CLAUDE.md).
+const ES_TEST = process.env.NODE_ENV === 'test';
+
+if (!ES_TEST) {
+    server.listen(app.get('port'), host, () => {
+        console.log('server ' + process.env.NODE_ENV + ' en puerto ' + app.get('port'));
+    });
+}
 
 //#region Rutas
 import actualizacionRuta from './routes/actualizacionRoute';
@@ -156,7 +161,7 @@ if(!config.web){
 }
 
 // Heartbeat y batch de errores: corren en toda instancia con terminal.json presente
-if(!config.web){
+if(!config.web && !ES_TEST){
     HeartbeatServ.IniciarCron();
     ErrorBatchServ.IniciarCron();
     BackupsServ.IniciarCron();
@@ -233,4 +238,6 @@ app.use((_req, res) => {
 
 //Manejo y logs de errores
 app.use(errorMiddleware);
+
+export default app;
 

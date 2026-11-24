@@ -312,7 +312,8 @@ class PedidosRepository {
     //#region AGREGAR
     async Agregar(pedido: Pedido, auditoria: Auditoria): Promise<number> {
         const datos = validarPedido(pedido);
-        const idUsuario = auditoria.usuarioId ?? (Number(pedido.idUsuario) || null);
+        // Identidad solo del header (auditoria.ts): nunca se completa con el body.
+        const idUsuario = auditoria.usuarioId;
         if (!idUsuario) throw errorValidacion('No se pudo identificar al usuario que crea el pedido.');
 
         const connection = await db.getConnection();
@@ -576,6 +577,11 @@ class PedidosRepository {
             }
             // El total no puede quedar por debajo de lo ya cobrado como seña (handoff §2.6).
             const senaNeta = await this.SenaNeta(connection, id);
+            // Con seña cobrada no se cambia el cliente: la seña es de ese cliente y la entrega se valida contra él
+            // (ValidarSeniaEnVenta). Regla 2026-11-23, handoff §2.8.
+            if (senaNeta > 0 && Number(pedido.idCliente) !== Number(actual.idCliente)) {
+                throw errorValidacion(`El pedido tiene $${senaNeta} de seña cobrada: no se puede cambiar el cliente. Anulá o devolvé la seña primero.`, 409, { idPedido: id });
+            }
             if (senaNeta - datos.total > TOLERANCIA) {
                 throw errorValidacion(`El nuevo total ($${datos.total}) es menor a la seña ya cobrada ($${senaNeta}). Anulá o devolvé parte de la seña primero.`, 400, { idPedido: id });
             }
