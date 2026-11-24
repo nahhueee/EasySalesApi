@@ -40,7 +40,7 @@ function basesReales() {
   return nombres;
 }
 
-async function main() {
+async function main({ conSeed = !process.argv.includes('--sin-seed') } = {}) {
   if (!fs.existsSync(CONFIG_PATH)) {
     throw new Error(`No existe ${CONFIG_PATH}. Ver CLAUDE.md (modo test).`);
   }
@@ -70,7 +70,7 @@ async function main() {
   try {
     const [batchNo, log] = await knex.migrate.latest();
     console.log(`Batch ${batchNo}: ${log.length} migration(s) aplicadas.`);
-    if (!process.argv.includes('--sin-seed')) {
+    if (conSeed) {
       await seed(knex);
       console.log('Seed de test aplicado.');
     }

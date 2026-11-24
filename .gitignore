@@ -21,3 +21,4 @@
 # Base de test (credenciales locales del usuario easysales_test)
 /config.test.json
 /scripts/test/informes
+/backups

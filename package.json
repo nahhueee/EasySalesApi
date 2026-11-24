@@ -11,6 +11,7 @@
     "release": "node scripts/release.js",
     "db:reset": "node scripts/db-reset.js",
     "test": "jest",
+    "start:test": "node scripts/test/serve-test.js",
     "db:reset:test": "node scripts/test/db-reset-test.js",
     "db:drift:test": "node scripts/test/drift-check.js",
     "migration": "cd scripts && knex migrate:latest",
