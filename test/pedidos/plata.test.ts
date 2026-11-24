@@ -131,9 +131,12 @@ describe('Anular pago a cuenta', () => {
     const id = await crearPedidoConSenia(300);
     const [mov] = await movimientosDePedido(id);
 
+    // Contrato histórico del ABM manual: 200 con el texto del motivo (no un error HTTP).
     const anular = await api.put('/movimientos/anular', { id: mov.id });
+    expect(anular.status).toBe(200);
     expect(JSON.stringify(anular.body)).toMatch(/seña de pedido/i);
     const eliminar = await api.put('/movimientos/eliminar', { id: mov.id, idCaja: CAJA, monto: 300, tipoMovimiento: 'ENTRADA' });
+    expect(eliminar.status).toBe(200);
     expect(JSON.stringify(eliminar.body)).toMatch(/seña de pedido/i);
 
     const movs = await movimientosDePedido(id);
@@ -195,16 +198,24 @@ describe('Cancelar pedido', () => {
     expect(await pagos(id)).toHaveLength(1);
   });
 
-  // BUG #6 (reportado, NO corregido). Sin seña, destinoSenia se ignora según el propio repo
-  // ("Sin seña, destinoSenia se ignora"), pero Cancelar bloquea la caja ANTES de mirar la seña:
-  // con destino 'devuelta' + una caja cerrada, cancelar un pedido SIN seña falla con 409.
-  // Este test afirma el comportamiento ACTUAL (con el bug).
-  test('BUG #6: cancelar SIN seña con destino devuelta y caja cerrada', async () => {
+  // #6 (corregido 2026-11-23): sin seña, destinoSenia se ignora y la caja no se mira.
+  test('#6: cancelar SIN seña con destino devuelta y caja cerrada cancela igual (sin tocar la caja)', async () => {
     const id = await crearPedido();
+    const cajaAntes = await caja(IDS.cajaCerrada);
     const res = await api.put(`/pedidos/cancelar/${id}`, { destinoSenia: 'devuelta', idCaja: IDS.cajaCerrada });
-    expect(res.status).toBe(409);                              // BUG #6: debería ser 200
-    expect(res.body.message).toMatch(/caja #\d+ está cerrada/); // BUG #6: no debería mirar la caja
-    expect((await pedido(id)).estado).toBe('pendiente');       // BUG #6: debería ser 'cancelado'
+    expect(res.status).toBe(200);
+    expect(await pedido(id)).toMatchObject({ estado: 'cancelado', destinoSenia: null });
+    expect(await pagos(id)).toHaveLength(0);
+    expect(await caja(IDS.cajaCerrada)).toEqual(cajaAntes);
+  });
+
+  test('#6 control: CON seña, devolver desde una caja cerrada sigue dando 409 y nada cambia', async () => {
+    const id = await crearPedidoConSenia(300);
+    const res = await api.put(`/pedidos/cancelar/${id}`, { destinoSenia: 'devuelta', idCaja: IDS.cajaCerrada });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/caja #\d+ está cerrada/);
+    expect((await pedido(id)).estado).toBe('pendiente');
+    expect(await pagos(id)).toHaveLength(1);
   });
 });
 
@@ -234,6 +245,26 @@ describe('Entrega (venta desde el pedido)', () => {
       [IDS.clienteSinSaldo, idVenta]);
     expect(ledger.map(l => [l.tipo, Number(l.debe), Number(l.haber)])).toEqual([['venta', 1000, 0], ['entrega', 0, 300], ['entrega', 0, 700]]);
     expect(await saldoCC(IDS.clienteSinSaldo)).toBe(saldoAntes);
+  });
+
+  test('seña en caja 1, entrega en caja 2: la caja 2 cobra solo el resto en efectivo y la caja 1 no cambia', async () => {
+    const caja1 = await crearCaja(false);
+    const caja2 = await crearCaja(false);
+    const id = await crearPedidoConSenia(300, { idCaja: caja1 });
+    const c1Antes = await caja(caja1);
+
+    const res = await entregar({ idPedido: id, idCaja: caja2, pagos: [{ idTipoPago: TP.SENIA, monto: 300 }, { idTipoPago: TP.EFECTIVO, monto: 700 }] });
+    expect(res.status).toBe(200);
+
+    expect(await caja(caja1)).toEqual(c1Antes);                         // la seña ya estaba (ENTRADA 300)
+    expect(c1Antes.entradas).toBe(300);
+    const c2 = await caja(caja2);
+    expect(c2).toMatchObject({ entradas: 0, salidas: 0, ventas: 1000 });
+    // Efectivo de ventas de la caja 2 (lo que suma al efectivo esperado del arqueo) = solo el resto.
+    const efe: any = await q1(
+      `SELECT COALESCE(SUM(vpd.monto),0) AS efectivo FROM ventas_pagos_detalle vpd JOIN ventas v ON v.id = vpd.idVenta
+       WHERE v.idCaja = ? AND vpd.idTPago = ? AND v.fechaBaja IS NULL`, [caja2, TP.EFECTIVO]);
+    expect(Number(efe.efectivo)).toBe(700);
   });
 
   test('resto a CUENTA CORRIENTE: la deuda aumenta total - seña', async () => {

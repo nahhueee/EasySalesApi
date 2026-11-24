@@ -317,19 +317,38 @@ describe('Venta con pedido y presupuesto a la vez', () => {
     expect((await q1<any>('SELECT estado FROM presupuestos WHERE id = ?', [idPres])).estado).toBe('vigente');
   });
 
-  // HALLAZGO (preexistente, de presupuestos; NO corregido). ventasRepository.Agregar valida el presupuesto
-  // ANTES que la regla pedido+presupuesto, y si el presupuesto no existe / no está vigente tira un `new Error`
-  // (no AppError): la ruta lo convierte en 500 "Error al intentar agregar la venta." y el usuario no ve el
-  // motivo. La venta no se crea (sin daño en la base). Pasa igual en una venta SOLO desde presupuesto.
-  // Este test afirma el comportamiento ACTUAL (con el bug).
-  test('BUG presupuesto: venta con pedido + presupuesto inexistente', async () => {
+  // Corregido 2026-11-23: la regla pedido+presupuesto se evalúa ANTES de validar el presupuesto
+  // (antes daba 500 "Error al intentar agregar la venta." por un `new Error` sin AppError).
+  test('con un presupuesto inexistente -> 400 por la regla pedido+presupuesto (no 500)', async () => {
     const id = await crearPedido();
     const antes = await contar('ventas');
     const res = await ventaConAmbos(id, 999999);
-    expect(res.status).toBe(500);                                       // BUG: debería ser 400 (regla pedido+presupuesto)
-    expect(res.body.message).toBe('Error al intentar agregar la venta.'); // BUG: debería explicar el motivo
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/pedido y de un presupuesto/);
     expect(await contar('ventas')).toBe(antes);
     expect((await pedido(id)).estado).toBe('pendiente');
+  });
+});
+
+describe('Venta desde presupuesto no vigente (sin pedido)', () => {
+  const ventaDesdePresupuesto = (idPresupuesto: number) =>
+    api.post('/ventas/agregar', { ...ventaPayload({ pagos: [{ idTipoPago: TP.EFECTIVO, monto: 1000 }] }), idPresupuesto });
+
+  test.each([
+    ['inexistente', null],
+    ['convertido', 'convertido'],
+    ['anulado', 'anulado'],
+    ['vencido', 'vencido'],
+  ])('presupuesto %s -> 409 con el motivo (no 500); no se crea la venta', async (_n, estado) => {
+    const idPres = estado === null ? 999999 : await insertar(
+      `INSERT INTO presupuestos (idCliente, idUsuario, fecha, validezHasta, total, estado)
+       VALUES (?, ?, CURDATE(), CURDATE() + INTERVAL 10 DAY, 1000, ?)`, [IDS.clienteSinSaldo, IDS.usuarioAdmin, estado]);
+    const antes = await contar('ventas');
+
+    const res = await ventaDesdePresupuesto(idPres);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'VALIDACION', message: 'El presupuesto ya fue convertido, anulado o no existe.' });
+    expect(await contar('ventas')).toBe(antes);
   });
 });
 

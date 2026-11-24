@@ -225,6 +225,12 @@ class VentasRepository{
             // productos en orden ascendente de id. Una caja cerrada no acepta ventas (Fase 3.4-A).
             if (venta.idCaja) await CajasRepo.AsegurarAbierta(connection, venta.idCaja);
 
+            // Primero la regla de forma (no depende de la base): pedido y presupuesto son excluyentes.
+            if (venta.idPedido && venta.idPresupuesto) {
+                throw new AppError(CodigoError.VALIDACION, 'Una venta no puede provenir de un pedido y de un presupuesto a la vez.',
+                    400, { modulo: 'VentasRepo.Agregar' });
+            }
+
             // Si la venta proviene de un presupuesto, validar que esté vigente
             // antes de crear la venta (FOR UPDATE evita doble conversión concurrente)
             if (venta.idPresupuesto) {
@@ -233,7 +239,8 @@ class VentasRepository{
                     [venta.idPresupuesto]
                 );
                 if (!pRows[0] || pRows[0].estado !== 'vigente') {
-                    throw new Error('El presupuesto ya fue convertido, anulado o no existe.');
+                    throw new AppError(CodigoError.VALIDACION, 'El presupuesto ya fue convertido, anulado o no existe.',
+                        409, { modulo: 'VentasRepo.Agregar', idPresupuesto: venta.idPresupuesto });
                 }
             }
 
@@ -242,10 +249,6 @@ class VentasRepository{
             // doble entrega concurrente: la segunda venta espera, ve 'entregado' y falla.
             let pedidoAEntregar: any = null;
             if (venta.idPedido) {
-                if (venta.idPresupuesto) {
-                    throw new AppError(CodigoError.VALIDACION, 'Una venta no puede provenir de un pedido y de un presupuesto a la vez.',
-                        400, { modulo: 'VentasRepo.Agregar' });
-                }
                 pedidoAEntregar = await PedidosRepo.BloquearParaEntrega(connection, venta.idPedido);
             }
             // Seña: el monto aplicado sale de la base, bajo el lock del pedido (no del front). También rechaza el

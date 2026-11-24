@@ -682,11 +682,17 @@ class PedidosRepository {
 
         const connection = await db.getConnection();
         try {
+            // Lectura previa SIN lock y FUERA de la transacción, solo para saber si hay que bloquear la caja
+            // (orden de locks caja -> pedido). Fuera de la transacción a propósito: en REPEATABLE READ el primer
+            // SELECT plano fija el snapshot, y el recálculo de abajo (después del FOR UPDATE) tiene que ver lo último.
+            const devolveriaSenia = destino === 'devuelta' && !!idCajaDev && (await this.SenaNeta(connection, id)) > 0;
+
             await connection.beginTransaction();
 
-            // Orden de locks: caja -> pedido. La caja se bloquea solo si se va a devolver.
-            if (destino === 'devuelta' && idCajaDev) {
-                await CajasRepo.AsegurarAbierta(connection, idCajaDev,
+            // Orden de locks: caja -> pedido. La caja se bloquea solo si se va a devolver una seña (#6: sin seña,
+            // destinoSenia se ignora y la caja no se mira).
+            if (devolveriaSenia) {
+                await CajasRepo.AsegurarAbierta(connection, idCajaDev!,
                     `La caja #${idCajaDev} está cerrada: no se puede devolver la seña desde ahí.`);
             }
 
@@ -696,6 +702,10 @@ class PedidosRepository {
             }
 
             const senaNeta = await this.SenaNeta(connection, id);
+            // Entre la lectura previa y el lock entró un pago: la caja no quedó bloqueada en orden. Reintentar.
+            if (senaNeta > 0 && destino === 'devuelta' && idCajaDev && !devolveriaSenia) {
+                throw new AppError(CodigoError.OPERACION_CONCURRENTE, MENSAJE_CONCURRENCIA, 409, { modulo: 'PedidosRepo', idPedido: id });
+            }
             let destinoFinal: DestinoSenia | null = null;
             let idPagoDev: number | null = null;
 
