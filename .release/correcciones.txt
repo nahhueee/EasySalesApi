@@ -1,1 +1,0 @@
-fix editar producto / añadir stock fallaba en bases latin1: la descripcion del evento de stock llevaba el caracter flecha (no entra en latin1), ahora texto ASCII

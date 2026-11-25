@@ -92,3 +92,7 @@ _(sin entradas registradas para esta versión)_
 **Correcciones**
 - fix editar producto / añadir stock fallaba en bases latin1: la descripcion del evento de stock llevaba el caracter flecha (no entra en latin1), ahora texto ASCII
 
+## 2.9.3 — 2026-11-25
+
+_(sin entradas registradas para esta versión)_
+
