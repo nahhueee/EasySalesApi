@@ -8,6 +8,17 @@ const textoOpcional = (max: number) => (v: any) => texto(max)(v) || null;
 const booleano = (v: any) => (v === false || v === 0 || v === 'false' || v === '0') ? 0 : (v ? 1 : 0);
 const entero = (v: any) => Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0;
 
+// Entero estricto: devuelve undefined si no es un número entero (a diferencia de `entero`, que cae a 0).
+const enteroEstricto = (v: any): number | undefined => {
+  if (v === null || v === '' || typeof v === 'boolean') return undefined;
+  const n = Number(v);
+  return Number.isInteger(n) ? n : undefined;
+};
+const enteroEnRango = (min: number, max: number) => (v: any) => {
+  const n = enteroEstricto(v);
+  return (n !== undefined && n >= min && n <= max) ? n : undefined;
+};
+
 const CAMPOS_IMPRESION: Record<string, (v: any) => any> = {
   impresora:            texto(100),
   papel:                texto(10),
@@ -29,6 +40,11 @@ const CAMPOS_IMPRESION: Record<string, (v: any) => any> = {
   logo:                 (v: any) => (v === null || v === '') ? null : (esNombreLogoValido(v) ? v : undefined),
   mostrarLogo:          booleano,
   mostrarNombre:        booleano,
+  // Impresión térmica directa (handoff_impresion_escpos.md §4). Valor inválido => undefined => se ignora.
+  modoImpresion:        (v: any) => { const m = String(v ?? '').trim().toUpperCase(); return (m === 'DRIVER' || m === 'ESCPOS') ? m : undefined; },
+  escposUmbral:         enteroEnRango(60, 220),
+  escposAvance:         enteroEnRango(0, 10),
+  escposAncho:          (v: any) => { const n = enteroEstricto(v); return (n === 384 || n === 512 || n === 576) ? n : undefined; },
 };
 
 /**

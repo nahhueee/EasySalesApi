@@ -6,11 +6,11 @@ import { CodigoError } from '../logger/CodigosError';
 import { ParametrosRepo } from '../data/parametrosRepository';
 import { ComprobanteService } from '../services/comprobanteService';
 import { auditoriaDesdeRequest } from '../utils/auditoria';
+import { ImpresionTermicaServ } from '../services/impresionTermicaService';
 import { v4 as uuid } from 'uuid';
 
 const router: Router = Router();
 const ComprobanteServ = new ComprobanteService();
-const printer = require('pdf-to-printer');
 const fs = require('fs');
 const path = require('path');
 
@@ -97,21 +97,8 @@ router.post('/imprimir-pdf/:id', async (req: Request, res: Response) => {
         const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
         const pdfBuffer = await ComprobanteServ.generarPedidoPDF(pedido, detalles, parametrosImpresion);
 
-        const tempName = `impresion_${uuid()}.pdf`;
-        const tempPath = path.join(__dirname, '..', 'temp', tempName);
-
-        fs.writeFileSync(tempPath, pdfBuffer);
-
-        try {
-            await printer.print(tempPath, {
-                printer: parametrosImpresion.impresora,
-                orientation: 'portrait',
-                scale: 'noscale'
-            });
-        } finally {
-            // El temporal se borra aunque la impresora falle (no queda basura en /temp)
-            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-        }
+        // Enviar a la impresora configurada (driver o ESC/POS; el servicio maneja el temporal)
+        await ImpresionTermicaServ.imprimirPDF(pdfBuffer, parametrosImpresion, parametrosImpresion.papel);
 
         res.status(200).json('OK');
 

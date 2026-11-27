@@ -12,13 +12,13 @@ import { ParametrosRepo, normalizarParametrosImpresion } from '../data/parametro
 import { ProductosRepo } from '../data/productosRepository';
 import { ComprobanteService } from '../services/comprobanteService';
 import { CierreCajaServ } from '../services/cierreCajaService';
+import { ImpresionTermicaServ } from '../services/impresionTermicaService';
 import { AppError } from '../logger/AppError';
 import { CodigoError } from '../logger/CodigosError';
 import { datosAuditoria } from '../utils/auditoria';
 const ComprobanteServ = new ComprobanteService();
 
 //#region IMPRESION DE PDFS
-const printer = require('pdf-to-printer');
 const fs = require('fs');
 
 
@@ -29,21 +29,8 @@ router.post('/imprimir-pdf', async (req: Request, res: Response) => {
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
     const pdfBuffer = await ComprobanteServ.generarComprobantePDF(venta, parametrosImpresion, tipoComprobante)
 
-    //Crear archivo temporal
-    const tempName = `impresion_${uuid()}.pdf`;
-    const tempPath = path.join(__dirname, '..', 'temp', tempName);
-
-    fs.writeFileSync(tempPath, pdfBuffer);
-
-    //Enviar a la impresora
-    await printer.print(tempPath, {
-      printer: parametrosImpresion.impresora,
-      orientation: 'portrait',
-      scale: 'noscale'
-    });
-
-    //Eliminar archivo temporal
-    fs.unlinkSync(tempPath);
+    //Enviar a la impresora (driver o ESC/POS según los parámetros; el servicio maneja el temporal)
+    await ImpresionTermicaServ.imprimirPDF(pdfBuffer, parametrosImpresion, parametrosImpresion.papel);
 
     res.status(200).json('OK');
 
@@ -60,21 +47,8 @@ router.post('/imprimir-pdf-nota-credito', async (req: Request, res: Response) =>
     const parametrosImpresion = await ParametrosRepo.ObtenerParametrosImpresion();
     const pdfBuffer = await ComprobanteServ.generarNotaCreditoPDF(nc, parametrosImpresion);
 
-    //Crear archivo temporal
-    const tempName = `impresion_${uuid()}.pdf`;
-    const tempPath = path.join(__dirname, '..', 'temp', tempName);
-
-    fs.writeFileSync(tempPath, pdfBuffer);
-
-    //Enviar a la impresora
-    await printer.print(tempPath, {
-      printer: parametrosImpresion.impresora,
-      orientation: 'portrait',
-      scale: 'noscale'
-    });
-
-    //Eliminar archivo temporal
-    fs.unlinkSync(tempPath);
+    //Enviar a la impresora (driver o ESC/POS según los parámetros; el servicio maneja el temporal)
+    await ImpresionTermicaServ.imprimirPDF(pdfBuffer, parametrosImpresion, parametrosImpresion.papel);
 
     res.status(200).json('OK');
 
@@ -181,7 +155,7 @@ function leerPedidoResumenCaja(req: Request): { idCaja: number; idCierre: number
 }
 
 // Papel: el pedido, si no el de los parámetros, si no 80mm.
-async function generarResumenCajaPDF(req: Request): Promise<{ pdf: Buffer; parametros: any }> {
+async function generarResumenCajaPDF(req: Request): Promise<{ pdf: Buffer; parametros: any; papel: string }> {
   const { idCaja, idCierre, papel } = leerPedidoResumenCaja(req);
   const { usuarioId } = datosAuditoria(req);
 
@@ -191,27 +165,19 @@ async function generarResumenCajaPDF(req: Request): Promise<{ pdf: Buffer; param
       { modulo: 'filesRoute.resumen-caja' });
   }
   const datos = await CierreCajaServ.ArmarImpresion(idCaja, idCierre, usuarioId);
-  const pdf = await ComprobanteServ.generarResumenCajaPDF(datos, parametros, papel ?? parametros.papel ?? '80mm');
-  return { pdf, parametros };
+  const papelEfectivo = papel ?? parametros.papel ?? '80mm';
+  const pdf = await ComprobanteServ.generarResumenCajaPDF(datos, parametros, papelEfectivo);
+  return { pdf, parametros, papel: papelEfectivo };
 }
 
 router.post('/imprimir-resumen-caja', async (req: Request, res: Response, next) => {
-  let tempPath: string | null = null;
   try {
-    const { pdf, parametros } = await generarResumenCajaPDF(req);
-
-    const carpeta = path.join(__dirname, '..', 'temp');
-    fs.mkdirSync(carpeta, { recursive: true });
-    tempPath = path.join(carpeta, `impresion_${uuid()}.pdf`);
-    fs.writeFileSync(tempPath, pdf);
+    const { pdf, parametros, papel: papelEfectivo } = await generarResumenCajaPDF(req);
 
     try {
-      await printer.print(tempPath, {
-        printer: parametros.impresora,
-        orientation: 'portrait',
-        scale: 'noscale'
-      });
+      await ImpresionTermicaServ.imprimirPDF(pdf, parametros, papelEfectivo);
     } catch (errorImpresion: any) {
+      if (errorImpresion instanceof AppError) throw errorImpresion;   // ya trae el mensaje claro (ESC/POS)
       logger.error(`Resumen de caja: falló la impresión en "${parametros.impresora}". ${errorImpresion?.message ?? errorImpresion}`);
       throw new AppError(CodigoError.INTERNAL_ERROR,
         `No se pudo imprimir en la impresora configurada (${parametros.impresora ?? 'sin nombre'}). Revisá que esté encendida y conectada.`,
@@ -223,8 +189,6 @@ router.post('/imprimir-resumen-caja', async (req: Request, res: Response, next) 
   } catch (error: any) {
     if (error instanceof AppError) return next(error);
     next(new AppError(CodigoError.INTERNAL_ERROR, 'Error al generar el resumen de caja.', 500, { modulo: 'filesRoute.imprimir-resumen-caja' }, error));
-  } finally {
-    if (tempPath) { try { fs.unlinkSync(tempPath); } catch { /* ya no está: nada que borrar */ } }
   }
 });
 

@@ -28,3 +28,5 @@ PARA CLAUDE, cuando te pida "traducime el changelog pendiente" antes de un relea
 No edites este archivo vos mismo salvo que te lo pida explícitamente — el que lo
 vacía y archiva en CHANGELOG.md es el script de release (build-changelog.js).
 -->
+
+- [mejora] impresion termica directa ESC/POS para tickets 80mm (modoImpresion, umbral, avance, ancho en parametros_impresion; mupdf 1.28.6; el release requiere npm install)
