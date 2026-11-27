@@ -96,3 +96,8 @@ _(sin entradas registradas para esta versión)_
 
 _(sin entradas registradas para esta versión)_
 
+## 2.9.4 — 2026-11-27
+
+**Mejoras**
+- impresion termica directa ESC/POS para tickets 80mm (modoImpresion, umbral, avance, ancho en parametros_impresion; mupdf 1.28.6; el release requiere npm install)
+
